@@ -1,0 +1,3 @@
+employee_id,restriction_type,function_id,valid_from,valid_to,note
+E012,heavy_work,,2026-09-01,,"FIKTIVT EKSEMPEL: fritatt fra alt tungt arbeid (intensitet > 0), uten sluttdato"
+E034,function,uren_gangen,2026-09-01,2026-12-31,"FIKTIVT EKSEMPEL: fritatt fra én bestemt funksjon i en periode"

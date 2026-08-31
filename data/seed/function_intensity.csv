@@ -1,0 +1,6 @@
+function_id,start,end,intensity,notes
+uren_produksjon,00:00,24:00,1,"Tungt arbeid hele døgnet (* i kilden)"
+uren_gangen,12:00,24:00,1,"Tungt arbeid etter kl. 12:00 (** i kilden)"
+ren_kontrollsone,12:00,24:00,1,"Tungt arbeid etter kl. 12:00 (** i kilden)"
+steril_produksjon,00:00,24:00,1,"Tungt arbeid hele døgnet (* i kilden)"
+steril_gang_vognvask,00:00,24:00,1,"Tungt arbeid hele døgnet (* i kilden)"

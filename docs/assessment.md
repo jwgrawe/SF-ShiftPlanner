@@ -1,245 +1,240 @@
 # SF-ShiftPlanner — assessment & proposed design
 
-*Status: proposal, v0.1 (2026-08-31). Nothing here is set in stone — it is the
-basis for discussion before development starts in earnest.*
+*Status: v0.2 (2026-08-31). Updated after the first round of clarifications —
+all agreed points are recorded in [decisions.md](decisions.md) (D-numbers);
+everything still unsettled is in [open-questions.md](open-questions.md)
+(Q-numbers).*
 
-A prototype web app for a hospital CSSD (sterilforsyning, "SF") of ~60–69
+A prototype web app for a hospital CSSD (sterilforsyning, "SF") of ~69
 employees that (1) suggests a daily placement of employees onto functions per
-zone, (2) plans the mid-shift rotations ("rullering") at 11:00 and 18:00,
-(3) lets managers adjust plans and register absences, and (4) shows the day's
-plan on a wall display.
+zone, (2) plans the mid-shift rotations ("rullering"), (3) lets managers
+adjust plans and register absences, and (4) shows the day's plan on a
+portrait display.
 
-## 1. Terminology
+## 1. Terminology *(settled — D1)*
 
-Recommendation: use **funksjon / function** as the canonical domain term, not
-"station"/"workstation".
-
-- It matches the department's own documents ("Grunnbemanning *funksjonsvis*",
-  column header "Funksjon/ansvar").
-- Several entries are responsibilities rather than physical places
-  (Ansvarsvakt, Driftskoordinator, "rullering fra SF" to an utpost).
-- Best practice (domain-driven design's *ubiquitous language*): the words in
-  the UI, the database and conversations with staff should be the same words.
-
-So: **zone → function**, with worktable types (ORT, ORTA, …) as an optional
-finer level under `Arbeidsbord/brikkelegging` if per-table planning turns out
-to be needed. UI text in Norwegian; identifiers in code/data in English-ish
-snake_case (`ren_kontrollsone`).
-
-A small glossary lives in the README.
+**Funksjon / function** is the canonical domain term: it matches the
+department's own documents, and several entries (Ansvarsvakt, rullering to an
+utpost) are duties rather than physical stations. Zone → function, with
+worktable types as a dormant finer level (D18). UI text in Norwegian bokmål
+(D3); identifiers in code/data in English snake_case.
 
 ## 2. Core domain model
 
 ```
-Zone 1─* Function                     Employee 1─* Competency *─1 Function
-              │                            │
-              │ demand: required people    │ roster: (date, shift_code)
-              ▼ per hour × day-type        ▼ absence: (date, type, [hours])
-        StaffingDemand              Availability (derived)
-              └──────────┬───────────────┘
+Zone 1─* Function 1─* IntensityWindow(start, end, intensity 0..1)
+              │                Employee 1─* Competency *─1 Function
+              │ demand per hour     │ 1─* Restriction (function | heavy work)
+              ▼ × day-type          │ roster: (date, shift_code)  [import]
+        StaffingDemand              ▼ absence: (date, [start–end], type)
+              └──────────┬── Availability (derived)
                          ▼
-              PlanDay (per operational day, 07:00→07:00)
-                 └─* Assignment (employee, function, segment, locked?, source)
+              PlanDay (operational day 07:00→07:00)
+                 └─* Assignment (employee, function, block, locked?, source)
                          │
                          ▼ history feeds fairness scoring
-                  HeavyWorkLedger (rolling heavy-hours per employee)
+                  IntensityLedger (rolling intensity-hours per employee)
 ```
 
-Key modelling decisions (and the reasoning):
+Key decisions:
 
-1. **The operational day runs 07:00 → 07:00 next day.** A night shift
-   (22:00–07:00) belongs to the day it starts. This makes "today's plan" a
-   single coherent unit and pushes the date-rollover problem into one place
-   in the code instead of everywhere. All intervals are half-open
-   `[start, end)` so 15:00 belongs to the late shift only, never to two blocks.
+1. **Operational day 07:00 → 07:00.** A night shift belongs to the day it
+   starts; the date-rollover lives in one place, and all intervals are
+   half-open `[start, end)`. This is *internal plumbing only*: every screen
+   speaks the staff's own categories — tidligvakt, senvakt, nattevakt,
+   helgevakt (D23) — and can show who arrives when and which function they
+   take over.
 
-2. **Shifts are segmented into planning blocks by the rotation points:**
+2. **Planning blocks cut at the rotation points** (D4, D8, D30):
 
    | Day type | Blocks |
    |---|---|
    | Weekday early (07–15) | 07:00–11:00 → **rullering** → 11:00–15:00 |
    | Weekday late (15–22) | 15:00–18:00 → **rullering** → 18:00–22:00 |
+   | Friday late *(interim)* | 15:00–17:00 → **rullering 17:00** → 17:00–22:00 (Q6) |
    | Weekday night (22–07) | one block, no rotation |
-   | Weekend/holiday (08–18) | one block, marked **ad hoc** (self-managed) |
+   | Weekend & holiday (08–18) | one block, ad hoc (D21) |
 
-   An *assignment* is "employee X works function Y during block Z". A person
-   with a mid shift (`ME` 12–20) simply participates in whichever block
-   overlaps their presence — how they rotate is open question B10.
+3. **Three staffing modes** (resolves the source sheet's empty rows):
+   `demand` (explicit hourly head-count), `remainder` (the zone default pool
+   — Produksjon uren sone, and Arbeidsbord/brikkelegging which absorbs the
+   *whole department's* remainder, nights included, per D13/D14), and
+   `adhoc_zone` (steril sone: staffed via the zone total, distributed
+   internally).
 
-3. **Three staffing modes for functions** (this resolves the "empty rows"
-   ambiguity in the source sheet):
-   - `demand` — explicit required head-count per hour (e.g. Kontrollsone: 2
-     from 14:00);
-   - `remainder` — the zone's default pool that absorbs everyone left over
-     (Produksjon uren sone; Arbeidsbord/brikkelegging);
-   - `adhoc_zone` — the zone is staffed as a whole and distributes itself
-     (Steril sone; the entire department on weekends/holidays). The plan and
-     the display then show *who* is in the zone, with an "fordeles ad hoc"
-     badge instead of per-function detail.
+4. **Intensity is a continuous scalar, not a flag** (D10).
+   `function_intensity.csv` holds windows of `(function, start, end,
+   intensity ∈ [0,1])`; today's data is exactly the old model — 1 all day
+   for `*` functions, 1 from 12:00 for `**` functions, 0 otherwise — but the
+   representation buys real options at no cost:
+   - the fairness ledger is simply ∑ intensity × hours, so "heavy hours"
+     and any future graded intensity use the same arithmetic;
+   - future per-employee *preferences* (an employee × function weight
+     matrix) slot into the same soft-scoring machinery, and the whole
+     objective stays a weighted sum — which is also the form a drop-in
+     optimizer (e.g. CP-SAT) wants;
+   - the crisp rules stay crisp: "heavy block" is defined as intensity above
+     a configurable threshold (default: > 0), so the hard back-to-back rule
+     (D9) doesn't blur as values get nuanced.
+   The one discipline required: the UI always shows labels ("tungt",
+   "normalt"), never raw numbers.
 
-4. **Heaviness is a property of (function, time):** `always`, `after_12`, or
-   `no`. An assignment's *heavy hours* = overlap between its segment and the
-   function's heavy window. Fairness is then arithmetic on the ledger, not
-   special cases in the planner.
+5. **Restrictions** (D11): per-employee exemptions from heavy work and/or
+   any set of functions, with validity periods and no stored reason. Applied
+   as hard filters in planning.
 
-5. **Demand is effective-dated configuration.** When admins later tweak the
-   numbers, old plans must not silently change. Config rows get
-   `valid_from`/`valid_to`; plans reference what was in force. (Prototype: a
-   single active version is fine, but the schema should leave room.)
+6. **Plan vs. reality are separate records** (D22): suggestion → published
+   plan → audited same-day edits; locked assignments always survive
+   regeneration — which doubles as the manager's tweaking tool: lock what
+   must hold, regenerate the rest.
 
-6. **Plan vs. reality are separate records.** A generated *suggestion*
-   becomes a *published plan*; same-day changes (sickness) edit the published
-   plan with an audit note ("changed by manager 09:12"). Manually edited
-   assignments are **locked**: regeneration never overwrites them.
+## 3. Architecture
 
-## 3. Proposed architecture
+Unchanged from v0.1 in substance (D2): one Python process — FastAPI +
+Jinja2 templates + vendored htmx, SQLite file storage — running on **one
+machine** for now (D31); the wall display comes later and will just be a
+browser pointed at the same app.
 
-**A single-process Python web app, server-rendered, with SQLite — one
-`pip install`, one command to run, one browser tab (or three).**
-
-| Layer | Choice | Why |
-|---|---|---|
-| Web framework | **FastAPI + Jinja2 templates** (Flask as fallback) | Tiny footprint; FastAPI gives a typed JSON API "for free" under `/api/...`, which is exactly the seam future integrations (GAT, HR) will plug into. If pip access on the work PC is a problem, the same design ports to stdlib-only. |
-| Interactivity | **htmx, vendored locally** (one static JS file committed to the repo) | Drag-free, build-free: no Node toolchain, nothing fetched from a CDN (hospital networks often block those). Server-rendered fragments keep all logic in Python. |
-| Storage | **SQLite** (stdlib `sqlite3`), file `sf_shiftplanner.db` | Zero-install, single file, trivially backed up by copying. Handles this scale (69 employees) with ease. |
-| Config/master data | **CSV files in `data/seed/` remain the source of truth** until the admin UI matures; an idempotent **re-import command** loads them into SQLite | Managers/admins can edit the tables in Excel today; the "re-import" workflow the briefing asks for is then one button/command. The admin UI can later take over table by table. |
-| Planner | Pure-Python **greedy heuristic with explainable scoring** (see §5) | Deterministic, dependency-free, debuggable. A real optimizer (OR-tools CP-SAT) can replace it behind the same interface *if* the heuristic proves insufficient — don't start there. |
-| Display screen | Browser in kiosk/fullscreen mode pointing at `/display`; page refreshes itself (htmx polling every ~60 s) | Any smart screen or a mini-PC with a browser works; no special client software. |
-
-Run it with `python -m uvicorn app.main:app` on the manager's PC; the wall
-display and other PCs on the ward network open `http://<pc-name>:8000/`.
-
-**Why browser-based rather than a desktop GUI:** the wall display, multi-user
-access (several managers), and the future integration story all favour a web
-app; and it keeps the prototype→production path smooth (the same app can later
-be hosted by IT). This answers the briefing's open stack question: yes, aim
-for the browser.
-
-### The three modes
-
-| Mode | URL | Auth (prototype) | Capabilities |
+| Mode | URL | Access (D25) | Does |
 |---|---|---|---|
-| Display | `/display` | none (read-only) | Today's placement per zone, big type; countdown + preview of the next rullering; "ad hoc" badges on weekends |
-| Manager | `/plan` | shared PIN | Day/week board; generate & publish suggestions; drag/reassign; register absences; lock assignments |
-| Admin | `/admin` | separate PIN | Edit functions, demand matrix, shift codes, employees, competencies; trigger CSV re-import; view heavy-work ledger |
+| Display | `/display` | none, read-only | Portrait layout, grouped by the three zones + utposter (D23): every person's current function, and who takes over what at the next rotation point; "fordeles ad hoc"-badges on weekends/holidays; fast utpost staff shown but marked as not planned here (D20) |
+| Manager | `/plan` | shared PIN | Day/week board per block; generate, edit, lock, publish; absences (full-day and time-range, D27) |
+| Admin | `/admin` | separate PIN | Master data, restrictions, re-import, intensity/fairness settings, ledger reports |
 
-Real authentication (hospital SSO/AD) is explicitly deferred; PINs merely
-prevent accidental edits from the wall display. Do not pretend it is security.
+All user-facing text in professional, plain bokmål (D3). Names as first name
++ initial (D24). The SQLite file lives on a local/shared drive (D26) and the
+app writes a dated backup copy on start.
 
-### Repository layout (target)
+## 4. Data flow: the import folder *(proposal, per D29)*
+
+Managers should maintain a small number of Excel files, not many CSVs. A
+folder `import/` next to the app, watched by a "Importer på nytt" button in
+admin (and a CLI command):
 
 ```
-app/            FastAPI app: routes, templates/, static/ (vendored htmx), db.py, planner/
-data/source/    Original workbooks, unmodified (provenance)
-data/seed/      Editable CSV master data — imported into SQLite
-scripts/        generate_fake_employees.py, validate_seed.py, (later: import_db.py)
-docs/           This assessment, open questions, data findings
+import/
+├── grunndata.xlsx     admin-owned config, one sheet per table:
+│                        Funksjoner · Bemanningsbehov · Intensitet ·
+│                        Vaktkoder · Åpningstider · Ukedagsregler
+├── personal.xlsx      manager-owned people data:
+│                        Ansatte · Kompetanse · Fritak · (Fravær as fallback —
+│                        normally entered in-app)
+└── turnus_*.xlsx      the roster export, dropped in as-is (10-week periods,
+                       D28); parsed by a dedicated adapter written against
+                       the real export format (Q1)
 ```
 
-## 4. Data pipeline
+Import is idempotent and defensive: validate first (the `validate_seed.py`
+checks, grown into the importer), show a diff summary ("3 endringer i
+Kompetanse …"), refuse to delete master data referenced by published plans,
+then upsert. The `data/seed/` CSVs in this repo remain the developer/test
+fixtures and document the exact table shapes; the two Excel workbooks are
+generated from them when M1 starts, so the department edits familiar files
+from day one.
 
-1. **Seed CSVs** (done, in `data/seed/`) — decoded from the workbooks, with
-   every assumption marked in `notes` columns:
-   `zones`, `functions` (with `heavy` + `staffing_mode`), `staffing_demand`
-   (24 h columns × day-type, plus zone totals), `weekday_rules` (structured
-   version of the free-text "Dagsvis" sheet), `shift_codes` (cleaned, with
-   proposed category mapping), `opening_hours`, `worktable_types`,
-   `employees` (69 fictional), `competencies` (placeholder).
-2. **Missing inputs** (see open-questions.md): the roster
-   (`date, employee_id, shift_code`) — the biggest gap — the real competency
-   file, and an absence table. Proposed stop-gap formats are specified there
-   so the department can start filling them in Excel immediately.
-3. **Import command** (milestone 1): validates (extending
-   `scripts/validate_seed.py`), then upserts into SQLite. Re-running is safe;
-   it refuses to delete master data that published plans reference.
+**Competency import today** (real, anonymized data): `Kompetanse_Anonymisert.xlsx`
+→ `scripts/import_competencies.py` → `competencies.csv`, with `x` →
+`qualified` and `?` → `uncertain` (treated as not eligible pending Q4).
+Fictional identities in `employees.csv` map 1:1 to the anonymized rows via
+`source_label`, so the test data carries the department's *real* competency
+structure. Interim eligibility rules for the five empty competency columns
+are defined in Q3.
 
 ## 5. The planning engine
 
-A per-day pipeline, run for each day in the horizon (proposal: 2 rolling weeks):
+Per day in the 2-week rolling horizon (D22):
 
 1. **Resolve the day**: weekday/weekend/holiday (Norwegian holidays computed
-   in code — Easter arithmetic, fixed dates), opening window, blocks.
-2. **Determine supply**: everyone rostered that operational day, minus
-   absences, mapped to blocks via their shift code's hours.
-3. **Pre-assign the "decided by roster" people**: DK/DKK → Driftskoordinator,
-   U-codes → their utpost, (likely) Ansvarsvakt. These are fixed points the
-   planner plans *around*.
-4. **Fill `demand` functions block by block**, hardest-to-staff first (fewest
-   eligible employees first). Each candidate gets a score:
-   - hard filters: competency, presence during the block, not already
-     assigned, heavy-rotation rule (no two heavy blocks in one shift; no
-     heavy block if yesterday was a heavy day — pending C11);
-   - soft scoring: low rolling heavy-hours (for heavy functions), continuity
-     (stay on the same function across a block boundary *unless* it is
-     heavy — then rotation is the point), variety (avoid the same function
-     day after day), fewest alternative uses (save flexible people).
-5. **Pour the remainder** into the zone default pools (`uren_produksjon`,
-   `ren_arbeidsbord`) and the steril zone total; anything unfillable becomes a
-   visible **shortfall warning** on the plan, never a silent drop.
-6. **Update the heavy-work ledger** from the resulting assignments so the next
-   day's run sees today's load.
+   in code; holidays follow the weekend regime, D21), blocks per §2.
+2. **Determine supply**: rostered employees minus absences, mapped to blocks
+   via shift-code hours.
+3. **Pin roster-decided functions** (D19): DK/DKK → Driftskoordinator,
+   U-codes → utposter. Fast utpost staff render on the plan but are not
+   planned (D20).
+4. **Fill `demand` functions** block by block, hardest-to-staff first.
+   Hard filters: competency (with Q3 interim rules), restrictions (D11),
+   presence, the rotation rule (D5/D6: a heavy block forces a function
+   change at the rotation point; at most one change per shift), no
+   back-to-back heavy days (D9).
+   Soft scoring: low rolling intensity-hours, continuity across non-heavy
+   boundaries, variety across days, saving scarce competencies.
+5. **Pour the remainder**: uren's leftover to Produksjon uren sone;
+   everyone else to Arbeidsbord/brikkelegging (D13/D14); steril staffed via
+   its zone total. Shortfalls become visible warnings, never silent drops.
+6. **Update the intensity ledger** so tomorrow's run sees today's load.
 
-Two properties matter more than optimality:
+Properties over optimality: **explainability** (every suggestion carries its
+reasoning) and **determinism** (same input → same plan; regeneration after a
+small edit changes little). The scoring function is a weighted sum by design
+— see §2.4 — so a real optimizer can later replace the greedy loop behind
+the same interface, and employee preferences can join the objective without
+re-architecture.
 
-- **Explainability** — every suggested assignment carries its score breakdown
-  ("Kari → Kontrollsone: qualified, 0 heavy hrs last 7 days, was here before
-  lunch"). Managers will only trust and adopt a planner they can interrogate.
-- **Determinism** — same inputs, same plan (seeded tie-breaking), so
-  regenerating after a small edit produces a mostly-unchanged plan
-  (minimal-disruption re-planning).
+## 6. Getting it running on the hospital PC *(for Q16)*
 
-The weekend/holiday planner is trivially different: pick the 5–6 rostered
-people, verify competency coverage across zones, mark everything ad hoc.
+No administrator rights are needed for any of this — Python packages can be
+installed per-user. Two things to test, in order:
 
-## 6. Best practices adopted
+```bat
+:: 1) Can pip reach the package index at all?
+python -m pip install --user --upgrade pip
 
-- **Ubiquitous language**: Norwegian domain terms everywhere users see text;
-  a glossary in the README maps them to code identifiers.
-- **Provenance**: original workbooks committed unmodified under
-  `data/source/`; every transformation into `data/seed/` documented in
-  [source-data-findings.md](source-data-findings.md); every assumption
-  carried as data (a `notes` column), not silently baked into code.
-- **Fictional data only** in the repo until data-handling questions (G30) are
-  settled; the fake-data generator is deterministic so everyone reproduces
-  identical test data.
-- **Validation as a habit**: `scripts/validate_seed.py` runs after any table
-  edit and in CI later.
-- **Suggestion ≠ decision**: the app proposes, the manager disposes. Locked
-  manual edits always survive regeneration; the audit trail says who changed
-  what.
-- **Small dependency surface**, all assets vendored — built for a locked-down
-  hospital PC and a slow IT pipeline.
-- **Time handled in one place**: operational-day abstraction, half-open
-  intervals, Europe/Oslo naive local times (a wall-clock domain; no UTC
-  round-tripping to introduce DST bugs — but the two DST Sundays get a unit
-  test each).
+:: 2) Install the prototype's few dependencies to your user profile:
+python -m pip install --user fastapi uvicorn jinja2 openpyxl
+```
 
-## 7. Suggested roadmap
+If the hospital proxy blocks pip, the error will say so (timeouts /
+ConnectionError) — report back and we either get the packages whitelisted,
+install from downloaded wheel files (`pip install --user *.whl` works fully
+offline), or fall back to a stdlib-only build (kept feasible by design: the
+architecture uses nothing conceptually beyond what `http.server`, `sqlite3`
+and string templates can do — it's just more work).
+
+A tidier variant once pip is confirmed working: a virtual environment in the
+user profile (`python -m venv %USERPROFILE%\sf-planner-env`), which also
+never needs admin rights. Browser: Edge is fine.
+
+## 7. Best practices adopted
+
+- **Decision log** ([decisions.md](decisions.md)): every settled point gets a
+  D-number; seed data and code reference them, so "why is it like this?"
+  always has an answer.
+- **Ubiquitous language** (D1/D3) and a glossary in the README.
+- **Provenance**: originals unmodified in `data/source/`; all decoding
+  documented; assumptions carried as data (`notes` columns) with Q-number
+  references, not baked into code.
+- **Real structure, fictional identities**: test data mirrors the actual
+  competency matrix under fictional names, deterministically generated.
+- **Validation as a habit**: `scripts/validate_seed.py` after every table
+  edit; the same checks become the importer's gatekeeper.
+- **Suggestion ≠ decision**; locked edits survive; audit trail on changes.
+- **Small dependency surface**, vendored assets, stdlib-fallback ceiling.
+- **Time in one place**: operational day, half-open intervals, Europe/Oslo
+  wall-clock; DST Sundays get unit tests.
+
+## 8. Roadmap
 
 | Milestone | Content | Exit criterion |
 |---|---|---|
-| **M0 — done** | Repo, decoded seed data, fake employees, docs | This document agreed; open questions A–C answered |
-| **M1 — data foundation** | SQLite schema, CSV→DB import, read-only web UI: browse functions/demand/employees; first cut of `/display` showing a *hand-made* plan | Wall display shows a manually entered day correctly, incl. a night shift |
-| **M2 — manual planning** | Manager board: assign people to functions per block, absences, locking, publish; roster import (stop-gap CSV) | A manager can plan tomorrow fully by hand faster than on paper |
-| **M3 — suggestions** | Planning engine v1 (greedy + fairness ledger), regenerate-with-locks, 2-week horizon, shortfall warnings | Suggested plan for a normal week accepted with < ~10 manual corrections |
-| **M4 — hardening** | Admin CRUD for master data, holiday calendar, heavy-work reports, backups, DST tests | Department runs on it for a pilot week |
-| **Later** | Real competency import, GAT/roster integration via `/api`, SSO, per-worktable planning | — |
+| **M0 — done** | Repo, decoded seed data, real competency structure under fictional names, decision log | Wednesday meeting resolves Q1–Q10 |
+| **M1 — data foundation** | SQLite schema, importer (+ generate the two Excel workbooks from seed), read-only browsing, first `/display` with a hand-made plan | Display shows a real day correctly, night shift included |
+| **M2 — manual planning** | Manager board per block, absences (incl. partial-day), locking, publish; **roster adapter** against the real export sample | A manager plans tomorrow faster than on paper |
+| **M3 — suggestions** | Engine v1 (greedy + intensity ledger), 2-week horizon, regenerate-with-locks, shortfall warnings | A normal week accepted with < ~10 manual corrections |
+| **M4 — hardening** | Admin CRUD, holiday calendar, reports, backup routine, DST tests | A live pilot week on the single machine |
+| **Later** | Wall display, GAT/API integration, SSO, preferences in the objective, per-worktable planning | — |
 
-M1+M2 before M3 is deliberate: the manual board produces the exact data
-structures the engine must fill, and the department gets value (display +
-manual planning) even before the clever part exists.
+## 9. Risks
 
-## 8. Risks
-
-- **Garbage-in for fairness**: without a real roster and competency data the
-  heavy-work balancing cannot be validated — it will look fine on fake data.
-  Mitigation: milestone gate — M3 starts only after A1/A2 and D14 are
-  delivered.
-- **The two sheets disagree on utposter** (see findings). Building on the
-  wrong one wastes a milestone; resolve E20 early.
-- **Scope creep toward a rostering system**: this app plans *placement of
-  people who are already rostered*; it must not drift into generating
-  shifts/turnus (a legally regulated, solved-elsewhere problem). Saying no
-  here keeps the prototype shippable.
-- **Single-PC deployment**: the manager's PC being off = blank wall display.
-  Acceptable for a prototype; note for later hosting.
+- **The roster sample is the critical path** (Q1): M2's adapter and all of
+  M3 depend on it. Until it arrives, a hand-written `roster.csv` in the same
+  spirit keeps development moving.
+- **Empty competency columns** (Q3): if the interim eligibility rules are
+  wrong, plans put people on functions they can't do. Surface the rules in
+  the UI ("antatt kvalifisert via sonekompetanse") so wrong assumptions are
+  caught by eyeballs early.
+- **Utposter conflict** (Q10) unresolved → utpost planning stays
+  display-only until it is.
+- **Scope creep toward rostering**: this app places people who are already
+  rostered; it must not drift into generating turnus.
+- **pip access unknown** (Q16): tested with a 10-minute experiment before M1
+  begins; fallback path defined in §6.

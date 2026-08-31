@@ -1,15 +1,16 @@
-function_id,zone_id,name,heavy,staffing_mode,sort_order,notes
-uren_produksjon,uren,"Produksjon, uren sone",always,remainder,1,"Default-funksjon i uren sone: alle øvrige i sonen plasseres her"
-uren_daglige_rutiner,uren,"Ansvar daglige rutiner (uren sone)",no,demand,2,
-uren_manuell_rengjoring,uren,"Manuell rengjøring",no,demand,3,
-uren_gangen,uren,"Gangen",after_12,demand,4,
-ren_driftskoordinator,ren,"Driftskoordinator",no,demand,5,"Har egne vaktkoder (DK/DKK) – trolig forhåndsbestemt av turnus"
-ren_ansvarsvakt,ren,"Ansvarsvakt",no,demand,6,"Bemannes 15:00–07:00 iht. grunnbemanningen"
-ren_kontrollsone,ren,"Kontrollsone",after_12,demand,7,
-ren_arbeidsbord,ren,"Arbeidsbord/brikkelegging",no,remainder,8,"Default-funksjon i ren sone. 10 arbeidsbord fordelt på 8 bordtyper – se worktable_types.csv"
-ren_sterrad_poliklinikker,ren,"Sterrad + poliklinikker/løspakk",no,demand,9,"Dagsvis-arket i kilden skiller Sterrad og Poliklinikker – granularitet må avklares"
-steril_produksjon,steril,"Produksjon, steril sone",always,adhoc_zone,10,"Bemannes via sonetotalen for steril sone; fordeles ad hoc innad i sonen"
-steril_gang_vognvask,steril,"Gang/vognvaskere",always,adhoc_zone,11,"Bemannes via sonetotalen for steril sone; fordeles ad hoc innad i sonen"
-utpost_kir_pol,utpost,"Kir. Pol.",unknown,demand,12,"Både fast bemanning og rullering fra SF – se kolonnen category i staffing_demand.csv"
-utpost_gastrolab,utpost,"Gastrolab.",unknown,demand,13,"Både fast bemanning og rullering fra SF"
-utpost_kop_barn,utpost,"KOP barn",unknown,demand,14,"Både fast bemanning og rullering fra SF. Aktivitet kun torsdager iht. Dagsvis-arket"
+function_id,zone_id,name,staffing_mode,sort_order,notes
+uren_produksjon,uren,"Produksjon, uren sone",remainder,1,"Default-funksjon i uren sone: alle øvrige i sonen plasseres her"
+uren_daglige_rutiner,uren,"Ansvar daglige rutiner (uren sone)",demand,2,"Ingen registrert kompetanse i kompetansefilen – tolkning uavklart (Q3)"
+uren_manuell_rengjoring,uren,"Manuell rengjøring",demand,3,"Ingen registrert kompetanse i kompetansefilen – tolkning uavklart (Q3)"
+uren_gangen,uren,"Gangen",demand,4,"Ingen registrert kompetanse i kompetansefilen – tolkning uavklart (Q3)"
+ren_driftskoordinator,ren,"Driftskoordinator",demand,5,"Egne vaktkoder (DK/DKK) – forhåndsbestemt av turnus (D19). Ingen registrert kompetanse i kompetansefilen (Q3)"
+ren_ansvarsvakt,ren,"Ansvarsvakt",demand,6,"Krever kompetanse; typisk seniore ansatte (D19). Bemannes 15:00–07:00"
+ren_kontrollsone,ren,"Kontrollsone",demand,7,
+ren_arbeidsbord,ren,"Arbeidsbord/brikkelegging",remainder,8,"Default-funksjon i ren sone – absorberer alle som ikke trengs andre steder, hele døgnet (D13/D14). 10 arbeidsbord, 8 generiske bordtyper – se worktable_types.csv (D18)"
+ren_sterrad,ren,"Sterrad",demand,9,"Delt fra «Sterrad + poliklinikker/løspakk» (D16). Behovstall og kompetanse foreligger kun samlet – se Q5"
+ren_poliklinikker_lospakk,ren,"Poliklinikker og løspakk",demand,10,"Delt fra «Sterrad + poliklinikker/løspakk» (D16). Behovstall og kompetanse foreligger kun samlet – se Q5"
+steril_produksjon,steril,"Produksjon, steril sone",adhoc_zone,11,"Bemannes via sonetotalen for steril sone; fordeles ad hoc innad i sonen"
+steril_gang_vognvask,steril,"Gang/vognvaskere",adhoc_zone,12,"Bemannes via sonetotalen; fordeles ad hoc. Heter «Gang/vognvaskemaskiner» i kompetansefilen (ingen registrert kompetanse – Q3)"
+utpost_kir_pol,utpost,"Kir. Pol.",demand,13,"Fast bemanning vises kun, planlegges ikke (D20); rullering fra SF planlegges. Intensitet uavklart (Q12)"
+utpost_gastrolab,utpost,"Gastrolab.",demand,14,"Fast bemanning vises kun, planlegges ikke (D20); rullering fra SF planlegges. Intensitet uavklart (Q12)"
+utpost_kop_barn,utpost,"KOP barn",demand,15,"Fast bemanning vises kun, planlegges ikke (D20). Aktivitet kun torsdager iht. Dagsvis-arket. Intensitet uavklart (Q12)"

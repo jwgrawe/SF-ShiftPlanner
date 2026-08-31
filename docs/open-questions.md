@@ -1,153 +1,118 @@
-# What must be known or defined before/while building
+# Open questions
 
-This is the master list of decisions, missing data and clarifications the
-project needs. Each item says **why it matters** for development. Items are
-grouped by theme and roughly ordered by how early they block progress.
+Fresh list as of 2026-08-31, after the first round of answers (recorded in
+[decisions.md](decisions.md)). Numbered **Q1–Q17** for reference from seed
+data and code; bring this list to the clarification meeting.
 
-Priority key: 🔴 blocks the planning engine · 🟡 needed before the app is
-useful in production · 🟢 can be decided late / defaulted for the prototype.
+Where an *interim rule* is stated, the project proceeds on that assumption —
+the question is whether it's right, not whether work is blocked.
 
-## A. The roster — who is actually at work? 🔴
+Priority: 🔴 gates the planning engine · 🟡 needed soon · 🟢 can wait.
 
-**This is the single biggest missing input.** The demand side (functions ×
-hours) is now well covered by the seed data, but the *supply* side is not:
+## A. Roster & import
 
-1. **How do we know which employee works which shift code on which date?**
-   The briefing mentions "a table listing employees and their shift codes",
-   but no such table was provided. Is it:
-   - a fixed repeating pattern per employee (a "turnus" with e.g. a 6-week
-     cycle), or
-   - a per-date roster exported from the workforce system (GAT/MinGat or
-     similar), or
-   - something managers type in manually?
-   The prototype can start with a hand-editable `roster.csv`
-   (`date, employee_id, shift_code`), but the answer decides the whole import
-   story and how many weeks ahead the app can plan.
-2. **What does a realistic week of rosters look like?** Even a fictionalised
-   two-week example (69 employees × dates × codes) would let us test the
-   planner against reality — e.g. whether 16 people really are present on a
-   weekday morning.
-3. **Absence handling:** which absence types matter (sick, child-sick, leave,
-   course, vacation)? Full-day only, or partial-day? Does an absence ever
-   *change* demand (e.g. close a worktable) or only supply?
+**Q1 🔴 The roster export.** *(Sample promised later this week.)* When it
+arrives, we also need:
+- the exact field layout (employee identifier, date, shift code — anything
+  else, e.g. absence codes?);
+- **how employee identity matches across sources** — does the roster export
+  and the competency sheet share an employee number, so the app can join
+  them? (The competency file is row-anonymized; the join key question remains.)
+- whether absences appear in the export at all, or only get registered
+  in-app (per D27 they only affect supply).
 
-## B. Rullering (rotation) semantics 🔴
+**Q2 🟡 Mid-period roster changes.** When the 10-week roster changes after
+import (swaps, new hires, corrected shifts): is the mechanism a fresh
+export/re-import, and how often should managers expect to do it?
 
-4. **The late-shift rotation time is stated as both 18:00 and 17:00** in the
-   briefing (requirements say 18:00; the display description says "switch at
-   either 11:00 or 17:00"). Which is correct — or does it vary?
-5. **Who must rotate?** Is the rule (a) everyone on a heavy function must leave
-   it at the rotation point, (b) they *may* rotate, or (c) whole pairs/groups
-   swap between a heavy function and the default pool? Where do replacements
-   come from — only the zone's default pool, or anywhere competence allows?
-6. **"1 rotation per shift" — hard or soft?** Does it mean each employee
-   changes function *at most* once per shift, *exactly* once, or that each
-   heavy function swaps its crew once?
-7. **Interaction between rotation at 11:00 and heaviness from 12:00:** a person
-   put on `Gangen` or `Kontrollsone` (heavy *after 12:00*) at the 11:00
-   rotation gets the heavy part of the day. Is that intended (fresh person
-   takes the heavy stretch), and does the 07–11 stint on such functions count
-   as heavy work in the fairness accounting?
-8. **Night shift:** no rotation at night, correct? And which functions do the
-   ~7 night workers cover (demand rows suggest uren 2, ansvarsvakt 1,
-   kontrollsone 1, steril 1 — leaving 2 unaccounted)?
-9. **Friday evening** is typed `Helg` from 17:00 in the opening-hours table.
-   Does Friday's senvakt rotate as a weekday or self-manage as a weekend?
-10. **Mid shifts (`ME`/`UME` 12–20, `H2` 10–18)** span both rotation points.
-    How do they participate — rotate at both, one, or neither? And is the
-    proposed "midpoint rule" for mapping shift codes to the four categories
-    acceptable (see `shift_codes.csv`, column `category_proposed`)?
+## B. The competency file
 
-## C. Heavy-work fairness rules 🔴
+**Q3 🔴 Five columns are completely empty**: *Daglige rutiner (uren)*,
+*Manuell rengjøring*, *Gangen*, *Driftskoordinator*, *Gang/vognvaskemaskiner*.
+Are these (a) covered implicitly by zone competency, (b) simply not yet
+registered, or (c) genuinely zero qualified? Note the tension: D19 says
+specific employees hold DK, yet the DK column is empty.
+*Interim rule:* the planner fills the three uren functions from
+`uren_produksjon`-qualified staff and vognvask from `steril_produksjon`-
+qualified staff; Driftskoordinator comes from the DK/DKK shift codes only.
 
-11. **The exact constraint must be quantified.** "Not several days in a row,
-    ideally not several weeks in a row" could mean, e.g.:
-    - hard: no employee has heavy blocks two working days in a row;
-    - soft: minimise a rolling heavy-load score per employee over 2–4 weeks.
-    Proposal to confirm: *hard* rule against back-to-back heavy days +
-    *soft* balancing of a 28-day rolling "heavy hours" count. What counts as
-    a "heavy day" — any heavy block, or a minimum number of heavy hours?
-12. **Does half a shift on a heavy function count the same as a full one?**
-    (Relates to B7.)
-13. **Are some employees exempt** (pregnancy, injury, age, "tilrettelegging")?
-    That implies a per-employee flag with a validity period — sensitive data,
-    so probably just "exempt from heavy work yes/no" with no reason stored.
+**Q4 🟡 What does "?" mean?** Five marks (Employee 15, 18, 29, 36, 37 —
+mostly under *Produksjon, steril sone*). Under training? Needs refresh?
+*Interim rule:* imported as status `uncertain` and treated as **not**
+eligible.
 
-## D. Competency data 🟡
+**Q5 🟡 The Sterrad/Poliklinikker split (D16) needs two follow-ups:**
+(a) the competency column is combined — is one competency really valid for
+both functions? (b) the hourly demand exists only combined (2 people
+mornings, 1 midday, 2 in the evening) — how does it split between the two?
+*Interim rule:* competency applies to both; demand kept as a combined
+"function group" row.
 
-14. **The real competency file** ("Kompetanse - Anonymisert", 69 employees) was
-    not received. Needed: the file itself, plus its column semantics.
-15. **Is competency binary or graded?** (qualified / under training / can do
-    with support?). The seed models it as binary eligibility per function.
-16. **Do worktable types (ORT, ORTA, …) have their own competencies?** If
-    brikkelegging is planned per table type, planning granularity in ren sone
-    changes significantly. Also: the legend says 10 tables, 8 types are
-    listed — what are the last two?
-17. **Special roles by shift code:** DK/DKK (Driftskoordinator) and U-codes
-    (utposter) imply the function is decided by the roster, not by the daily
-    planner. Confirm: the planner should treat these as pre-assigned and plan
-    everyone else around them. Is Ansvarsvakt likewise tied to specific
-    (senior) employees?
+## C. Rullering
 
-## E. Demand data gaps 🟡
+**Q6 🟡 Friday evening.** Rotation assumed at **17:00** (D30) since the
+period is helg-typed from 17:00 — confirm the time, and that Friday evening
+rotates at all rather than self-managing.
 
-18. **Hour 00:00 is missing** from the demand matrix (assumed equal to
-    23:00/01:00 in the seed — confirm).
-19. **Ren sone has no zone total.** Confirm the interpretation: ren sone
-    absorbs everyone not needed elsewhere (via Arbeidsbord/brikkelegging).
-20. **Utposter numbers conflict** between the hourly sheet and the per-weekday
-    sheet (see source-data-findings.md). Which is authoritative? Are the
-    "fast" utpost staff inside or outside the 69-person pool this app plans —
-    i.e. should the app *plan* them or merely *display* them?
-21. **Weekend demand is undefined** beyond "5–6 people self-manage". Are there
-    minimums per zone on weekends (e.g. at least 1 in steril)? Is the
-    weekend day demand matrix simply not applicable?
-22. **Sterrad vs. poliklinikker:** one function or two?
-23. **Do holidays follow the weekend pattern exactly** (08–18, ad hoc)? What
-    about half-days such as Christmas Eve, New Year's Eve, Easter Wednesday —
-    hospital-specific rules? (Norwegian national holidays themselves can be
-    computed in code; no data needed.)
+**Q7 🟡 Mid shifts.** `ME`/`UME` (12–20) and `H2` (10–18) span both rotation
+points. Do they rotate at both, one, or neither? Related: confirm the
+midpoint rule used to map every shift code to tidlig/sen/natt/helg
+(`category_proposed` in `shift_codes.csv`).
 
-## F. Product / UX decisions 🟡
+**Q8 🟡 Confirm the rotation rule (D5):** everyone on a heavy function must
+leave it at the rotation point, replacements from anywhere competence
+allows. Flagged as "not 100 % certain" — the app keeps it configurable
+either way.
 
-24. **Planning horizon and workflow:** how many weeks ahead should suggestions
-    be generated (proposal: 2 weeks rolling)? Who "publishes" a plan, and may
-    a published plan be regenerated? (Proposal: regeneration never overwrites
-    manually locked assignments.)
-25. **Display screen:** what should it show outside rotation windows vs. the
-    30–60 min around 11:00/18:00 (proposal: current placement + "next change"
-    panel)? Portrait or landscape? One screen or several (per zone)?
-26. **Naming on the wall display:** full names, or first name + initial?
-    The screen hangs in a semi-public area — worth a deliberate GDPR-friendly
-    choice even though viewers are staff. (Seed data includes a
-    `display_name` column: "Kari H.".)
-27. **How do night shifts display?** A "planning day" runs 07:00 → 07:00 (the
-    night shift belongs to the day it starts). Confirm this matches how staff
-    think about it.
-28. **Language of the UI:** Norwegian (bokmål) assumed for all end-user
-    screens; code/docs in English.
+**Q9 🟢 Partial-shift heavy work** currently counts as a full "heavy day"
+in the back-to-back rule (D9). Keep, or refine (e.g. a minimum number of
+heavy hours)?
 
-## G. Technical / environment 🟢
+## D. Demand data
 
-29. **Can the work PC install Python packages** (pip against PyPI, possibly
-    via a proxy)? If not, the stack must shrink to the standard library —
-    doable, but worth knowing before choosing FastAPI/Flask. Which browser is
-    available (Edge?), and can the wall display point at the work PC over the
-    network, or is it the same machine?
-30. **Where may data live?** Even with fictional data now, confirm SQLite
-    file on a local/shared drive is acceptable, and whether real names may be
-    stored there later without further approval (likely fine internally, but
-    hospitals often require a DPIA — worth asking early because approval is
-    slow).
-31. **Backup/copy routine** for the SQLite file (proposal: the app writes a
-    dated backup on start).
+**Q10 🔴 Utposter numbers conflict** between the hourly matrix (Gastrolab
+up to 3 people daily; rullering total only hours 10–11) and the per-weekday
+sheet (Gastrolab 2 people Thu/Fri only; Kir. Pol. Thu 10–17 / Fri 10–15).
+*(Owner investigating.)* Also unstated: KOP barn's Thursday head-count
+(assumed 1).
 
-## Suggested resolution order
+**Q11 🟡 Weekend/holiday shift codes** are missing from the vaktkode list —
+no code matches the 08:00–18:00 helgevakt window. *(Owner adding.)*
 
-1. A1–A2 (roster source + example data) — everything else feeds off this.
-2. B4–B10 (rullering semantics) and C11–C13 (fairness rules) — needed to
-   design the planner correctly the first time.
-3. D14–D17 (competency file) — swap fake data for realistic structure.
-4. E18–E23 (demand gaps) — mostly confirmations; defaults already chosen in
-   the seed and marked with notes.
-5. F/G — can be answered while the data foundation is being built.
+**Q12 🟢 Are utpost functions heavy?** Currently intensity 0 (no marks in
+the source).
+
+**Q13 🟢 Weekend display.** With everyone ad hoc (D21), should the screen
+show anything beyond the day's crew list per zone — e.g. who holds
+ansvarsvakt-like responsibility, if anyone?
+
+## E. Product details
+
+**Q14 🟡 Absence types.** Which list should the app offer (syk, egenmelding,
+ferie, kurs, permisjon, annet …)? Should the type be visible to everyone on
+the display/plan, or shown simply as "fravær" with the type visible only to
+managers?
+
+**Q15 🟢 Driftskoordinator fallback.** If no DK/DKK-coded employee is
+present (sickness): should the planner suggest a replacement (requires an
+answer to Q3 — who is DK-qualified?), or leave the slot empty with a
+warning for the manager?
+
+## F. Technical
+
+**Q16 🟡 Package installation on the work PC.** Test user-level installs
+(no admin rights needed) — instructions in [assessment.md](assessment.md)
+§6. The outcome decides FastAPI vs. a stdlib-only fallback.
+
+**Q17 🟢 Concrete paths.** Where should the app folder, the SQLite file and
+the import folder live — local disk or a shared drive (which one)?
+
+---
+
+### Resolved since last version
+
+Former questions on terminology, stack, rotation time (18:00), ren sone as
+remainder, night staffing, hour 00:00, shift-code lengths, competency
+granularity, worktables, utpost fast staff, weekends/holidays, horizon,
+display layout, naming, UI language, PINs, storage and absences are all
+settled — see [decisions.md](decisions.md).
