@@ -1,0 +1,5 @@
+zone_id,name,sort_order,notes
+uren,Uren sone,1,"Mottak, rengjøring og dekontaminering av brukt utstyr"
+ren,Ren sone,2,"Sortering, kontroll, brikkelegging og sterilisering"
+steril,Steril sone,3,"Håndtering og utlevering av sterilt gods"
+utpost,Utposter,4,"Arbeidssteder utenfor SF-sentralen"

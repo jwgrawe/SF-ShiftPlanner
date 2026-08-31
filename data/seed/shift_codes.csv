@@ -1,0 +1,22 @@
+code,start,end,crosses_midnight,category_proposed,duration_hours,comment
+A,14:00,22:00,no,senvakt,8.0,
+A1,13:30,21:00,no,senvakt,7.5,"Tidspunkt normalisert fra '13.30'/'21.00' i kilden"
+A2,15:00,22:00,no,senvakt,7.0,
+A4,14:30,22:00,no,senvakt,7.5,
+D,07:00,15:00,no,tidligvakt,8.0,
+D1,07:00,14:00,no,tidligvakt,7.0,
+D2,08:00,15:00,no,tidligvakt,7.0,
+DK,07:00,15:00,no,tidligvakt,8.0,Driftskoordinator
+DKK,07:00,14:00,no,tidligvakt,7.0,Driftskoordinator
+H1,08:00,16:00,no,tidligvakt,8.0,
+H2,10:00,18:00,no,tidligvakt,8.0,"Mellomvakt – midtpunkt 14:00 -> tidligvakt. Krysser begge rulleringstidspunkt (11:00 og 18:00-slutt) – håndtering må avklares"
+ME,12:00,20:00,no,senvakt,8.0,"Mellomvakt – midtpunkt 16:00 -> senvakt. Passer ingen kategori godt, må avklares"
+N,22:00,07:00,yes,nattevakt,9.0,
+NA,21:45,07:15,yes,nattevakt,9.5,"Over 7,5 t – bryter med antakelsen om maks 7,5 t. Må avklares"
+U10,10:00,17:00,no,tidligvakt,7.0,Utposter
+U16,09:00,16:00,no,tidligvakt,7.0,Utposter
+U17,09:00,17:00,no,tidligvakt,8.0,Utposter
+U8,08:00,17:00,no,tidligvakt,9.0,"Utposter. Over 7,5 t – må avklares"
+U9,09:00,18:00,no,tidligvakt,9.0,"Utposter. Over 7,5 t – må avklares"
+UKB,08:00,15:30,no,tidligvakt,7.5,Utposter
+UME,12:00,20:00,no,senvakt,8.0,"Utposter. Samme tidsrom som ME – kategori må avklares"

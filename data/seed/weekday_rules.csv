@@ -1,0 +1,15 @@
+function_id,category,weekday,rule,start,end,count,source_text
+utpost_kir_pol,rullering_fra_sf,mon,none,,,0,
+utpost_kir_pol,rullering_fra_sf,tue,none,,,0,
+utpost_kir_pol,rullering_fra_sf,wed,none,,,0,
+utpost_kir_pol,rullering_fra_sf,thu,staffed,10:00,17:00,1,"1 ansatt fra SF 10-17"
+utpost_kir_pol,rullering_fra_sf,fri,staffed,10:00,15:00,1,"1 ansatt fra SF 10-15"
+utpost_gastrolab,fast,thu,staffed,09:00,16:00,1,"En begynner 09-16"
+utpost_gastrolab,fast,thu,staffed,10:00,17:00,1,"en annen 10-17"
+utpost_gastrolab,fast,fri,staffed,09:00,16:00,1,"En begynner 09-16"
+utpost_gastrolab,fast,fri,staffed,10:00,17:00,1,"en annen 10-17"
+utpost_kop_barn,fast,mon,closed,,,0,"Ingen aktivitet"
+utpost_kop_barn,fast,tue,closed,,,0,"Ingen aktivitet"
+utpost_kop_barn,fast,wed,closed,,,0,"Ingen aktivitet"
+utpost_kop_barn,fast,thu,staffed,08:00,15:00,1,"Aktivitet 08-15 (antall ansatte ikke oppgitt – antatt 1)"
+utpost_kop_barn,fast,fri,closed,,,0,"Ingen aktivitet"
