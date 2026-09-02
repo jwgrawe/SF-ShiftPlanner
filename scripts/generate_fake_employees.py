@@ -53,14 +53,17 @@ def main() -> None:
 
     SEED_DIR.mkdir(parents=True, exist_ok=True)
     out_path = SEED_DIR / "employees.csv"
+    # works_at: "sf" (the CSSD central) or "utpost_fast" (permanently at an
+    # outpost, excluded from SF planning per D39). Which employees are
+    # utpost_fast is not yet known (Q21) – everyone starts as "sf".
     with open(out_path, "w", newline="", encoding="utf-8") as fh:
         writer = csv.writer(fh)
         writer.writerow(
-            ["employee_id", "source_label", "first_name", "last_name", "display_name"]
+            ["employee_id", "source_label", "first_name", "last_name", "display_name", "works_at"]
         )
         for i, (first, last) in enumerate(names):
             writer.writerow(
-                [f"E{i + 1:03d}", f"Employee {i + 1}", first, last, f"{first} {last[0]}."]
+                [f"E{i + 1:03d}", f"Employee {i + 1}", first, last, f"{first} {last[0]}.", "sf"]
             )
 
     print(f"Wrote {N_EMPLOYEES} employees to {out_path}")

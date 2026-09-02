@@ -76,14 +76,15 @@ than guessing which is right. Fast utpost staff are display-only, not planned
 - The source's `Vakttype` column (Dag/Kveld/Natt) is **disregarded** per the
   project decision; instead a `category_proposed` column maps every code onto
   the four planning categories (tidligvakt/senvakt/nattevakt/helgevakt) using
-  the *midpoint rule*: a shift belongs to the category whose window contains
-  the shift's midpoint. **⚠ The rule needs confirmation**, especially for the
-  straddling codes `H2` (10–18), `ME`/`UME` (12–20) — *still open (Q7)*.
+  explicit per-code assignment. **⚠ The straddling codes** were resolved in
+  round 2: `H2` turned out to be a weekend code (D36), and `ME`/`UME` became
+  the new category **mellomvakt** with its own 16:00 rotation time (D35).
+  Categories are assigned explicitly per code, not by formula (Q25 confirms).
 - **⚠ Several codes exceed the stated 7.5 h maximum**: `N` 9 h, `NA` 9.5 h,
   `U8` 9 h, `U9` 9 h — *resolved (D15): longer shifts are allowed; the 7.5 h
   rule is the HR system's concern and is disregarded here.*
-- **⚠ No code matches the helgevakt window 08:00–18:00** — *weekend codes are
-  being added by the department (Q11).*
+- **⚠ No code matches the helgevakt window 08:00–18:00** — *resolved (D36):
+  `H1` (08–16) and `H2` (10–18) are the weekend/holiday codes.*
 - `DK`/`DKK` are dedicated Driftskoordinator codes and `U*` codes are dedicated
   utpost codes — i.e. for these, the *function* is largely decided by the
   roster before daily planning starts.
@@ -94,8 +95,9 @@ Already tidy; copied through with normalised headers. One detail worth noting:
 
 - Friday 15:00–17:00 is `Hverdag`, but **Friday 17:00–22:00 is typed `Helg`**
   while still being an open Senvakt period. **⚠ Does the Friday senvakt follow
-  weekday rules or weekend rules?** — *interim decision (D30): assume rotation
-  at 17:00; confirmation still open (Q6).*
+  weekday rules or weekend rules?** — *resolved (D34): Friday evening rotates
+  at 18:00 like every other weekday; the `Helg` typing is only about opening
+  periods.*
 - The week is closed Mon 00:00–07:00, Fri 22:00 → Sat 08:00, Sat 18:00 → Sun
   08:00, and Sun 18:00 → Mon 07:00 — matching the briefing.
 
@@ -112,17 +114,17 @@ department's **real competency structure** under fictional names.
 
 Findings:
 
-- **⚠ Five columns contain no marks at all**: *Daglige rutiner (uren sone)*,
-  *Manuell rengjøring*, *Gangen*, *Driftskoordinator*,
-  *Gang/vognvaskemaskiner*. Interpretation is open (Q3) — notably, an empty
-  Driftskoordinator column sits oddly with D19 ("specific employees hold
-  DK"). Interim eligibility rules are defined in Q3.
-- **⚠ Five `?` marks** (Employees 15, 18, 29, 36, 37; four of them under
-  *Produksjon, steril sone*). Meaning open (Q4); imported as `uncertain` and
-  treated as not eligible for now.
-- The column *"Sterrad + poliklinikker/løspakk"* is combined, while the
-  function was split by D16 — the import maps it to **both** new functions
-  pending Q5.
+- **⚠ Five columns contain no marks at all** — *resolved for uren (D42: the
+  three uren columns are covered by "Produksjon, uren sone" competency, via
+  the function-competency mapping) and for DK (D41: DK is identified via
+  shift codes; the function merged with Ansvarsvakt). Gang/vognvaskemaskiner
+  remains an assumption (Q24: covered by produksjon_steril).*
+- **⚠ Five `?` marks** (Employees 15, 18, 29, 36, 37) — *resolved (D44): a
+  manager's "assess this" reminder; imported as `uncertain`, never eligible;
+  any other unexpected mark is ignored with a warning.*
+- The column *"Sterrad + poliklinikker/løspakk"* is combined, while both the
+  function **and the competency** were split (D43) — the import credits both
+  competencies from the one column until the file is re-issued (Q20).
 - Coverage counts (qualified): Produksjon uren 59, Arbeidsbord 60,
   Produksjon steril 38, Kontrollsone 33, Sterrad+poliklinikker 27,
   Ansvarsvakt 21, Kir. Pol. 18, Gastrolab 14, KOP barn 10.

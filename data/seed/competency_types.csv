@@ -1,0 +1,16 @@
+competency_id,name,source_column,notes
+produksjon_uren,"Produksjon, uren sone","Produksjon, uren sone",
+daglige_rutiner_uren,"Daglige rutiner (uren sone)","Daglige rutiner (uren sone)","Tom i kildefilen – dekkes av produksjon_uren via function_competencies (D42)"
+manuell_rengjoring,"Manuell rengjøring","Manuell rengjøring","Tom i kildefilen – dekkes av produksjon_uren (D42)"
+gangen,"Gangen","Gangen","Tom i kildefilen – dekkes av produksjon_uren (D42)"
+driftskoordinator,"Driftskoordinator","Driftskoordinator","Tom i kildefilen; DK identifiseres primært via vaktkode (D41)"
+ansvarsvakt,"Ansvarsvakt","Ansvarsvakt",
+kontrollsone,"Kontrollsone","Kontrollsone",
+arbeidsbord,"Arbeidsbord/brikkelegging","Arbeidsbord/brikkelegging",
+sterrad,"Sterrad","Sterrad + poliklinikker/løspakk","Delt kompetanse (D43); kildekolonnen er fortsatt samlet og mappes til begge (Q20)"
+poliklinikker_lospakk,"Poliklinikker/løspakk","Sterrad + poliklinikker/løspakk","Delt kompetanse (D43); kildekolonnen er fortsatt samlet og mappes til begge (Q20)"
+produksjon_steril,"Produksjon, steril sone","Produksjon, steril sone",
+gang_vognvask,"Gang/vognvaskere","Gang/vognvaskemaskiner","Tom i kildefilen – antatt dekket av produksjon_steril (Q24)"
+utpost_kir_pol,"Kir. Pol.","Kirurgisk poliklinikk",
+utpost_gastrolab,"Gastrolab.","Gastro lab.",
+utpost_kop_barn,"KOP barn","KOP barn",

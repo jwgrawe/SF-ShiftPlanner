@@ -1,0 +1,6 @@
+category,rotation_time,notes
+tidligvakt,11:00,
+senvakt,18:00,"Gjelder også fredag kveld (D34)"
+mellomvakt,16:00,"Eget rulleringstidspunkt for vakter som dekker begge de andre punktene (D35)"
+nattevakt,,"Ingen rullering (D8)"
+helgevakt,,"Ingen rullering – ad hoc (D21)"

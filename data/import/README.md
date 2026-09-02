@@ -9,9 +9,13 @@ Planned contents:
 
 | File | Owner | Sheets |
 |---|---|---|
-| `grunndata.xlsx` | admin | Funksjoner · Bemanningsbehov · Intensitet · Vaktkoder · Åpningstider · Ukedagsregler |
-| `personal.xlsx` | managers | Ansatte · Kompetanse · Fritak · (Fravær, as fallback — normally entered in-app) |
-| `turnus_*.xlsx` | roster system export | dropped in as-is; parsed by a dedicated adapter once the real export format is known (Q1) |
+| `grunndata.xlsx` | admin | Funksjoner · Funksjonskompetanser · Bemanningsbehov · Intensitet · Vaktkoder · Rulleringsregler · Åpningstider · Ukedagsregler |
+| `personal.xlsx` | managers | Ansatte · Kompetanse · Preferanser · Fritak · (Fravær, as fallback — normally entered in-app) |
+| `turnus_*.xlsx` | roster system export | dropped in as-is; parsed by a dedicated adapter once the real export format is known (Q1). On refresh, published plans are re-validated against the new roster and conflicts flagged (D45) |
+
+Note on sensitivity: the Preferanser sheet (and Fritak) carries information
+that is only ever surfaced in the admin view (D32/D11) — the import folder
+should live with the app in its access-controlled location.
 
 Import rules: validate first, show a diff summary, refuse to delete master
 data referenced by published plans, then upsert. Idempotent — re-importing an

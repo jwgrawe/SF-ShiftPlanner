@@ -1,16 +1,15 @@
-function_id,zone_id,name,staffing_mode,sort_order,notes
-uren_produksjon,uren,"Produksjon, uren sone",remainder,1,"Default-funksjon i uren sone: alle øvrige i sonen plasseres her"
-uren_daglige_rutiner,uren,"Ansvar daglige rutiner (uren sone)",demand,2,"Ingen registrert kompetanse i kompetansefilen – tolkning uavklart (Q3)"
-uren_manuell_rengjoring,uren,"Manuell rengjøring",demand,3,"Ingen registrert kompetanse i kompetansefilen – tolkning uavklart (Q3)"
-uren_gangen,uren,"Gangen",demand,4,"Ingen registrert kompetanse i kompetansefilen – tolkning uavklart (Q3)"
-ren_driftskoordinator,ren,"Driftskoordinator",demand,5,"Egne vaktkoder (DK/DKK) – forhåndsbestemt av turnus (D19). Ingen registrert kompetanse i kompetansefilen (Q3)"
-ren_ansvarsvakt,ren,"Ansvarsvakt",demand,6,"Krever kompetanse; typisk seniore ansatte (D19). Bemannes 15:00–07:00"
-ren_kontrollsone,ren,"Kontrollsone",demand,7,
-ren_arbeidsbord,ren,"Arbeidsbord/brikkelegging",remainder,8,"Default-funksjon i ren sone – absorberer alle som ikke trengs andre steder, hele døgnet (D13/D14). 10 arbeidsbord, 8 generiske bordtyper – se worktable_types.csv (D18)"
-ren_sterrad,ren,"Sterrad",demand,9,"Delt fra «Sterrad + poliklinikker/løspakk» (D16). Behovstall og kompetanse foreligger kun samlet – se Q5"
-ren_poliklinikker_lospakk,ren,"Poliklinikker og løspakk",demand,10,"Delt fra «Sterrad + poliklinikker/løspakk» (D16). Behovstall og kompetanse foreligger kun samlet – se Q5"
-steril_produksjon,steril,"Produksjon, steril sone",adhoc_zone,11,"Bemannes via sonetotalen for steril sone; fordeles ad hoc innad i sonen"
-steril_gang_vognvask,steril,"Gang/vognvaskere",adhoc_zone,12,"Bemannes via sonetotalen; fordeles ad hoc. Heter «Gang/vognvaskemaskiner» i kompetansefilen (ingen registrert kompetanse – Q3)"
-utpost_kir_pol,utpost,"Kir. Pol.",demand,13,"Fast bemanning vises kun, planlegges ikke (D20); rullering fra SF planlegges. Intensitet uavklart (Q12)"
-utpost_gastrolab,utpost,"Gastrolab.",demand,14,"Fast bemanning vises kun, planlegges ikke (D20); rullering fra SF planlegges. Intensitet uavklart (Q12)"
-utpost_kop_barn,utpost,"KOP barn",demand,15,"Fast bemanning vises kun, planlegges ikke (D20). Aktivitet kun torsdager iht. Dagsvis-arket. Intensitet uavklart (Q12)"
+function_id,zone_id,name,staffing_mode,active,sort_order,notes
+uren_produksjon,uren,"Produksjon, uren sone",remainder,yes,1,"Default-funksjon i uren sone: alle øvrige i sonen plasseres her"
+uren_daglige_rutiner,uren,"Ansvar daglige rutiner (uren sone)",demand,yes,2,
+uren_manuell_rengjoring,uren,"Manuell rengjøring",demand,yes,3,
+uren_gangen,uren,"Gangen",demand,yes,4,
+ren_dk_ansvarsvakt,ren,"DK/ansvarsvakt",demand,yes,5,"Sammenslått av Driftskoordinator og Ansvarsvakt (D41): sikrer én ansvarlig på vakt hele døgnet. DK-vaktkode (DK/DKK) prioriteres; ellers velges ansvarsvakt-kompetent"
+ren_kontrollsone,ren,"Kontrollsone",demand,yes,6,
+ren_arbeidsbord,ren,"Arbeidsbord/brikkelegging",remainder,yes,7,"Default-funksjon for hele avdelingen – absorberer alle som ikke trengs andre steder, også om natten (D13/D14). 10 arbeidsbord, 8 generiske bordtyper – se worktable_types.csv (D18)"
+ren_sterrad,ren,"Sterrad",demand,yes,8,"Delt fra «Sterrad + poliklinikker/løspakk» (D43). Behovstall foreligger kun samlet – se Q20"
+ren_poliklinikker_lospakk,ren,"Poliklinikker/løspakk",demand,yes,9,"Delt fra «Sterrad + poliklinikker/løspakk» (D43). Behovstall foreligger kun samlet – se Q20"
+steril_produksjon,steril,"Produksjon, steril sone",adhoc_zone,yes,10,"Bemannes via sonetotalen for steril sone; fordeles ad hoc innad i sonen"
+steril_gang_vognvask,steril,"Gang/vognvaskere",adhoc_zone,yes,11,"Bemannes via sonetotalen; fordeles ad hoc. Heter «Gang/vognvaskemaskiner» i kompetansefilen"
+utpost_kir_pol,utpost,"Kir. Pol.",demand,no,12,"Utposter er utenfor planleggingsomfanget inntil videre (D39); modellen beholdes klar for reaktivering"
+utpost_gastrolab,utpost,"Gastrolab.",demand,no,13,"Utposter er utenfor planleggingsomfanget inntil videre (D39)"
+utpost_kop_barn,utpost,"KOP barn",demand,no,14,"Utposter er utenfor planleggingsomfanget inntil videre (D39)"

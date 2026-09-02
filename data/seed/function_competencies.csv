@@ -1,0 +1,20 @@
+function_id,competency_id,priority,notes
+uren_produksjon,produksjon_uren,1,
+uren_daglige_rutiner,daglige_rutiner_uren,1,
+uren_daglige_rutiner,produksjon_uren,2,"D42: produksjon_uren dekker de øvrige uren-funksjonene"
+uren_manuell_rengjoring,manuell_rengjoring,1,
+uren_manuell_rengjoring,produksjon_uren,2,"D42"
+uren_gangen,gangen,1,
+uren_gangen,produksjon_uren,2,"D42"
+ren_dk_ansvarsvakt,driftskoordinator,1,"Ansatte med DK/DKK-vaktkode prioriteres uansett (D41)"
+ren_dk_ansvarsvakt,ansvarsvakt,2,"Fallback: ansvarsvakt-kompetent (D41)"
+ren_kontrollsone,kontrollsone,1,
+ren_arbeidsbord,arbeidsbord,1,
+ren_sterrad,sterrad,1,
+ren_poliklinikker_lospakk,poliklinikker_lospakk,1,
+steril_produksjon,produksjon_steril,1,
+steril_gang_vognvask,gang_vognvask,1,
+steril_gang_vognvask,produksjon_steril,2,"Antakelse inntil avklart (Q24)"
+utpost_kir_pol,utpost_kir_pol,1,
+utpost_gastrolab,utpost_gastrolab,1,
+utpost_kop_barn,utpost_kop_barn,1,

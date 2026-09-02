@@ -15,6 +15,7 @@ SEED_DIR = Path(__file__).resolve().parent.parent / "data" / "seed"
 
 TIME_RE = re.compile(r"^([01]?\d|2[0-3]):[0-5]\d$|^24:00$")
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+SHIFT_CATEGORIES = {"tidligvakt", "senvakt", "mellomvakt", "nattevakt", "helgevakt"}
 
 errors: list[str] = []
 
@@ -40,22 +41,29 @@ def check_unique(rows: list[dict], key: str, name: str) -> None:
 def main() -> int:
     zones = load("zones.csv")
     functions = load("functions.csv")
+    competency_types = load("competency_types.csv")
+    function_competencies = load("function_competencies.csv")
     intensity = load("function_intensity.csv")
     demand = load("staffing_demand.csv")
     shift_codes = load("shift_codes.csv")
+    rotation_rules = load("rotation_rules.csv")
     employees = load("employees.csv")
-    competencies = load("competencies.csv")
+    employee_competencies = load("employee_competencies.csv")
+    preferences = load("employee_preferences.csv")
     restrictions = load("employee_restrictions.csv")
     weekday_rules = load("weekday_rules.csv")
 
     check_unique(zones, "zone_id", "zones.csv")
     check_unique(functions, "function_id", "functions.csv")
+    check_unique(competency_types, "competency_id", "competency_types.csv")
     check_unique(shift_codes, "code", "shift_codes.csv")
+    check_unique(rotation_rules, "category", "rotation_rules.csv")
     check_unique(employees, "employee_id", "employees.csv")
     check_unique(employees, "source_label", "employees.csv")
 
     zone_ids = {r["zone_id"] for r in zones}
     function_ids = {r["function_id"] for r in functions}
+    competency_ids = {r["competency_id"] for r in competency_types}
     employee_ids = {r["employee_id"] for r in employees}
 
     for row in functions:
@@ -65,6 +73,24 @@ def main() -> int:
             errors.append(
                 f"functions.csv: {row['function_id']}: bad staffing_mode {row['staffing_mode']!r}"
             )
+        if row["active"] not in {"yes", "no"}:
+            errors.append(f"functions.csv: {row['function_id']}: bad active {row['active']!r}")
+
+    covered_functions: set[str] = set()
+    for row in function_competencies:
+        if row["function_id"] not in function_ids:
+            errors.append(f"function_competencies.csv: unknown function_id {row['function_id']!r}")
+        if row["competency_id"] not in competency_ids:
+            errors.append(
+                f"function_competencies.csv: unknown competency_id {row['competency_id']!r}"
+            )
+        if not row["priority"].isdigit():
+            errors.append(
+                f"function_competencies.csv: {row['function_id']}: bad priority {row['priority']!r}"
+            )
+        covered_functions.add(row["function_id"])
+    for function_id in sorted(function_ids - covered_functions):
+        errors.append(f"function_competencies.csv: function {function_id} has no competency mapping")
 
     for row in intensity:
         if row["function_id"] not in function_ids:
@@ -111,10 +137,24 @@ def main() -> int:
         for col in ("start", "end"):
             if not TIME_RE.match(row[col]):
                 errors.append(f"shift_codes.csv: {row['code']}: bad {col} {row[col]!r}")
-        if row["category_proposed"] not in {"tidligvakt", "senvakt", "nattevakt", "helgevakt"}:
+        if row["category"] not in SHIFT_CATEGORIES:
+            errors.append(f"shift_codes.csv: {row['code']}: bad category {row['category']!r}")
+
+    rule_categories = set()
+    for row in rotation_rules:
+        if row["category"] not in SHIFT_CATEGORIES:
+            errors.append(f"rotation_rules.csv: bad category {row['category']!r}")
+        if row["rotation_time"] and not TIME_RE.match(row["rotation_time"]):
             errors.append(
-                f"shift_codes.csv: {row['code']}: bad category {row['category_proposed']!r}"
+                f"rotation_rules.csv: {row['category']}: bad rotation_time {row['rotation_time']!r}"
             )
+        rule_categories.add(row["category"])
+    for category in sorted(SHIFT_CATEGORIES - rule_categories):
+        errors.append(f"rotation_rules.csv: category {category} has no row")
+
+    for row in employees:
+        if row["works_at"] not in {"sf", "utpost_fast"}:
+            errors.append(f"employees.csv: {row['employee_id']}: bad works_at {row['works_at']!r}")
 
     for row in weekday_rules:
         if row["function_id"] not in function_ids:
@@ -122,13 +162,21 @@ def main() -> int:
         if row["weekday"] not in {"mon", "tue", "wed", "thu", "fri", "sat", "sun"}:
             errors.append(f"weekday_rules.csv: bad weekday {row['weekday']!r}")
 
-    for row in competencies:
+    for row in employee_competencies:
         if row["employee_id"] not in employee_ids:
-            errors.append(f"competencies.csv: unknown employee_id {row['employee_id']!r}")
-        if row["function_id"] not in function_ids:
-            errors.append(f"competencies.csv: unknown function_id {row['function_id']!r}")
+            errors.append(f"employee_competencies.csv: unknown employee_id {row['employee_id']!r}")
+        if row["competency_id"] not in competency_ids:
+            errors.append(
+                f"employee_competencies.csv: unknown competency_id {row['competency_id']!r}"
+            )
         if row["status"] not in {"qualified", "uncertain"}:
-            errors.append(f"competencies.csv: bad status {row['status']!r}")
+            errors.append(f"employee_competencies.csv: bad status {row['status']!r}")
+
+    for row in preferences:
+        if row["employee_id"] not in employee_ids:
+            errors.append(f"employee_preferences.csv: unknown employee_id {row['employee_id']!r}")
+        if row["function_id"] not in function_ids:
+            errors.append(f"employee_preferences.csv: unknown function_id {row['function_id']!r}")
 
     for row in restrictions:
         if row["employee_id"] not in employee_ids:
@@ -154,12 +202,15 @@ def main() -> int:
             print(f"  - {error}")
         return 1
 
-    qualified = sum(1 for r in competencies if r["status"] == "qualified")
+    qualified = sum(1 for r in employee_competencies if r["status"] == "qualified")
     print("OK – all seed files consistent")
     print(f"  zones: {len(zones)}, functions: {len(functions)}, "
-          f"intensity windows: {len(intensity)}, demand rows: {len(demand)}")
-    print(f"  shift codes: {len(shift_codes)}, employees: {len(employees)}, "
-          f"competency rows: {len(competencies)} ({qualified} qualified), "
+          f"competency types: {len(competency_types)}, "
+          f"function-competency mappings: {len(function_competencies)}")
+    print(f"  intensity windows: {len(intensity)}, demand rows: {len(demand)}, "
+          f"shift codes: {len(shift_codes)}, rotation rules: {len(rotation_rules)}")
+    print(f"  employees: {len(employees)}, competency rows: {len(employee_competencies)} "
+          f"({qualified} qualified), preferences: {len(preferences)}, "
           f"restrictions: {len(restrictions)}")
     return 0
 

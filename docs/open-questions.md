@@ -1,118 +1,118 @@
 # Open questions
 
-Fresh list as of 2026-08-31, after the first round of answers (recorded in
-[decisions.md](decisions.md)). Numbered **Q1–Q17** for reference from seed
-data and code; bring this list to the clarification meeting.
-
-Where an *interim rule* is stated, the project proceeds on that assumption —
-the question is whether it's right, not whether work is blocked.
+Current list as of 2026-09-02, after the department's question round.
+Q-numbers are stable across rounds: **Q2–Q17 are resolved** (answers recorded
+in [decisions.md](decisions.md)); Q1 remains open; new items continue from
+Q18. Where an *interim rule* is stated, work proceeds on that assumption.
 
 Priority: 🔴 gates the planning engine · 🟡 needed soon · 🟢 can wait.
 
 ## A. Roster & import
 
-**Q1 🔴 The roster export.** *(Sample promised later this week.)* When it
-arrives, we also need:
-- the exact field layout (employee identifier, date, shift code — anything
-  else, e.g. absence codes?);
-- **how employee identity matches across sources** — does the roster export
-  and the competency sheet share an employee number, so the app can join
-  them? (The competency file is row-anonymized; the join key question remains.)
-- whether absences appear in the export at all, or only get registered
-  in-app (per D27 they only affect supply).
+**Q1 🔴 The roster export.** *(Still pending — sample promised.)* Needed with
+it: the field layout, and **the identity join key** — do the roster export
+and the competency data share an employee number the app can join on?
 
-**Q2 🟡 Mid-period roster changes.** When the 10-week roster changes after
-import (swaps, new hires, corrected shifts): is the mechanism a fresh
-export/re-import, and how often should managers expect to do it?
+## B. Rotation semantics *(new — the big ones)*
 
-## B. The competency file
+**Q18 🔴 Scope of the zone swap (D37).** "Rotation between uren sone and ren
+sone (all functions)" needs pinning down, because the crews are different
+sizes (uren needs 3–6 people; ren holds most of the department):
 
-**Q3 🔴 Five columns are completely empty**: *Daglige rutiner (uren)*,
-*Manuell rengjøring*, *Gangen*, *Driftskoordinator*, *Gang/vognvaskemaskiner*.
-Are these (a) covered implicitly by zone competency, (b) simply not yet
-registered, or (c) genuinely zero qualified? Note the tension: D19 says
-specific employees hold DK, yet the DK column is empty.
-*Interim rule:* the planner fills the three uren functions from
-`uren_produksjon`-qualified staff and vognvask from `steril_produksjon`-
-qualified staff; Driftskoordinator comes from the DK/DKK shift codes only.
+- Does the **entire uren crew** leave uren at the rotation point, replaced by
+  an equal number from ren — or only part of the crew?
+- Who in ren is in the swap pool: only the Arbeidsbord/brikkelegging
+  remainder, or also people on demand functions (Kontrollsone, Sterrad,
+  Poliklinikker/løspakk, DK/ansvarsvakt)?
+- **Kontrollsone and Gangen are heavy from 12:00** but are not a uren↔ren
+  swap in themselves. Does the person on Kontrollsone rotate within ren
+  (e.g. to arbeidsbord), does the Gangen person swap like the rest of uren —
+  or do these simply follow the zone swap?
+- Does **steril sone** participate in any rotation? Its functions are marked
+  heavy (`*`), but D37 defines rotation as uren↔ren only. If steril doesn't
+  rotate, is that intentional (small crew, self-paced)?
+- Night shift: confirmed no rotation — so the ~2 people in uren at night
+  stand a full night of heavy work. Accepted?
 
-**Q4 🟡 What does "?" mean?** Five marks (Employee 15, 18, 29, 36, 37 —
-mostly under *Produksjon, steril sone*). Under training? Needs refresh?
-*Interim rule:* imported as status `uncertain` and treated as **not**
-eligible.
+**Q19 🔴 The "heavy at most once per week" rule (D37) looks mathematically
+infeasible as stated — which relaxation is intended?** Rough arithmetic per
+weekday, counting distinct people who touch heavy work (intensity > 0), with
+the zone swap making each half-shift a different person:
 
-**Q5 🟡 The Sterrad/Poliklinikker split (D16) needs two follow-ups:**
-(a) the competency column is combined — is one competency really valid for
-both functions? (b) the hourly demand exists only combined (2 people
-mornings, 1 midday, 2 in the evening) — how does it split between the two?
-*Interim rule:* competency applies to both; demand kept as a combined
-"function group" row.
+| Heavy work | Distinct people per weekday |
+|---|---|
+| Uren sone (heavy all day, 3–6 on duty × 4 rotation halves + night) | ~20–22 |
+| Kontrollsone (heavy 12:00–21:00) | ~5 |
+| Gangen (heavy 12:00–21:00) | ~3 |
+| Steril sone (heavy all day) | ~5 |
+| **Total** | **~30–35 per day → ~150–175 per week** |
 
-## C. Rullering
+With 69 employees, a hard cap of one heavy occurrence per week allows at most
+69 — the demand is ~2–2.5× that, so every employee would need **2–3 heavy
+stints per week** no matter how cleverly we plan. Options (pick or combine):
 
-**Q6 🟡 Friday evening.** Rotation assumed at **17:00** (D30) since the
-period is helg-typed from 17:00 — confirm the time, and that Friday evening
-rotates at all rather than self-managing.
+1. **Narrow the rule's scope**: "once per week" applies only to the
+   *especially* heavy functions (e.g. Gangen + Kontrollsone — ~8 slots/day
+   ≈ 40/week, comfortably feasible), while general uren/steril work is
+   governed by the zone swap + soft balancing only.
+2. **Half-shifts don't count**: the zone swap already caps uren work at half
+   a shift; only a *full* unrotated heavy shift counts as an "occurrence".
+   (Then the rule mostly bites nights and steril.)
+3. **Make it a soft target**: the planner minimizes heavy occurrences per
+   person per week (aiming at 1) with a higher hard cap (2–3).
 
-**Q7 🟡 Mid shifts.** `ME`/`UME` (12–20) and `H2` (10–18) span both rotation
-points. Do they rotate at both, one, or neither? Related: confirm the
-midpoint rule used to map every shift code to tidlig/sen/natt/helg
-(`category_proposed` in `shift_codes.csv`).
+*Interim rule until answered:* option 3 with a hard cap of 3 and the 28-day
+intensity-hours balancing (D9) as tiebreaker.
 
-**Q8 🟡 Confirm the rotation rule (D5):** everyone on a heavy function must
-leave it at the rotation point, replacements from anywhere competence
-allows. Flagged as "not 100 % certain" — the app keeps it configurable
-either way.
+**Q25 🟢 Mellomvakt membership.** Confirm `ME` and `UME` are the only current
+mellomvakt codes (D35), and that new codes get their category assigned
+explicitly in the vaktkode table (rather than by a formula) — proposed, since
+edge cases like `A` (14–22) defy any clean rule.
 
-**Q9 🟢 Partial-shift heavy work** currently counts as a full "heavy day"
-in the back-to-back rule (D9). Keep, or refine (e.g. a minimum number of
-heavy hours)?
+## C. Competencies, preferences & staffing data
 
-## D. Demand data
+**Q20 🟡 The Sterrad / Poliklinikker/løspakk split (D43), remaining halves:**
+(a) the hourly demand still exists only combined — how does it split?
+(b) will the competency file be re-issued with two separate columns (and
+ideally values in the currently empty columns while at it)? Until then the
+combined column credits employees with both competencies.
 
-**Q10 🔴 Utposter numbers conflict** between the hourly matrix (Gastrolab
-up to 3 people daily; rullering total only hours 10–11) and the per-weekday
-sheet (Gastrolab 2 people Thu/Fri only; Kir. Pol. Thu 10–17 / Fri 10–15).
-*(Owner investigating.)* Also unstated: KOP barn's Thursday head-count
-(assumed 1).
+**Q21 🟡 Who works fast at the utposter?** D39 needs the actual list:
+which employees should be marked `utpost_fast` (excluded from SF planning)?
+Alternatively: can it be derived from the roster (everyone with only U-codes)?
 
-**Q11 🟡 Weekend/holiday shift codes** are missing from the vaktkode list —
-no code matches the 08:00–18:00 helgevakt window. *(Owner adding.)*
+**Q22 🟡 Preference semantics (D32), two defaults to confirm:**
+(a) an employee with **no** preference list = *no constraint* (assignable to
+any competent, non-restricted function) — correct?
+(b) preferences are maintained by managers in the admin view and visible
+only there — correct that regular planning views shouldn't even hint at why
+someone is never placed somewhere?
 
-**Q12 🟢 Are utpost functions heavy?** Currently intensity 0 (no marks in
-the source).
+**Q24 🟢 Gang/vognvaskere competency** (empty column, not covered by the Q3
+answer which addressed uren + DK): still assumed covered by "Produksjon,
+steril sone". Confirm — low stakes while steril is staffed as a zone.
 
-**Q13 🟢 Weekend display.** With everyone ad hoc (D21), should the screen
-show anything beyond the day's crew list per zone — e.g. who holds
-ansvarsvakt-like responsibility, if anyone?
+## D. Product details
 
-## E. Product details
+**Q23 🟡 Someone in charge on weekends?** DK/ansvarsvakt exists to guarantee
+a responsible person on duty (D41) — weekdays it's staffed around the clock.
+Should the weekend ad hoc crew also always include (at least) one
+ansvarsvakt-qualified employee, and should the planner/warning system check
+for it?
 
-**Q14 🟡 Absence types.** Which list should the app offer (syk, egenmelding,
-ferie, kurs, permisjon, annet …)? Should the type be visible to everyone on
-the display/plan, or shown simply as "fravær" with the type visible only to
-managers?
-
-**Q15 🟢 Driftskoordinator fallback.** If no DK/DKK-coded employee is
-present (sickness): should the planner suggest a replacement (requires an
-answer to Q3 — who is DK-qualified?), or leave the slot empty with a
-warning for the manager?
-
-## F. Technical
-
-**Q16 🟡 Package installation on the work PC.** Test user-level installs
-(no admin rights needed) — instructions in [assessment.md](assessment.md)
-§6. The outcome decides FastAPI vs. a stdlib-only fallback.
-
-**Q17 🟢 Concrete paths.** Where should the app folder, the SQLite file and
-the import folder live — local disk or a shared drive (which one)?
+**Q26 🟢 Absence types.** Which list should managers get when registering
+(syk, egenmelding, ferie, kurs, permisjon, annet …)? Display never shows
+absences (D46); this is only for the manager view and any reports.
 
 ---
 
 ### Resolved since last version
 
-Former questions on terminology, stack, rotation time (18:00), ren sone as
-remainder, night staffing, hour 00:00, shift-code lengths, competency
-granularity, worktables, utpost fast staff, weekends/holidays, horizon,
-display layout, naming, UI language, PINs, storage and absences are all
-settled — see [decisions.md](decisions.md).
+Q2 (roster mechanics → D45), Q3 (empty columns → D41/D42), Q4 ("?" → D44),
+Q5 (split → D43), Q6 (Friday 18:00 → D34), Q7 (mellomvakt 16:00 → D35),
+Q8 (zone-swap rotation → D37, with follow-ups Q18/Q19), Q9 (partial counts →
+D38), Q10 (utposter out of scope → D39), Q11 (H1/H2 helgevakt → D36),
+Q12 (utpost intensity 0), Q13 (data-driven weekend view → D47),
+Q14 (absences hidden on display → D46; type list lives on as Q26),
+Q15 (DK/ansvarsvakt merge → D41), Q16 (pip works → D48),
+Q17 (self-contained folder → D49).

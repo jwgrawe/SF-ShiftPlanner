@@ -1,23 +1,22 @@
 #!/usr/bin/env python3
-"""Import the anonymized competency workbook into data/seed/competencies.csv.
+"""Import the anonymized competency workbook into data/seed/employee_competencies.csv.
 
 Reads data/source/Kompetanse_Anonymisert.xlsx (requires openpyxl) and writes
-one row per (employee, function) with a status:
+one row per (employee, competency) with a status:
 
-  x  -> qualified
-  ?  -> uncertain   (meaning unclarified – see docs/open-questions.md; the
-                     planner treats "uncertain" as NOT eligible until decided)
+  x / X -> qualified
+  ?     -> uncertain   (a manager's reminder to assess this competency, D44;
+                        NOT eligible for planning)
+  anything else -> ignored with a warning (treated as no competency, D44)
+
+Competency columns are mapped to the competency_id values in
+data/seed/competency_types.csv (functions map to competencies separately, in
+function_competencies.csv). The combined source column
+"Sterrad + poliklinikker/løspakk" maps to BOTH split competencies until the
+source file gains separate columns (D43/Q20).
 
 Anonymized rows "Employee N" map to employee_id E<NNN>, matching the
 source_label column produced by scripts/generate_fake_employees.py.
-
-Notes on the mapping (see docs/source-data-findings.md §4):
-- The combined source column "Sterrad + poliklinikker/løspakk" maps to BOTH
-  ren_sterrad and ren_poliklinikker_lospakk, since the functions were split
-  by decision D16 but the competency data is still combined.
-- Five source columns contain no marks at all (Daglige rutiner, Manuell
-  rengjøring, Gangen, Driftskoordinator, Gang/vognvaskemaskiner); they yield
-  no rows here. How to interpret them is an open question.
 
 Usage:  python scripts/import_competencies.py
 """
@@ -31,25 +30,19 @@ from openpyxl import load_workbook
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SOURCE = REPO_ROOT / "data" / "source" / "Kompetanse_Anonymisert.xlsx"
-OUT = REPO_ROOT / "data" / "seed" / "competencies.csv"
+SEED_DIR = REPO_ROOT / "data" / "seed"
+OUT = SEED_DIR / "employee_competencies.csv"
 
-COLUMN_TO_FUNCTIONS = {
-    "Produksjon, uren sone": ["uren_produksjon"],
-    "Daglige rutiner (uren sone)": ["uren_daglige_rutiner"],
-    "Manuell rengjøring": ["uren_manuell_rengjoring"],
-    "Gangen": ["uren_gangen"],
-    "Driftskoordinator": ["ren_driftskoordinator"],
-    "Ansvarsvakt": ["ren_ansvarsvakt"],
-    "Kontrollsone": ["ren_kontrollsone"],
-    "Arbeidsbord/brikkelegging": ["ren_arbeidsbord"],
-    "Sterrad + poliklinikker/løspakk": ["ren_sterrad", "ren_poliklinikker_lospakk"],
-    "Produksjon, steril sone": ["steril_produksjon"],
-    "Gang/vognvaskemaskiner": ["steril_gang_vognvask"],
-    "Kirurgisk poliklinikk": ["utpost_kir_pol"],
-    "Gastro lab.": ["utpost_gastrolab"],
-    "KOP barn": ["utpost_kop_barn"],
-}
 STATUS = {"x": "qualified", "?": "uncertain"}
+
+
+def load_column_mapping() -> dict[str, list[str]]:
+    """source_column -> [competency_id, ...] from competency_types.csv."""
+    mapping: dict[str, list[str]] = {}
+    with open(SEED_DIR / "competency_types.csv", newline="", encoding="utf-8") as fh:
+        for row in csv.DictReader(fh):
+            mapping.setdefault(row["source_column"], []).append(row["competency_id"])
+    return mapping
 
 
 def main() -> int:
@@ -57,15 +50,17 @@ def main() -> int:
         print(f"Source file not found: {SOURCE}")
         return 1
 
+    column_mapping = load_column_mapping()
     ws = load_workbook(SOURCE, data_only=True).worksheets[0]
     headers = [cell.value for cell in ws[2]]
 
-    unknown = [h for h in headers[1:] if h and h not in COLUMN_TO_FUNCTIONS]
+    unknown = [h for h in headers[1:] if h and h not in column_mapping]
     if unknown:
-        print(f"Unmapped competency columns: {unknown}")
+        print(f"Unmapped competency columns (add them to competency_types.csv): {unknown}")
         return 1
 
     rows: list[tuple[str, str, str]] = []
+    warnings: list[str] = []
     n_employees = 0
     for row in ws.iter_rows(min_row=3):
         label = row[0].value
@@ -83,26 +78,31 @@ def main() -> int:
             mark = str(cell.value).strip().lower() if cell.value is not None else ""
             if not mark:
                 continue
-            if mark not in STATUS:
-                print(f"Unexpected mark {mark!r} for {label} / {header!r}")
-                return 1
-            for function_id in COLUMN_TO_FUNCTIONS[header]:
-                rows.append((employee_id, function_id, STATUS[mark]))
+            status = STATUS.get(mark)
+            if status is None:
+                warnings.append(
+                    f"{label} / {header!r}: mark {mark!r} ignored (treated as no competency)"
+                )
+                continue
+            for competency_id in column_mapping[header]:
+                rows.append((employee_id, competency_id, status))
 
     rows.sort()
     with open(OUT, "w", newline="", encoding="utf-8") as fh:
         writer = csv.writer(fh)
-        writer.writerow(["employee_id", "function_id", "status"])
+        writer.writerow(["employee_id", "competency_id", "status"])
         writer.writerows(rows)
 
+    for warning in warnings:
+        print(f"WARNING: {warning}")
     print(f"Imported {n_employees} employees, {len(rows)} competency rows -> {OUT}")
-    per_function: dict[str, int] = {}
-    for _, function_id, status in rows:
+    per_competency: dict[str, int] = {}
+    for _, competency_id, status in rows:
         if status == "qualified":
-            per_function[function_id] = per_function.get(function_id, 0) + 1
-    for functions in COLUMN_TO_FUNCTIONS.values():
-        for function_id in functions:
-            print(f"  {function_id:28s} {per_function.get(function_id, 0):3d} qualified")
+            per_competency[competency_id] = per_competency.get(competency_id, 0) + 1
+    for competency_ids in column_mapping.values():
+        for competency_id in competency_ids:
+            print(f"  {competency_id:24s} {per_competency.get(competency_id, 0):3d} qualified")
     return 0
 
 
