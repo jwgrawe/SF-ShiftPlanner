@@ -13,18 +13,30 @@ week. Editing, absences and the suggestion engine come in M2/M3.
 
 ## Running the prototype
 
+No admin rights and **no virtual environment** required (some org policies
+block venv creation — D61); packages install to the user profile.
+
 ```bash
-# one command (creates .venv, installs, imports seed data, builds the demo
-# week, starts the server):
+start.bat             # Windows: double-click, or run in a terminal
 ./start.sh            # Linux/macOS
-start.bat             # Windows (double-click works; no admin rights needed)
 ```
 
+Both install dependencies on first run (`pip install --user`) and then run
+`python run.py`, which prepares the database on first start (seed import +
+demo week), opens the browser and starts the server. `run.py` works from
+**any** current directory — you don't have to stand in the project folder.
+
 Then open <http://127.0.0.1:8000/>. The demo week is 2026-09-07 – 2026-09-13;
-preview any moment with e.g. `/display?date=2026-09-07&time=10:30`. Manual
-steps, if you prefer them: `pip install -r requirements.txt`, then
-`python -m app.importer`, `python scripts/make_demo_data.py`,
-`python -m uvicorn app.main:app`.
+preview any moment with e.g. `/display?date=2026-09-07&time=10:30`.
+
+Tips for the hospital PC:
+- **Keep the folder outside OneDrive** if you can (e.g. `C:\Users\<you>\Planlegger`).
+  OneDrive syncing can lock or lag the SQLite database file while the app
+  writes to it. If it must live in OneDrive, right-click the folder and choose
+  "Always keep on this device".
+- Rebuild data manually if needed: `python -m app.importer` (from the project
+  folder) reloads the seed CSVs; `python scripts/make_demo_data.py` rebuilds
+  the demo week.
 
 ## Start here
 

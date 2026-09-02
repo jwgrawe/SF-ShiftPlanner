@@ -1,14 +1,11 @@
 @echo off
-rem SF-Planlegger - start the prototype on Windows (no admin rights needed).
-rem First time: creates a virtual environment and installs dependencies.
+rem SF-Planlegger - start prototypen. Krever verken administratorrettigheter
+rem eller virtuelle miljoer: pakker installeres til brukerprofilen (pip --user).
 cd /d "%~dp0"
-if not exist .venv (
-    echo Forbereder foerste gangs oppstart...
-    python -m venv .venv
-    .venv\Scripts\python -m pip install --upgrade pip
-    .venv\Scripts\python -m pip install -r requirements.txt
-    .venv\Scripts\python -m app.importer
-    .venv\Scripts\python scripts\make_demo_data.py
+python -c "import fastapi, uvicorn, jinja2, openpyxl" 2>nul
+if errorlevel 1 (
+    echo Installerer avhengigheter til brukerprofilen...
+    python -m pip install --user -r requirements.txt
 )
-start "" http://127.0.0.1:8000/
-.venv\Scripts\python -m uvicorn app.main:app --port 8000
+python run.py
+pause

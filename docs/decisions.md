@@ -99,4 +99,5 @@ answers on intensity, imports and product details).
 | D26 | R1 | SQLite on local/shared drive approved; may hold full personal data. |
 | D31 | R1 | One single machine for now; wall display later. |
 | D48 | R2 | **User-level pip installs confirmed working** on the work PC — the FastAPI stack is locked in; no stdlib-only fallback needed. |
-| D49 | R2 | The app is **self-contained in a single folder** (code, virtual environment, database, import folder, backups — all under one directory, relative paths only), since final paths/hosting won't be settled for a while. |
+| D49 | R2 | The app is **self-contained in a single folder** (code, database, import folder, backups — all under one directory, relative paths only), since final paths/hosting won't be settled for a while. |
+| D61 | R3 | **No virtual environment on the work PC** — org policy blocks venv creation there. Dependencies install per-user (`pip install --user`); `run.py`/`start.bat` assume no venv and work from any current directory. The single-folder principle (D49) stands, with packages living in the user profile. The app folder should sit **outside OneDrive** (or be marked "Always keep on this device") so sync never locks the SQLite file. |
