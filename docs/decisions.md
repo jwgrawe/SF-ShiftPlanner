@@ -5,7 +5,8 @@ Decisions referenced from seed data, docs and (later) code as **D-numbers**.
 Q-number). ~~Struck~~ = superseded; kept for traceability.
 
 Rounds: **R1** = 2026-08-31 (first briefing + answers), **R2** = 2026-09-02
-(question round after the department meeting).
+(question round after the department meeting), **R3** = 2026-09-02 (follow-up
+answers on intensity, imports and product details).
 
 ## Domain & terminology
 
@@ -29,6 +30,10 @@ Rounds: **R1** = 2026-08-31 (first briefing + answers), **R2** = 2026-09-02
 | D35 | R2 | New shift category **mellomvakt** for shifts spanning both ordinary rotation points, with its own rotation time **16:00**. Rotation times are per-category *configuration* (`rotation_rules.csv`), not code — customizable for other departments. Current mellomvakt codes: `ME`, `UME`. |
 | D37 | R2 | **The rotation is a zone swap between uren sone and ren sone** (all functions), once per shift, competence permitting — its purpose is relieving homogeneous/repetitive work. Heavy functions are governed by a *separate* exposure rule: at most one occurrence per employee per week *(interim — scope and feasibility open, Q18/Q19)*. |
 | D38 | R2 | Partial-shift heavy work counts the same as a full shift in the exposure rule. |
+| D50 | R3 | **Two-tier intensity**: Kontrollsone (after 12:00) = full intensity **1.0**; all other heavy functions = moderate **0.5**. **Night hours (22–07) carry no intensity** — night work is not considered heavy. Baseline for normal work is 0. *(Window boundaries 07:00/22:00 for the all-day functions are inferred — Q27.)* |
+| D51 | R3 | The weekly exposure rule applies to **full-intensity work only** (occurrence threshold: intensity ≥ 1.0): soft target 1 occurrence per employee per week, hard cap 3 — **all parameters admin-adjustable** (`planner_settings.csv`). With current data this makes the rule feasible: ~25 full-intensity slots/week vs. 33 Kontrollsone-qualified employees. Moderate work is governed by the zone swap + ledger balancing. |
+| D52 | R3 | **Intensity is tracked per hour**: the ledger accrues intensity × hours from the actual hours spent in each function, using the per-window intensity data (any granularity). Baseline 0 is deliberate: the ledger measures heavy *exposure*; a total-workload metric, if ever wanted, is a separate sum — not a shifted baseline. |
+| D53 | R3 | **Rule violations are never silent**: when a cap or rule must be broken (or is broken by a manual edit), the manager/admin gets an explicit warning and can override with an acknowledgement, which is audited. |
 
 ## Heaviness, fairness & individual settings
 
@@ -38,6 +43,7 @@ Rounds: **R1** = 2026-08-31 (first briefing + answers), **R2** = 2026-09-02
 | D10 | R1 | Intensity is a **continuous scalar per (function, time window)** (`function_intensity.csv`, 0–1). UI shows labels ("tungt"), never numbers. |
 | D11 | R1 | Per-employee **restrictions**: exemptions from heavy work and/or specific functions, with validity periods; no reason stored. |
 | D32 | R2 | Per-employee **preferred functions** (allowlist): when set, the employee is only assigned functions on their list. Eligibility = competency ∧ not-restricted ∧ (no preference list ∨ function on it). Maintained by managers in the admin view; **never shown anywhere else** (not on display, not on the plan board beyond its effect). |
+| D56 | R3 | Preference semantics confirmed: empty list = no constraint; admin-only visibility. **Tilrettelegging is handled via restrictions (fritak)**, not preferences: restrictions carry validity periods and express "should not do X", which matches accommodations; preferences express organizational steering ("works only here"). *(Recommendation adopted — confirm, Q28.)* |
 | D33 | R2 | An in-app **competency editor** (admin view) is planned: managers edit competencies, including the `?` status. File import remains the default path for now. |
 | D44 | R2 | Competency marks: `x`/`X` = qualified; `?` = "assess this" reminder for managers, **not eligible** for planning; any other mark = ignored with a warning. |
 
@@ -67,6 +73,10 @@ Rounds: **R1** = 2026-08-31 (first briefing + answers), **R2** = 2026-09-02
 | D36 | R2 | **`H1` and `H2` are weekend/holiday shift codes** (category helgevakt). |
 | D39 | R2 | **Utposter are entirely out of planning scope for now** (their staffing is not yet settled in the department). The model keeps them ready for reactivation (`active = no` on the functions). For now it suffices to mark each employee as working in the CSSD (`sf`) or permanently at an outpost (`utpost_fast`, excluded from SF planning) — who is which is Q21. |
 | D45 | R2 | Roster mechanics: a 10-week base roster repeats for ~6 months. Changes (forskyvning, vaktbytte) are made **in the underlying roster file** by managers and refreshed into the app by re-import; infrequent. |
+| D54 | R3 | **Import drift detection**: the importer compares each file's structure against what the app has configured (columns, sheets) and warns the admin/manager on mismatch — merged, missing, renamed or new columns — before importing. Import file formats may evolve slightly over time; the competency file will be re-issued with the Sterrad/Poliklinikker split. |
+| D55 | R3 | **Utpost days are derived from the roster**: shift codes starting with `U` are flagged `utpost_code = yes`, and a day with a U-code keeps that employee out of SF planning for that day (covers both fast staff and future "rullering fra SF"). The `works_at` column remains as a manual fallback/override until the roster import exists. |
+| D58 | R3 | Steril sone confirmed: "Produksjon, steril sone" and "Gang/vognvaskere" are borderline indistinguishable and stay `adhoc_zone` — the crew organizes internally. Gang/vognvask competency covered by produksjon_steril. |
+| D59 | R3 | Shift categories stay **explicitly assigned** per vaktkode; the app adds an *advisory* heuristic that suggests a category for new codes and flags suspicious assignments, but never classifies silently. (The literal rule "covers both 11:00 and 18:00" would misclassify `ME` 12–20, which does not cover 11:00 — evidence that a hard algorithm here breeds confusion.) |
 
 ## Product & workflow
 
@@ -77,6 +87,8 @@ Rounds: **R1** = 2026-08-31 (first briefing + answers), **R2** = 2026-09-02
 | D24 | R1 | Names shown as first name + initial. |
 | D27 | R1 | Absences affect supply only; full-day and partial-day supported. |
 | D46 | R2 | **Absences are never surfaced on the display** — it simply shows the current (updated) plan. Absence details are manager/admin-only. |
+| D57 | R3 | **Every shift has a DK/ansvarsvakt** — weekends and holidays included (1 person 08–18 on weekend days; the rest of the weekend crew stays ad hoc). The planner warns when no qualified person is available. |
+| D60 | R3 | Absences are both **importable from file and definable in-app** (manager/admin). Default type list *(interim, Q29)*: Syk · Ferie · Kurs/opplæring · Permisjon · Annet. |
 | D47 | R2 | The weekend view is **data-driven**, not special-cased: views render from the day's blocks and rotation rules, so a weekend naturally produces one ad-hoc block. Same for holidays. |
 
 ## Technical & deployment

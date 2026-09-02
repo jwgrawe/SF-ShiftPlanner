@@ -54,8 +54,10 @@ def main() -> None:
     SEED_DIR.mkdir(parents=True, exist_ok=True)
     out_path = SEED_DIR / "employees.csv"
     # works_at: "sf" (the CSSD central) or "utpost_fast" (permanently at an
-    # outpost, excluded from SF planning per D39). Which employees are
-    # utpost_fast is not yet known (Q21) – everyone starts as "sf".
+    # outpost, excluded from SF planning per D39). The authoritative signal is
+    # the roster: days with a U-prefixed shift code are outpost days (D55);
+    # this column is only a manual fallback/override until the roster import
+    # exists. Everyone starts as "sf".
     with open(out_path, "w", newline="", encoding="utf-8") as fh:
         writer = csv.writer(fh)
         writer.writerow(

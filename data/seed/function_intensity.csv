@@ -1,6 +1,6 @@
 function_id,start,end,intensity,notes
-uren_produksjon,00:00,24:00,1,"Tungt arbeid hele døgnet (* i kilden)"
-uren_gangen,12:00,24:00,1,"Tungt arbeid etter kl. 12:00 (** i kilden)"
-ren_kontrollsone,12:00,24:00,1,"Tungt arbeid etter kl. 12:00 (** i kilden)"
-steril_produksjon,00:00,24:00,1,"Tungt arbeid hele døgnet (* i kilden)"
-steril_gang_vognvask,00:00,24:00,1,"Tungt arbeid hele døgnet (* i kilden)"
+uren_produksjon,07:00,22:00,0.5,"Moderat tungt (D50). Natt (22–07) regnes ikke som tungt; vindusgrensene 07:00/22:00 er antakelse – Q27"
+uren_gangen,12:00,22:00,0.5,"Moderat tungt etter kl. 12 (D50/D7)"
+ren_kontrollsone,12:00,22:00,1.0,"Full intensitet (D50) – eneste funksjon som omfattes av ukesregelen (D51). Tungt etter kl. 12 (D7); natt ikke tungt"
+steril_produksjon,07:00,22:00,0.5,"Moderat tungt (D50); natt ikke tungt – Q27"
+steril_gang_vognvask,07:00,22:00,0.5,"Moderat tungt (D50); natt ikke tungt – Q27"

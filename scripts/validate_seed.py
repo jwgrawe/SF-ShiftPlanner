@@ -47,6 +47,7 @@ def main() -> int:
     demand = load("staffing_demand.csv")
     shift_codes = load("shift_codes.csv")
     rotation_rules = load("rotation_rules.csv")
+    planner_settings = load("planner_settings.csv")
     employees = load("employees.csv")
     employee_competencies = load("employee_competencies.csv")
     preferences = load("employee_preferences.csv")
@@ -128,6 +129,8 @@ def main() -> int:
             errors.append(f"staffing_demand.csv: unknown zone_id {row['zone_id']!r}")
         if row["category"] not in {"normal", "fast", "rullering_fra_sf"}:
             errors.append(f"staffing_demand.csv: {label}: bad category {row['category']!r}")
+        if row["day_type"] not in {"weekday", "weekend_holiday"}:
+            errors.append(f"staffing_demand.csv: {label}: bad day_type {row['day_type']!r}")
         for col in hour_cols:
             value = row[col]
             if value != "" and not value.isdigit():
@@ -139,6 +142,14 @@ def main() -> int:
                 errors.append(f"shift_codes.csv: {row['code']}: bad {col} {row[col]!r}")
         if row["category"] not in SHIFT_CATEGORIES:
             errors.append(f"shift_codes.csv: {row['code']}: bad category {row['category']!r}")
+        if row["utpost_code"] not in {"yes", "no"}:
+            errors.append(f"shift_codes.csv: {row['code']}: bad utpost_code {row['utpost_code']!r}")
+
+    for row in planner_settings:
+        try:
+            float(row["value"])
+        except ValueError:
+            errors.append(f"planner_settings.csv: {row['key']}: value {row['value']!r} not numeric")
 
     rule_categories = set()
     for row in rotation_rules:
@@ -208,7 +219,8 @@ def main() -> int:
           f"competency types: {len(competency_types)}, "
           f"function-competency mappings: {len(function_competencies)}")
     print(f"  intensity windows: {len(intensity)}, demand rows: {len(demand)}, "
-          f"shift codes: {len(shift_codes)}, rotation rules: {len(rotation_rules)}")
+          f"shift codes: {len(shift_codes)}, rotation rules: {len(rotation_rules)}, "
+          f"planner settings: {len(planner_settings)}")
     print(f"  employees: {len(employees)}, competency rows: {len(employee_competencies)} "
           f"({qualified} qualified), preferences: {len(preferences)}, "
           f"restrictions: {len(restrictions)}")

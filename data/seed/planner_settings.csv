@@ -1,0 +1,5 @@
+key,value,notes
+heavy_occurrence_intensity_threshold,1.0,"Intensitet som teller som «tung forekomst» i ukesregelen (D51). Med dagens data: kun Kontrollsone etter kl. 12"
+heavy_occurrence_target_per_week,1,"Mykt mål: planleggeren minimerer forekomster utover dette per ansatt per uke (D51)"
+heavy_occurrence_hard_cap_per_week,3,"Hard grense per ansatt per uke; brudd krever leder-overstyring med kvittering (D53)"
+intensity_ledger_window_days,28,"Rullerende vindu for balansering av vektede intensitetstimer (D9/D52)"

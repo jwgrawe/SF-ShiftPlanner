@@ -43,10 +43,11 @@ app/           (future) FastAPI web app — display / manager / admin modes
 | `functions.csv` | 14 functions with zone, staffing mode (`demand` / `remainder` / `adhoc_zone`) and `active` flag (utposter parked, D39) |
 | `competency_types.csv` | The competency catalog — decoupled from functions (D40), mirroring the competency sheet's columns |
 | `function_competencies.csv` | Which competencies qualify for which function, with priority (handles DK/ansvarsvakt merge, uren fallbacks, the Sterrad split) |
-| `function_intensity.csv` | Intensity windows per function — continuous 0–1 scale (D10) |
+| `function_intensity.csv` | Intensity windows per function and time of day — two tiers today: Kontrollsone 1.0, other heavy work 0.5; nights carry none (D50) |
+| `planner_settings.csv` | Admin-adjustable planner parameters: occurrence threshold/target/cap, ledger window (D51) |
 | `staffing_demand.csv` | Required head-count per function/zone × hour (h00–h23), weekdays |
 | `rotation_rules.csv` | Rotation time per shift category (11:00 / 16:00 / 18:00 / none) — configuration, not code (D35) |
-| `shift_codes.csv` | 21 vaktkoder with confirmed categories (incl. mellomvakt and helgevakt) |
+| `shift_codes.csv` | 21 vaktkoder with confirmed categories (incl. mellomvakt and helgevakt) and the U-code flag that keeps utpost days out of SF planning (D55) |
 | `opening_hours.csv` | Opening hours / period types per weekday |
 | `weekday_rules.csv` | Per-weekday deviations (utposter — currently parked), structured from free text |
 | `worktable_types.csv` | The 8 generic worktable types under Arbeidsbord/brikkelegging |
@@ -80,7 +81,7 @@ Requires Python ≥ 3.11; only `import_competencies.py` needs a package
 | Funksjon | function | A staffed duty/place within a zone — the unit people are placed on |
 | Kompetanse | competency | First-class entity; functions accept one or more competencies with priority |
 | Preferanse | preference | Admin-only per-employee allowlist of assignable functions |
-| Fritak | restriction | Per-employee exemption from heavy work or specific functions |
+| Fritak | restriction | Per-employee exemption from heavy work or specific functions — also the home of tilrettelegging (D56) |
 | Grunnbemanning | staffing demand | Required head-count per function per hour |
 | Rullering | rotation | The once-per-shift zone swap uren ↔ ren (11:00 / 16:00 / 18:00 by shift category) |
 | Tungt arbeid / intensitet | heavy work / intensity | 0–1 scalar per function and time window; exposure limited per week |
