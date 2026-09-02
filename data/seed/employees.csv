@@ -5,14 +5,14 @@ E003,Employee 3,Ivar,Pedersen,Ivar P.,sf
 E004,Employee 4,Bente,Nilsen,Bente N.,sf
 E005,Employee 5,Odd,Jakobsen,Odd J.,sf
 E006,Employee 6,Espen,Halvorsen,Espen H.,sf
-E007,Employee 7,Jan,Johnsen,Jan J.,sf
+E007,Employee 7,Jan,Johnsen,Jan John.,sf
 E008,Employee 8,Nora,Jørgensen,Nora J.,sf
 E009,Employee 9,Randi,Gundersen,Randi G.,sf
 E010,Employee 10,Ingrid,Nilsen,Ingrid N.,sf
 E011,Employee 11,Trond,Martinsen,Trond M.,sf
 E012,Employee 12,Vidar,Gundersen,Vidar G.,sf
 E013,Employee 13,Frode,Berg,Frode B.,sf
-E014,Employee 14,Pål,Johansen,Pål J.,sf
+E014,Employee 14,Pål,Johansen,Pål Johans.,sf
 E015,Employee 15,Oda,Jørgensen,Oda J.,sf
 E016,Employee 16,Pål,Strand,Pål S.,sf
 E017,Employee 17,Nils,Svendsen,Nils S.,sf
@@ -25,7 +25,7 @@ E023,Employee 23,Per,Haugen,Per H.,sf
 E024,Employee 24,Kari,Lund,Kari L.,sf
 E025,Employee 25,Marit,Hansen,Marit H.,sf
 E026,Employee 26,Grete,Pedersen,Grete P.,sf
-E027,Employee 27,Jan,Johannessen,Jan J.,sf
+E027,Employee 27,Jan,Johannessen,Jan Joha.,sf
 E028,Employee 28,Silje,Lund,Silje L.,sf
 E029,Employee 29,Kari,Strand,Kari S.,sf
 E030,Employee 30,Frida,Andreassen,Frida A.,sf
@@ -38,8 +38,8 @@ E036,Employee 36,Marit,Martinsen,Marit M.,sf
 E037,Employee 37,Bente,Pedersen,Bente P.,sf
 E038,Employee 38,Eva,Berg,Eva B.,sf
 E039,Employee 39,Stein,Karlsen,Stein K.,sf
-E040,Employee 40,Pål,Johnsen,Pål J.,sf
-E041,Employee 41,Camilla,Jørgensen,Camilla J.,sf
+E040,Employee 40,Pål,Johnsen,Pål John.,sf
+E041,Employee 41,Camilla,Jørgensen,Camilla Jø.,sf
 E042,Employee 42,Bente,Andreassen,Bente A.,sf
 E043,Employee 43,Knut,Johannessen,Knut J.,sf
 E044,Employee 44,Yngve,Henriksen,Yngve H.,sf
@@ -48,7 +48,7 @@ E046,Employee 46,Vidar,Martinsen,Vidar M.,sf
 E047,Employee 47,Vidar,Kristiansen,Vidar K.,sf
 E048,Employee 48,Marit,Eriksen,Marit E.,sf
 E049,Employee 49,Cato,Strand,Cato S.,sf
-E050,Employee 50,Pål,Johannessen,Pål J.,sf
+E050,Employee 50,Pål,Johannessen,Pål Johann.,sf
 E051,Employee 51,Ingrid,Eide,Ingrid E.,sf
 E052,Employee 52,Cato,Andreassen,Cato A.,sf
 E053,Employee 53,Dag,Kristiansen,Dag K.,sf
@@ -59,7 +59,7 @@ E057,Employee 57,Silje,Kristiansen,Silje K.,sf
 E058,Employee 58,Frode,Gundersen,Frode G.,sf
 E059,Employee 59,Nora,Eriksen,Nora E.,sf
 E060,Employee 60,Åse,Haugen,Åse H.,sf
-E061,Employee 61,Camilla,Johansen,Camilla J.,sf
+E061,Employee 61,Camilla,Johansen,Camilla Jo.,sf
 E062,Employee 62,Yngve,Berg,Yngve B.,sf
 E063,Employee 63,Line,Hagen,Line H.,sf
 E064,Employee 64,Håkon,Jacobsen,Håkon J.,sf

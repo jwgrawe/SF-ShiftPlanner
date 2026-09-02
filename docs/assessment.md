@@ -252,7 +252,7 @@ admin), and identical inputs give identical plans.
 | Milestone | Content | Exit criterion |
 |---|---|---|
 | **M0 — done** | Repo, decoded data, competency/eligibility architecture, rotation framework, two-tier intensity, decision log | Q18 (zone-swap scope) answered; Q1 (roster sample) delivered |
-| **M1 — data foundation** | SQLite schema, importer (+ generate the two Excel workbooks), read-only browsing, first `/display` with a hand-made plan | Display renders a real day, night shift included |
+| **M1 — built** | SQLite schema, seed importer, eligibility service, `/display` (portrait, rotation preview, ad-hoc weekend view), `/plan` (read-only day board), `/admin` (browser incl. preferences/fritak), demo week, domain unit tests, one-command startup | ✔ Display renders weekday, night and weekend correctly. Outstanding for M1 exit: the two manager-editable Excel workbooks are generated at the start of M2 instead |
 | **M2 — manual planning** | Manager board per block, absences, locking, publish; roster adapter against the real export (Q1) | Planning tomorrow by hand beats paper |
 | **M3 — suggestions** | Engine v1: zone swap + heavy cap + ledger, 2-week horizon, regenerate-with-locks, shortfall warnings | A normal week accepted with < ~10 corrections |
 | **M4 — hardening** | Admin CRUD incl. competency editor & preferences, holiday calendar, reports, backups | A live pilot week |

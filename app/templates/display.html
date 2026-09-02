@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %}Tavle – SF-Planlegger{% endblock %}
+{% block header %}{% endblock %}
+{% block style %}
+    body { background: #101a1f; color: #e8eef1; }
+    main { max-width: 44rem; padding: 1.4rem 1.6rem; }
+    .top { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 0.4rem; }
+    .top h1 { font-size: 2rem; margin: 0; color: #ffffff; }
+    .top .clock { font-size: 2rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+    .daylabel { color: #9fb2bb; font-size: 1.05rem; margin-bottom: 1rem; }
+    .zone { border-radius: 12px; overflow: hidden; margin: 1rem 0; background: #18242b; border: 1px solid #24343d; }
+    .zone header { padding: 0.55rem 1rem; font-size: 1.25rem; font-weight: 700; color: #fff; display: flex; justify-content: space-between; align-items: center; }
+    .zone.uren header { background: var(--uren); } .zone.ren header { background: var(--ren); }
+    .zone.steril header { background: var(--steril); } .zone.utpost header { background: var(--utpost); }
+    .zone ul { list-style: none; margin: 0; padding: 0.5rem 1rem 0.7rem; }
+    .zone li { display: flex; justify-content: space-between; gap: 1rem; padding: 0.3rem 0; font-size: 1.25rem; border-bottom: 1px solid #22313a; }
+    .zone li:last-child { border-bottom: none; }
+    .zone li .fn { color: #9fb2bb; font-size: 1.05rem; text-align: right; }
+    .adhoc { font-size: 0.85rem; font-weight: 600; background: rgba(255,255,255,0.22); border-radius: 999px; padding: 0.15rem 0.7rem; }
+    .next { background: #1c343b; border: 1px solid #2d505a; border-radius: 12px; padding: 0.8rem 1rem; margin-top: 1.2rem; }
+    .next h2 { margin: 0 0 0.4rem; font-size: 1.15rem; color: #7fc6d4; }
+    .next li { font-size: 1.15rem; padding: 0.15rem 0; list-style: none; }
+    .next ul { margin: 0; padding: 0; }
+    .empty { color: #9fb2bb; font-size: 1.1rem; padding: 2rem 0; }
+    .previewtag { color: #d9a544; font-size: 0.9rem; }
+{% endblock %}
+{% block head %}{% if not preview %}<meta http-equiv="refresh" content="60">{% endif %}{% endblock %}
+{% block content %}
+  <div class="top">
+    <h1>Sterilforsyningen</h1>
+    <span class="clock">{{ now.strftime("%H:%M") }}</span>
+  </div>
+  <div class="daylabel">
+    {{ ["Mandag","Tirsdag","Onsdag","Torsdag","Fredag","Lørdag","Søndag"][plan_date.weekday()] }}
+    {{ plan_date.strftime("%d.%m.%Y") }}
+    {% if day_kind == "weekend_holiday" %} · Helg/helligdag{% endif %}
+    {% if preview %} <span class="previewtag">(forhåndsvisning)</span>{% endif %}
+  </div>
+
+  {% if not has_plan %}
+    <p class="empty">Ingen publisert plan for denne dagen ennå.</p>
+  {% endif %}
+
+  {% for zone in zones %}
+    {% if zone.people or day_kind == "weekday" %}
+    <section class="zone {{ zone.zone_id }}">
+      <header>
+        {{ zone.name }}
+        {% if zone.adhoc_zone %}<span class="adhoc">fordeles ad hoc</span>{% endif %}
+      </header>
+      <ul>
+        {% for person in zone.people %}
+          <li><span>{{ person.display_name }}</span>
+              <span class="fn">{% if not person.adhoc %}{{ person.function_name }}{% endif %}</span></li>
+        {% else %}
+          <li class="muted" style="border:none">–</li>
+        {% endfor %}
+      </ul>
+    </section>
+    {% endif %}
+  {% endfor %}
+
+  {% if adhoc_crew %}
+    <section class="zone ren">
+      <header>På jobb i dag <span class="adhoc">fordeles ad hoc</span></header>
+      <ul>
+        {% for person in adhoc_crew %}
+          <li><span>{{ person.display_name }}</span><span class="fn">{{ person.hours }}</span></li>
+        {% endfor %}
+      </ul>
+    </section>
+  {% endif %}
+
+  {% if next_change %}
+    <section class="next">
+      <h2>Neste rullering kl. {{ next_change.strftime("%H:%M") }}</h2>
+      <ul>
+        {% for takeover in takeovers %}
+          <li>{{ takeover.display_name }} → {{ takeover.function_name }}{% if takeover.replaces %} <span class="muted">(overtar for {{ takeover.replaces }})</span>{% endif %}</li>
+        {% endfor %}
+      </ul>
+    </section>
+  {% endif %}
+{% endblock %}

@@ -6,10 +6,25 @@ zones (uren, ren, steril), planning the mid-shift zone rotations
 ("rullering"), handling absences, and showing the day's plan on a portrait
 display.
 
-**Status: pre-development.** The repo contains the decoded source data,
-test data (real competency structure under fictional names), the design
-assessment, the decision log, and the open questions. Application code starts
-with milestone M1.
+**Status: milestone M1 built** — a runnable read-only prototype: SQLite
+schema, seed importer, the wall display (`/display`), the manager's day view
+(`/plan`) and a master-data browser (`/admin`), fed by a deterministic demo
+week. Editing, absences and the suggestion engine come in M2/M3.
+
+## Running the prototype
+
+```bash
+# one command (creates .venv, installs, imports seed data, builds the demo
+# week, starts the server):
+./start.sh            # Linux/macOS
+start.bat             # Windows (double-click works; no admin rights needed)
+```
+
+Then open <http://127.0.0.1:8000/>. The demo week is 2026-09-07 – 2026-09-13;
+preview any moment with e.g. `/display?date=2026-09-07&time=10:30`. Manual
+steps, if you prefer them: `pip install -r requirements.txt`, then
+`python -m app.importer`, `python scripts/make_demo_data.py`,
+`python -m uvicorn app.main:app`.
 
 ## Start here
 
@@ -23,16 +38,22 @@ with milestone M1.
 ## Repository layout
 
 ```
+app/           FastAPI web app: db.py (schema), importer.py (seed -> SQLite),
+               domain.py (operational day, blocks, holidays), service.py
+               (eligibility + view models), main.py + templates/ (Norwegian UI)
 data/source/   Original Excel workbooks, committed unmodified (provenance)
 data/seed/     Editable master data as CSV — decoded from the workbooks.
                Source of truth for development; edit in Excel/LibreOffice,
-               then run scripts/validate_seed.py
+               then run scripts/validate_seed.py and python -m app.importer
 data/import/   Spec for the runtime import folder (Excel files managers edit)
 scripts/       generate_fake_employees.py  (fictional identities, deterministic)
                import_competencies.py      (real competency matrix -> CSV)
                validate_seed.py            (consistency checks for data/seed/)
+               make_demo_data.py           (demo roster + naive demo plan;
+                                            NOT the planning engine)
+tests/         Unit tests for the domain logic (python -m unittest discover -s tests)
 docs/          Assessment, decisions, open questions, data findings
-app/           (future) FastAPI web app — display / manager / admin modes
+start.sh/.bat  One-command startup (venv + install + import + run)
 ```
 
 ## Seed data overview

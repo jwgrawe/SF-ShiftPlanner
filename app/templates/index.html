@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>SF-Planlegger</h1>
+<p>Prototype for daglig plassering av ansatte i sterilforsyningen.</p>
+<ul>
+  <li><a href="/display">Tavle</a> – dagens plassering for visning på skjerm (stående format)</li>
+  <li><a href="/plan">Plan</a> – dagens plan blokk for blokk, med vaktliste</li>
+  <li><a href="/admin">Administrasjon</a> – grunndata, kompetanse, preferanser og fritak</li>
+</ul>
+<p class="muted">Denne versjonen (M1) er kun lesing. Redigering, fravær og
+planforslag kommer i M2/M3. Forhåndsvis et tidspunkt med
+<code>/display?date=ÅÅÅÅ-MM-DD&amp;time=TT:MM</code>.</p>
+{% endblock %}

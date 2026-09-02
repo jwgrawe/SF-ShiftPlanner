@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Plan {{ plan_date }} – SF-Planlegger{% endblock %}
+{% block content %}
+<h1>
+  Plan for {{ ["mandag","tirsdag","onsdag","torsdag","fredag","lørdag","søndag"][plan_date.weekday()] }}
+  {{ plan_date.strftime("%d.%m.%Y") }}
+  {% if day_kind == "weekend_holiday" %}<span class="badge soft">helg/helligdag</span>{% endif %}
+</h1>
+<p>
+  <a href="/plan?date={{ prev_date }}">&larr; forrige dag</a> ·
+  <a href="/plan?date={{ next_date }}">neste dag &rarr;</a>
+</p>
+<p class="note">Kun lesing i denne versjonen (M1). Redigering, fravær og låsing av
+plasseringer kommer i M2.</p>
+
+{% if not has_plan %}
+  <p class="muted">Ingen plan registrert for denne dagen.</p>
+{% endif %}
+
+{% for block in blocks %}
+  <h2>{{ block.start.strftime("%H:%M") }}–{{ block.end.strftime("%H:%M") }}
+      {% if block.end.date() != plan_date %}<span class="muted">(neste dag)</span>{% endif %}</h2>
+  <div class="tablewrap"><table>
+    <tr><th>Sone</th><th>Funksjon</th><th>Ansatte</th></tr>
+    {% for fn in block.functions %}
+      <tr>
+        <td><span class="badge {{ fn.zone_id }}">{{ fn.zone_name }}</span></td>
+        <td>{{ fn.function_name }}</td>
+        <td>{{ fn.people | join(", ") }}</td>
+      </tr>
+    {% endfor %}
+  </table></div>
+{% endfor %}
+
+<h2>Vaktliste denne dagen</h2>
+<div class="tablewrap"><table>
+  <tr><th>Ansatt</th><th>Vaktkode</th><th>Kategori</th><th>Tid</th></tr>
+  {% for row in roster %}
+    <tr><td>{{ row.display_name }}</td><td>{{ row.shift_code }}</td>
+        <td>{{ row.category }}</td><td>{{ row.start }}–{{ row.end }}</td></tr>
+  {% else %}
+    <tr><td colspan="4" class="muted">Ingen vaktliste importert for denne dagen.</td></tr>
+  {% endfor %}
+</table></div>
+{% endblock %}

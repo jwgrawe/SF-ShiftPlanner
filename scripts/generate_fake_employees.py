@@ -51,6 +51,27 @@ def main() -> None:
     names = sorted(pairs)
     rng.shuffle(names)
 
+    # Display names ("Kari H.", D24) must be unique — the wall display cannot
+    # have two people rendered identically. Extend the surname prefix until
+    # every name is distinct ("Dag Ha." vs "Dag Hau.").
+    prefix_len = [1] * len(names)
+
+    def display(i: int) -> str:
+        first, last = names[i]
+        prefix = last[: prefix_len[i]]
+        return f"{first} {prefix}." if len(prefix) < len(last) else f"{first} {last}"
+
+    while True:
+        seen: dict[str, list[int]] = {}
+        for i in range(len(names)):
+            seen.setdefault(display(i), []).append(i)
+        clashes = [ids for ids in seen.values() if len(ids) > 1]
+        if not clashes:
+            break
+        for ids in clashes:
+            for i in ids:
+                prefix_len[i] += 1
+
     SEED_DIR.mkdir(parents=True, exist_ok=True)
     out_path = SEED_DIR / "employees.csv"
     # works_at: "sf" (the CSSD central) or "utpost_fast" (permanently at an
@@ -65,7 +86,7 @@ def main() -> None:
         )
         for i, (first, last) in enumerate(names):
             writer.writerow(
-                [f"E{i + 1:03d}", f"Employee {i + 1}", first, last, f"{first} {last[0]}.", "sf"]
+                [f"E{i + 1:03d}", f"Employee {i + 1}", first, last, display(i), "sf"]
             )
 
     print(f"Wrote {N_EMPLOYEES} employees to {out_path}")
