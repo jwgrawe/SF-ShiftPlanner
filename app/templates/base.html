@@ -23,7 +23,7 @@
     }
     header.app .brand { font-weight: 700; letter-spacing: 0.02em; }
     header.app nav a { margin-right: 0.9rem; text-decoration: none; }
-    main { padding: 1.2rem; max-width: 72rem; margin: 0 auto; }
+    main { padding: 1.2rem 1.6rem; max-width: 100rem; margin: 0 auto; }
     h1 { font-size: 1.5rem; margin: 0.2rem 0 0.8rem; }
     h2 { font-size: 1.1rem; margin: 1.6rem 0 0.5rem; }
     table { border-collapse: collapse; width: 100%; background: var(--surface); font-size: 0.92rem; }
@@ -38,6 +38,18 @@
     .badge.uren { background: var(--uren); } .badge.ren { background: var(--ren); }
     .badge.steril { background: var(--steril); } .badge.utpost { background: var(--utpost); }
     .badge.soft { background: var(--line); color: var(--ink-soft); }
+    .badge.draft { background: #b0813a; }
+    .badge.published { background: var(--steril); }
+    .badge.edited { background: #7a5ea8; }
+    .btn {
+      display: inline-block; font-family: inherit; font-size: 0.88rem; font-weight: 600;
+      background: var(--accent); color: #fff; border: none; border-radius: 6px;
+      padding: 0.4rem 0.9rem; cursor: pointer; text-decoration: none;
+    }
+    .btn.secondary { background: var(--surface); color: var(--accent); border: 1px solid var(--accent); }
+    .btn:hover, .btn:focus-visible { filter: brightness(1.1); }
+    .actions { display: flex; gap: 0.6rem; flex-wrap: wrap; align-items: center; margin: 0.8rem 0; }
+    .actions form { display: inline; margin: 0; }
     .note {
       background: #fdf6e6; border: 1px solid #ddc38a; border-radius: 8px;
       padding: 0.6rem 0.9rem; margin: 0.8rem 0; font-size: 0.92rem;
@@ -51,10 +63,10 @@
     <span class="brand">SF-Planlegger</span>
     <nav>
       <a href="/display">Tavle</a>
-      <a href="/plan">Plan</a>
+      <a href="/plan">Planlegging</a>
       <a href="/admin">Administrasjon</a>
     </nav>
-    <span class="muted" style="margin-left:auto; font-size:0.85rem">Prototype (M1) – kun lesing</span>
+    <span class="muted" style="margin-left:auto; font-size:0.85rem">Prototype (M2)</span>
   </header>
   {% endblock %}
   <main>{% block content %}{% endblock %}</main>

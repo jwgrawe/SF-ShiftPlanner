@@ -1,39 +1,51 @@
 {% extends "base.html" %}
 {% block title %}Tavle – SF-Planlegger{% endblock %}
 {% block header %}{% endblock %}
+{% block head %}{% if not preview %}<meta http-equiv="refresh" content="60">{% endif %}{% endblock %}
 {% block style %}
     body { background: #101a1f; color: #e8eef1; }
-    main { max-width: 44rem; padding: 1.4rem 1.6rem; }
+    main { max-width: 54rem; padding: 1rem 1.4rem; }
     .top { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 0.4rem; }
-    .top h1 { font-size: 2rem; margin: 0; color: #ffffff; }
-    .top .clock { font-size: 2rem; font-weight: 700; font-variant-numeric: tabular-nums; }
-    .daylabel { color: #9fb2bb; font-size: 1.05rem; margin-bottom: 1rem; }
-    .zone { border-radius: 12px; overflow: hidden; margin: 1rem 0; background: #18242b; border: 1px solid #24343d; }
-    .zone header { padding: 0.55rem 1rem; font-size: 1.25rem; font-weight: 700; color: #fff; display: flex; justify-content: space-between; align-items: center; }
+    .top h1 { font-size: 1.7rem; margin: 0; color: #ffffff; }
+    .top .clock { font-size: 1.7rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+    .daylabel { color: #9fb2bb; font-size: 0.95rem; margin-bottom: 0.7rem; }
+    .zone { border-radius: 10px; overflow: hidden; margin: 0.7rem 0; background: #18242b; border: 1px solid #24343d; }
+    .zone header { padding: 0.35rem 0.9rem; font-size: 1.05rem; font-weight: 700; color: #fff; display: flex; justify-content: space-between; align-items: center; }
     .zone.uren header { background: var(--uren); } .zone.ren header { background: var(--ren); }
     .zone.steril header { background: var(--steril); } .zone.utpost header { background: var(--utpost); }
-    .zone ul { list-style: none; margin: 0; padding: 0.5rem 1rem 0.7rem; }
-    .zone li { display: flex; justify-content: space-between; gap: 1rem; padding: 0.3rem 0; font-size: 1.25rem; border-bottom: 1px solid #22313a; }
+    .zone ul { list-style: none; margin: 0; padding: 0.3rem 0.9rem 0.45rem; }
+    .zone li {
+      display: grid; grid-template-columns: minmax(9rem, 1.2fr) 1fr auto;
+      gap: 0.8rem; align-items: baseline;
+      padding: 0.18rem 0; font-size: 1.05rem; border-bottom: 1px solid #22313a;
+    }
     .zone li:last-child { border-bottom: none; }
-    .zone li .fn { color: #9fb2bb; font-size: 1.05rem; text-align: right; }
-    .adhoc { font-size: 0.85rem; font-weight: 600; background: rgba(255,255,255,0.22); border-radius: 999px; padding: 0.15rem 0.7rem; }
-    .next { background: #1c343b; border: 1px solid #2d505a; border-radius: 12px; padding: 0.8rem 1rem; margin-top: 1.2rem; }
-    .next h2 { margin: 0 0 0.4rem; font-size: 1.15rem; color: #7fc6d4; }
-    .next li { font-size: 1.15rem; padding: 0.15rem 0; list-style: none; }
+    .zone li .fn { color: #9fb2bb; font-size: 0.95rem; }
+    .nextchip {
+      justify-self: end; font-size: 0.85rem; font-weight: 600; white-space: nowrap;
+      border-radius: 999px; padding: 0.08rem 0.6rem; color: #fff;
+    }
+    .nextchip.uren { background: var(--uren); } .nextchip.ren { background: var(--ren); }
+    .nextchip.steril { background: var(--steril); } .nextchip.utpost { background: var(--utpost); }
+    .nextchip.none { background: transparent; color: #52646d; font-weight: 400; }
+    .adhoc { font-size: 0.75rem; font-weight: 600; background: rgba(255,255,255,0.22); border-radius: 999px; padding: 0.1rem 0.6rem; }
+    .next { background: #1c343b; border: 1px solid #2d505a; border-radius: 10px; padding: 0.6rem 0.9rem; margin-top: 0.9rem; }
+    .next h2 { margin: 0 0 0.3rem; font-size: 1rem; color: #7fc6d4; }
+    .next li { font-size: 1rem; padding: 0.1rem 0; list-style: none; }
     .next ul { margin: 0; padding: 0; }
-    .empty { color: #9fb2bb; font-size: 1.1rem; padding: 2rem 0; }
-    .previewtag { color: #d9a544; font-size: 0.9rem; }
+    .empty { color: #9fb2bb; font-size: 1.05rem; padding: 1.6rem 0; }
+    .previewtag { color: #d9a544; font-size: 0.85rem; }
 {% endblock %}
-{% block head %}{% if not preview %}<meta http-equiv="refresh" content="60">{% endif %}{% endblock %}
 {% block content %}
   <div class="top">
-    <h1>Sterilforsyningen</h1>
+    <h1>Fordeling, SF</h1>
     <span class="clock">{{ now.strftime("%H:%M") }}</span>
   </div>
   <div class="daylabel">
     {{ ["Mandag","Tirsdag","Onsdag","Torsdag","Fredag","Lørdag","Søndag"][plan_date.weekday()] }}
     {{ plan_date.strftime("%d.%m.%Y") }}
     {% if day_kind == "weekend_holiday" %} · Helg/helligdag{% endif %}
+    {% if next_change %} · Neste rullering kl. {{ next_change.strftime("%H:%M") }}{% endif %}
     {% if preview %} <span class="previewtag">(forhåndsvisning)</span>{% endif %}
   </div>
 
@@ -50,8 +62,15 @@
       </header>
       <ul>
         {% for person in zone.people %}
-          <li><span>{{ person.display_name }}</span>
-              <span class="fn">{% if not person.adhoc %}{{ person.function_name }}{% endif %}</span></li>
+          <li>
+            <span>{{ person.display_name }}</span>
+            <span class="fn">{% if not person.adhoc %}{{ person.function_name }}{% endif %}</span>
+            {% if person.next %}
+              <span class="nextchip {{ person.next.zone_id }}">→ {{ person.next.short_name }}{% if person.next.time %} {{ person.next.time }}{% endif %}</span>
+            {% else %}
+              <span class="nextchip none"></span>
+            {% endif %}
+          </li>
         {% else %}
           <li class="muted" style="border:none">–</li>
         {% endfor %}
@@ -65,18 +84,18 @@
       <header>På jobb i dag <span class="adhoc">fordeles ad hoc</span></header>
       <ul>
         {% for person in adhoc_crew %}
-          <li><span>{{ person.display_name }}</span><span class="fn">{{ person.hours }}</span></li>
+          <li><span>{{ person.display_name }}</span><span class="fn">{{ person.hours }}</span><span class="nextchip none"></span></li>
         {% endfor %}
       </ul>
     </section>
   {% endif %}
 
-  {% if next_change %}
+  {% if next_change and arrivals %}
     <section class="next">
-      <h2>Neste rullering kl. {{ next_change.strftime("%H:%M") }}</h2>
+      <h2>Kommer på kl. {{ next_change.strftime("%H:%M") }}</h2>
       <ul>
-        {% for takeover in takeovers %}
-          <li>{{ takeover.display_name }} → {{ takeover.function_name }}{% if takeover.replaces %} <span class="muted">(overtar for {{ takeover.replaces }})</span>{% endif %}</li>
+        {% for person in arrivals %}
+          <li>{{ person.display_name }} → {{ person.function_name }}</li>
         {% endfor %}
       </ul>
     </section>

@@ -44,9 +44,10 @@ def import_seed(conn: sqlite3.Connection) -> dict[str, int]:
     ])
     counts["functions"] = insert(
         conn, "functions",
-        ["function_id", "zone_id", "name", "staffing_mode", "active", "sort_order", "notes"],
-        [(r["function_id"], r["zone_id"], r["name"], r["staffing_mode"], r["active"],
-          int(r["sort_order"]), r["notes"]) for r in read_csv("functions.csv")],
+        ["function_id", "zone_id", "name", "short_name", "staffing_mode", "active",
+         "sort_order", "notes"],
+        [(r["function_id"], r["zone_id"], r["name"], r["short_name"], r["staffing_mode"],
+          r["active"], int(r["sort_order"]), r["notes"]) for r in read_csv("functions.csv")],
     )
     counts["competency_types"] = insert(
         conn, "competency_types", ["competency_id", "name", "source_column", "notes"],

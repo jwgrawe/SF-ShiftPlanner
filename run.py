@@ -23,30 +23,54 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--port", type=int, default=8000)
     parser.add_argument("--no-browser", action="store_true")
+    parser.add_argument("--check-deps", action="store_true",
+                        help="exit 0 if all dependencies are installed, 1 otherwise")
     args = parser.parse_args()
 
+    import importlib.util
+
+    required = {
+        "fastapi": ("fastapi",), "uvicorn": ("uvicorn",), "jinja2": ("jinja2",),
+        "openpyxl": ("openpyxl",),
+        "python-multipart": ("multipart", "python_multipart"),
+    }
+    missing = [
+        package
+        for package, modules in required.items()
+        if all(importlib.util.find_spec(module) is None for module in modules)
+    ]
+    # tzdata is only needed where the OS has no tz database (i.e. Windows).
     try:
-        import uvicorn
-    except ImportError:
+        from zoneinfo import ZoneInfo
+        ZoneInfo("Europe/Oslo")
+    except Exception:
+        if importlib.util.find_spec("tzdata") is None:
+            missing.append("tzdata")
+    if missing:
         raise SystemExit(
-            "Avhengigheter mangler. Kjør først:\n"
+            f"Avhengigheter mangler ({', '.join(missing)}). Kjør først:\n"
             "  python -m pip install --user -r requirements.txt"
         )
+    if args.check_deps:
+        return
+    import uvicorn
 
-    from app import db
+    from app import db, demo
+    from app.importer import import_seed
 
-    if not db.DEFAULT_DB_PATH.exists():
-        print("Første oppstart: importerer grunndata og lager demo-uke ...")
-        conn = db.get_conn()
-        db.init_schema(conn)
-        from app.importer import import_seed
-
+    # Master data is re-imported from data/seed/ on every start, so a
+    # `git pull` that changes the seed tables takes effect immediately.
+    # Runtime data (roster, plans, absences) is never touched by this.
+    conn = db.get_conn()
+    db.init_schema(conn)
+    conn.execute("PRAGMA foreign_keys = OFF")
+    try:
         with conn:
             import_seed(conn)
-        conn.close()
-        from scripts.make_demo_data import main as make_demo_data
-
-        make_demo_data()
+    finally:
+        conn.execute("PRAGMA foreign_keys = ON")
+    demo.ensure(conn)
+    conn.close()
 
     from app.main import app as fastapi_app
 

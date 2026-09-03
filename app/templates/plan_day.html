@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}{{ weekday }} {{ plan_date.strftime("%d.%m") }} – SF-Planlegger{% endblock %}
+{% block content %}
+<h1>
+  {{ weekday }} {{ plan_date.strftime("%d.%m.%Y") }}
+  {% if day_kind == "weekend_holiday" %}<span class="badge soft">helg/helligdag</span>{% endif %}
+  {% if status == "published" %}<span class="badge published">publisert</span>
+  {% elif status == "draft" %}<span class="badge draft">utkast</span>{% endif %}
+  {% if manually_edited %}<span class="badge edited" title="Planen er manuelt endret">manuelt endret</span>{% endif %}
+</h1>
+<p>
+  <a href="/plan/dag?date={{ prev_date }}">&larr; forrige dag</a> ·
+  <a href="/plan/uke?start={{ monday }}">ukevisning</a> ·
+  <a href="/plan">oversikt</a> ·
+  <a href="/plan/dag?date={{ next_date }}">neste dag &rarr;</a>
+</p>
+
+<div class="actions">
+  {% if has_plan %}
+    <a class="btn" href="/plan/dag/rediger?date={{ plan_date }}">Rediger planen</a>
+    {% if status == "draft" %}
+      <form method="post" action="/plan/publiser">
+        <input type="hidden" name="start" value="{{ plan_date }}">
+        <button class="btn secondary" type="submit">Publiser</button>
+      </form>
+    {% endif %}
+  {% endif %}
+  {% if roster_count %}
+    <form method="post" action="/plan/generer">
+      <input type="hidden" name="start" value="{{ plan_date }}"><input type="hidden" name="days" value="1">
+      <button class="btn secondary" type="submit">{% if has_plan %}Lag forslag på nytt{% else %}Lag forslag{% endif %}</button>
+    </form>
+  {% endif %}
+  {% if manually_edited %}
+    <form method="post" action="/plan/dag/laas-opp">
+      <input type="hidden" name="date" value="{{ plan_date }}">
+      <button class="btn secondary" type="submit">Lås opp alle rader</button>
+    </form>
+  {% endif %}
+  {% if generated_at %}<span class="muted" style="font-size:0.85rem">Sist generert {{ generated_at.replace("T", " kl. ") }}</span>{% endif %}
+</div>
+{% if has_plan %}
+  <p class="muted" style="font-size:0.88rem">🔒 = manuelt satt; beholdes uendret når forslaget lages på nytt.</p>
+{% endif %}
+
+{% if not has_plan %}
+  <p class="muted">Ingen plan for denne dagen{% if not roster_count %} (og ingen vaktliste){% endif %}.</p>
+{% endif %}
+
+{% for block in blocks %}
+  <h2>{{ block.start.strftime("%H:%M") }}–{{ block.end.strftime("%H:%M") }}
+      {% if block.end.date() != plan_date %}<span class="muted">(neste dag)</span>{% endif %}</h2>
+  <div class="tablewrap"><table>
+    <tr><th style="width:9rem">Sone</th><th style="width:16rem">Funksjon</th><th>Ansatte</th></tr>
+    {% for fn in block.functions %}
+      <tr>
+        <td><span class="badge {{ fn.zone_id }}">{{ fn.zone_name }}</span></td>
+        <td>{{ fn.function_name }}</td>
+        <td>{% for person in fn.people %}{{ person.name }}{% if person.locked %} 🔒{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}</td>
+      </tr>
+    {% endfor %}
+  </table></div>
+{% endfor %}
+
+<h2>Vaktliste denne dagen</h2>
+<div class="tablewrap"><table>
+  <tr><th>Ansatt</th><th>Vaktkode</th><th>Kategori</th><th>Tid</th></tr>
+  {% for row in roster %}
+    <tr><td>{{ row.display_name }}</td><td>{{ row.shift_code }}</td>
+        <td>{{ row.category }}</td><td>{{ row.start }}–{{ row.end }}</td></tr>
+  {% else %}
+    <tr><td colspan="4" class="muted">Ingen vaktliste importert for denne dagen.</td></tr>
+  {% endfor %}
+</table></div>
+{% endblock %}

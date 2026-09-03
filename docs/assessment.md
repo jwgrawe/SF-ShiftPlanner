@@ -253,12 +253,41 @@ admin), and identical inputs give identical plans.
 |---|---|---|
 | **M0 — done** | Repo, decoded data, competency/eligibility architecture, rotation framework, two-tier intensity, decision log | Q18 (zone-swap scope) answered; Q1 (roster sample) delivered |
 | **M1 — built** | SQLite schema, seed importer, eligibility service, `/display` (portrait, rotation preview, ad-hoc weekend view), `/plan` (read-only day board), `/admin` (browser incl. preferences/fritak), demo week, domain unit tests, one-command startup | ✔ Display renders weekday, night and weekend correctly. Outstanding for M1 exit: the two manager-editable Excel workbooks are generated at the start of M2 instead |
-| **M2 — manual planning** | Manager board per block, absences, locking, publish; roster adapter against the real export (Q1) | Planning tomorrow by hand beats paper |
+| **M2 — in progress** | ✔ Plan management: overview (weeks × days with statuses), week matrix (employees × days), day view, day editor with eligibility-filtered dropdowns, generate/publish/regenerate-with-locks, "manuelt endret" flags; compact display with inline rotation destinations. Remaining: absence registration UI, PINs, roster adapter against the real export (Q1), Excel import UI with drift warnings | Planning tomorrow by hand beats paper |
 | **M3 — suggestions** | Engine v1: zone swap + heavy cap + ledger, 2-week horizon, regenerate-with-locks, shortfall warnings | A normal week accepted with < ~10 corrections |
 | **M4 — hardening** | Admin CRUD incl. competency editor & preferences, holiday calendar, reports, backups | A live pilot week |
 | **Later** | Wall display, utposter reactivation, GAT/API, SSO, preference weights in the objective, per-worktable planning | — |
 
-## 8. Risks
+## 8. UX backlog (brainstorm, unprioritized)
+
+The core manager journey — open app → refresh roster → generate next week →
+review → edit → publish — is served by the M2 views. Candidate improvements
+around it, roughly in the order they'd pay off:
+
+1. **A "today" start page for managers**: today's plan status, loud warnings
+   (shortfalls, no DK/ansvarsvakt, absent people still assigned), one-click
+   jump to fixing them.
+2. **Warnings as first-class objects** (D53): every rule the plan bends
+   listed on the day view, each dismissible with an audited acknowledgement.
+3. **Absence quick-flow**: click a person anywhere → "Meld fravær" → their
+   assignments are highlighted and the planner proposes replacements for
+   just those slots.
+4. **Import screen** with per-file "last imported" timestamps and the drift
+   warnings (D54); a roster refresh shows exactly which published days it
+   conflicts with.
+5. **Person view**: one employee's week/month, their rotation pattern and
+   intensity-hours ledger — answers "where is Kari this week?" and "who is
+   due for a heavy stint?".
+6. **Print/PDF of the day plan** — paper fallback for the sluice walls.
+7. **Undo/history**: every manual edit and publish in an audit list, with
+   one-step revert.
+8. **Display niceties**: auto-rotation between pages if the crew outgrows
+   the screen; a subtle progress bar toward the next rullering.
+9. **Copy patterns**: "gjenta forrige uke" for near-identical weeks.
+10. **Touch-friendly editing** (big tap targets) — ward PCs often have
+    touch screens, and drag-and-drop between functions beats dropdowns.
+
+## 9. Risks
 
 - **Zone-swap scope** (Q18) is the last blocking rotation question — the
   exposure rule is settled and feasible (D50/D51). M1/M2 don't depend on it;

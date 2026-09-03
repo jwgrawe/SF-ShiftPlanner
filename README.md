@@ -6,10 +6,13 @@ zones (uren, ren, steril), planning the mid-shift zone rotations
 ("rullering"), handling absences, and showing the day's plan on a portrait
 display.
 
-**Status: milestone M1 built** — a runnable read-only prototype: SQLite
-schema, seed importer, the wall display (`/display`), the manager's day view
-(`/plan`) and a master-data browser (`/admin`), fed by a deterministic demo
-week. Editing, absences and the suggestion engine come in M2/M3.
+**Status: milestone M2 in progress** — a runnable prototype with plan
+management: the wall display (`/display`, published plans only, with inline
+rotation destinations), the planning section (`/plan`: week overview → week
+matrix → day view → day editor, with generate/publish and locked manual
+edits), and a master-data browser (`/admin`). Demo data covers four weeks of
+roster with week 1 pre-published. Remaining in M2: absences, PINs, the real
+roster adapter (Q1) and the Excel import UI.
 
 ## Running the prototype
 

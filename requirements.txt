@@ -3,3 +3,4 @@ uvicorn>=0.29
 jinja2>=3.1
 openpyxl>=3.1
 tzdata>=2024.1  # IANA time zone data - Windows ships none, zoneinfo needs it
+python-multipart>=0.0.9  # form parsing (Starlette requires it)

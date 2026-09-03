@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Rediger {{ plan_date.strftime("%d.%m") }} – SF-Planlegger{% endblock %}
+{% block style %}
+    select { font-family: inherit; font-size: 0.9rem; padding: 0.25rem 0.4rem; max-width: 24rem; }
+    td.name { width: 14rem; }
+{% endblock %}
+{% block content %}
+<h1>Rediger plan – {{ weekday }} {{ plan_date.strftime("%d.%m.%Y") }}</h1>
+<p><a href="/plan/dag?date={{ plan_date }}">&larr; tilbake til dagen (uten å lagre)</a></p>
+<p class="note">Endringer du lagrer blir <strong>låst</strong> (🔒): de beholdes
+uendret hvis forslaget senere lages på nytt. Velg «(fjern)» for å ta bort en
+plassering. Funksjoner den ansatte ikke har registrert kompetanse for vises
+ikke i listen.</p>
+
+<form method="post" action="/plan/dag/lagre">
+  <input type="hidden" name="date" value="{{ plan_date }}">
+  {% for block in edit_blocks %}
+    <h2>{{ block.start.strftime("%H:%M") }}–{{ block.end.strftime("%H:%M") }}
+        {% if block.end.date() != plan_date %}<span class="muted">(neste dag)</span>{% endif %}</h2>
+    <div class="tablewrap"><table>
+      <tr><th class="name">Ansatt</th><th>Funksjon</th></tr>
+      {% for row in block.rows %}
+        <tr>
+          <td class="name">{{ row.display_name }}{% if row.locked %} 🔒{% endif %}</td>
+          <td>
+            <select name="a{{ row.assignment_id }}">
+              {% for option in row.options %}
+                <option value="{{ option.function_id }}"
+                        {% if option.function_id == row.function_id %}selected{% endif %}>
+                  {{ option.label }}{% if not option.eligible %} (mangler kompetanse!){% endif %}
+                </option>
+              {% endfor %}
+              <option value="__remove__">(fjern plasseringen)</option>
+            </select>
+          </td>
+        </tr>
+      {% endfor %}
+    </table></div>
+  {% endfor %}
+  <div class="actions">
+    <button class="btn" type="submit">Lagre endringer</button>
+    <a class="btn secondary" href="/plan/dag?date={{ plan_date }}">Avbryt</a>
+  </div>
+</form>
+{% endblock %}

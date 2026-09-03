@@ -18,8 +18,8 @@ CREATE TABLE IF NOT EXISTS zones (
     zone_id TEXT PRIMARY KEY, name TEXT NOT NULL, sort_order INTEGER, notes TEXT);
 CREATE TABLE IF NOT EXISTS functions (
     function_id TEXT PRIMARY KEY, zone_id TEXT NOT NULL REFERENCES zones(zone_id),
-    name TEXT NOT NULL, staffing_mode TEXT NOT NULL, active TEXT NOT NULL,
-    sort_order INTEGER, notes TEXT);
+    name TEXT NOT NULL, short_name TEXT NOT NULL, staffing_mode TEXT NOT NULL,
+    active TEXT NOT NULL, sort_order INTEGER, notes TEXT);
 CREATE TABLE IF NOT EXISTS competency_types (
     competency_id TEXT PRIMARY KEY, name TEXT NOT NULL, source_column TEXT, notes TEXT);
 CREATE TABLE IF NOT EXISTS function_competencies (
@@ -78,8 +78,11 @@ CREATE TABLE IF NOT EXISTS absences (
     absence_id INTEGER PRIMARY KEY,
     employee_id TEXT NOT NULL REFERENCES employees(employee_id),
     date TEXT NOT NULL, start TEXT, end TEXT, type TEXT, note TEXT);
+-- status: 'draft' (utkast) or 'published' (publisert). The display shows
+-- published plans only (D22). manually_edited marks plans a manager changed.
 CREATE TABLE IF NOT EXISTS plan_days (
-    plan_date TEXT PRIMARY KEY, status TEXT NOT NULL, generated_at TEXT, note TEXT);
+    plan_date TEXT PRIMARY KEY, status TEXT NOT NULL, generated_at TEXT,
+    manually_edited INTEGER NOT NULL DEFAULT 0, note TEXT);
 CREATE TABLE IF NOT EXISTS assignments (
     assignment_id INTEGER PRIMARY KEY,
     plan_date TEXT NOT NULL REFERENCES plan_days(plan_date),
@@ -106,5 +109,14 @@ def get_conn(db_path: Path | str = DEFAULT_DB_PATH) -> sqlite3.Connection:
     return conn
 
 
+def _ensure_column(conn: sqlite3.Connection, table: str, column: str, decl: str) -> None:
+    existing = {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
+    if column not in existing:
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {decl}")
+
+
 def init_schema(conn: sqlite3.Connection) -> None:
     conn.executescript(SCHEMA)
+    # Lightweight migrations for databases created by earlier versions.
+    _ensure_column(conn, "functions", "short_name", "TEXT NOT NULL DEFAULT ''")
+    _ensure_column(conn, "plan_days", "manually_edited", "INTEGER NOT NULL DEFAULT 0")

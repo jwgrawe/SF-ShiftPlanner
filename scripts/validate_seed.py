@@ -76,6 +76,8 @@ def main() -> int:
             )
         if row["active"] not in {"yes", "no"}:
             errors.append(f"functions.csv: {row['function_id']}: bad active {row['active']!r}")
+        if not row["short_name"].strip():
+            errors.append(f"functions.csv: {row['function_id']}: short_name is empty")
 
     covered_functions: set[str] = set()
     for row in function_competencies:

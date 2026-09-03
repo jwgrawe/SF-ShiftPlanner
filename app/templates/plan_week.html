@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}Uke {{ iso_week }} – SF-Planlegger{% endblock %}
+{% block style %}
+    td.cell { font-size: 0.78rem; white-space: nowrap; }
+    .seq { display: inline-flex; gap: 0.15rem; align-items: center; flex-wrap: wrap; }
+    .chip { font-size: 0.7rem; padding: 0.06rem 0.4rem; }
+    .arrow { color: var(--ink-soft); }
+    th.dayhead a { text-decoration: none; }
+    th.dayhead .sub { display: block; font-weight: 400; text-transform: none; letter-spacing: 0; }
+{% endblock %}
+{% block content %}
+<h1>Uke {{ iso_week }} <span class="muted" style="font-size:1rem">{{ monday.strftime("%d.%m.%Y") }} –</span></h1>
+<p>
+  <a href="/plan/uke?start={{ prev_monday }}">&larr; forrige uke</a> ·
+  <a href="/plan">oversikt</a> ·
+  <a href="/plan/uke?start={{ next_monday }}">neste uke &rarr;</a>
+</p>
+
+<div class="actions">
+  <form method="post" action="/plan/generer">
+    <input type="hidden" name="start" value="{{ monday }}"><input type="hidden" name="days" value="7">
+    <button class="btn" type="submit">Lag forslag for hele uken</button>
+  </form>
+  <form method="post" action="/plan/publiser">
+    <input type="hidden" name="start" value="{{ monday }}"><input type="hidden" name="days" value="7">
+    <input type="hidden" name="back" value="/plan/uke?start={{ monday }}">
+    <button class="btn secondary" type="submit">Publiser hele uken</button>
+  </form>
+  <span class="muted" style="font-size:0.85rem">«Lag forslag» beholder låste (manuelt satte) plasseringer og fyller resten på nytt.</span>
+</div>
+
+<div class="tablewrap"><table>
+  <tr>
+    <th>Ansatt</th>
+    {% for day in days %}
+      <th class="dayhead">
+        <a href="/plan/dag?date={{ day.date }}">{{ ["Man","Tir","Ons","Tor","Fre","Lør","Søn"][loop.index0] }} {{ day.date.strftime("%d.%m") }}</a>
+        <span class="sub">
+          {% if day.status == "published" %}<span class="badge published">publ.</span>
+          {% elif day.status == "draft" %}<span class="badge draft">utkast</span>
+          {% elif day.roster_count %}<span class="badge soft">ingen plan</span>{% endif %}
+          {% if day.manually_edited %}<span class="badge edited">endret</span>{% endif %}
+        </span>
+      </th>
+    {% endfor %}
+  </tr>
+  {% for emp in employees %}
+    <tr>
+      <td>{{ emp.name }}</td>
+      {% for cell in emp.cells %}
+        <td class="cell">
+          {% if cell is none %}<span class="muted">–</span>
+          {% elif cell.adhoc %}<span class="muted">ad hoc</span>
+          {% else %}
+            <span class="seq">
+              {% for part in cell.sequence %}
+                {% if not loop.first %}<span class="arrow">→</span>{% endif %}
+                <span class="chip badge {{ part.zone_id }}">{{ part.short_name }}</span>
+              {% endfor %}
+              {% if cell.locked %}🔒{% endif %}
+            </span>
+          {% endif %}
+        </td>
+      {% endfor %}
+    </tr>
+  {% else %}
+    <tr><td colspan="8" class="muted">Ingen vaktliste for denne uken.</td></tr>
+  {% endfor %}
+</table></div>
+{% endblock %}

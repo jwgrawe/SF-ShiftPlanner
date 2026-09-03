@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Planlegging – SF-Planlegger{% endblock %}
+{% block style %}
+    .weekgrid { display: grid; grid-template-columns: 10rem repeat(7, 1fr); gap: 0; align-items: stretch; }
+    .weekgrid > div { border-bottom: 1px solid var(--line); padding: 0.5rem 0.6rem; background: var(--surface); }
+    .weekgrid .weeklabel { font-weight: 600; }
+    .weekgrid .head { background: var(--surface-2, #eef2f4); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-soft); }
+    .daycell a { text-decoration: none; font-weight: 600; }
+    .daycell .meta { font-size: 0.78rem; color: var(--ink-soft); }
+    .gridwrap { border: 1px solid var(--line); border-radius: 8px; overflow-x: auto; margin: 1rem 0; }
+{% endblock %}
+{% block content %}
+<h1>Planlegging</h1>
+<p>Oversikt over de kommende ukene: hvilke dager som har vaktliste, forslag
+(utkast) og publisert plan. Velg en uke for kompakt ukevisning, eller en dag
+for detaljer og redigering.</p>
+
+<div class="gridwrap"><div class="weekgrid">
+  <div class="head"></div>
+  {% for name in ["Man","Tir","Ons","Tor","Fre","Lør","Søn"] %}<div class="head">{{ name }}</div>{% endfor %}
+  {% for week in weeks %}
+    <div class="weeklabel">
+      <a href="/plan/uke?start={{ week.monday }}">Uke {{ week.iso_week }}</a><br>
+      <span class="muted" style="font-size:0.78rem">{{ week.monday.strftime("%d.%m") }}–</span><br>
+      {% if week.has_roster %}
+        <span class="muted" style="font-size:0.78rem">{{ week.published_days }}/7 publisert</span>
+      {% else %}
+        <span class="muted" style="font-size:0.78rem">ingen vaktliste</span>
+      {% endif %}
+    </div>
+    {% for day in week.days %}
+      <div class="daycell">
+        <a href="/plan/dag?date={{ day.date }}">{{ day.date.strftime("%d.%m") }}</a>
+        {% if day.day_kind == "weekend_holiday" %}<span class="muted" style="font-size:0.7rem">helg</span>{% endif %}
+        <div class="meta">
+          {% if day.status == "published" %}<span class="badge published">publisert</span>
+          {% elif day.status == "draft" %}<span class="badge draft">utkast</span>
+          {% elif day.roster_count %}<span class="badge soft">ingen plan</span>
+          {% else %}<span class="muted">–</span>{% endif %}
+          {% if day.manually_edited %}<span class="badge edited" title="Planen er manuelt endret">endret</span>{% endif %}
+        </div>
+        <div class="meta">{% if day.roster_count %}{{ day.roster_count }} på vakt{% endif %}</div>
+      </div>
+    {% endfor %}
+  {% endfor %}
+</div></div>
+
+<p class="muted">Vaktlisten er foreløpig demo-data (fire uker). Når eksporten
+fra turnussystemet er på plass, importeres den her i stedet.</p>
+{% endblock %}
