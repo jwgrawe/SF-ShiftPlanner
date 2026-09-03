@@ -2,7 +2,7 @@
 rem SF-Planlegger - start prototypen. Krever verken administratorrettigheter
 rem eller virtuelle miljoer: pakker installeres til brukerprofilen (pip --user).
 cd /d "%~dp0"
-python -c "import fastapi, uvicorn, jinja2, openpyxl" 2>nul
+python -c "import fastapi, uvicorn, jinja2, openpyxl, tzdata" 2>nul
 if errorlevel 1 (
     echo Installerer avhengigheter til brukerprofilen...
     python -m pip install --user -r requirements.txt

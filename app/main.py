@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import datetime as dt
 from pathlib import Path
-from zoneinfo import ZoneInfo
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
@@ -19,7 +19,12 @@ from fastapi.templating import Jinja2Templates
 
 from app import db, domain, service
 
-TZ = ZoneInfo("Europe/Oslo")
+try:
+    TZ = ZoneInfo("Europe/Oslo")
+except ZoneInfoNotFoundError:
+    # Windows has no system tz database; without the `tzdata` package fall
+    # back to the machine's local clock (which on-site is Oslo time anyway).
+    TZ = None
 TEMPLATES = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 
 app = FastAPI(title="SF-Planlegger", docs_url=None, redoc_url=None)
