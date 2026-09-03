@@ -13,27 +13,41 @@ week. Editing, absences and the suggestion engine come in M2/M3.
 
 ## Running the prototype
 
-No admin rights and **no virtual environment** required (some org policies
-block venv creation — D61); packages install to the user profile.
+No admin rights, no virtual environment, and no scripts that group policy
+can block (D61). Two steps:
 
-```bash
-start.bat             # Windows: double-click, or run in a terminal
-./start.sh            # Linux/macOS
+```bat
+:: one-time, from any terminal (installs to your user profile):
+python -m pip install --user -r requirements.txt
+
+:: start the app (from any directory):
+python run.py
 ```
 
-Both install dependencies on first run (`pip install --user`) and then run
-`python run.py`, which prepares the database on first start (seed import +
-demo week), opens the browser and starts the server. `run.py` works from
-**any** current directory — you don't have to stand in the project folder.
+`run.py` prepares the database on first start (seed import + demo week),
+opens the browser, and serves on <http://127.0.0.1:8000/>. Stop with Ctrl+C.
+The demo week is 2026-09-07 – 2026-09-13; preview any moment with e.g.
+`/display?date=2026-09-07&time=10:30`.
 
-Then open <http://127.0.0.1:8000/>. The demo week is 2026-09-07 – 2026-09-13;
-preview any moment with e.g. `/display?date=2026-09-07&time=10:30`.
+Easiest way to open a terminal in the project folder: open the folder in
+Explorer and type `cmd` in the address bar, or right-click → "Åpne i
+terminal". For one-click startup, make a Windows shortcut (Ny → Snarvei)
+with this target — shortcuts launch the whitelisted `python.exe`, so group
+policy doesn't object:
+
+```
+"C:\Program Files\Python311\python.exe" "C:\...\Planlegger\run.py"
+```
+
+`start.bat` / `start.sh` do the same install-check + `run.py` for you, but
+many org policies block `.bat` execution ("blokkert for gruppepolicy") — if
+you see that, use `python run.py` as above; nothing is lost.
 
 Tips for the hospital PC:
-- **Keep the folder outside OneDrive** if you can (e.g. `C:\Users\<you>\Planlegger`).
-  OneDrive syncing can lock or lag the SQLite database file while the app
-  writes to it. If it must live in OneDrive, right-click the folder and choose
-  "Always keep on this device".
+- **OneDrive**: mark the folder "Always keep on this device" (or keep it
+  outside OneDrive) so sync never locks the SQLite database file. Avoid
+  network drives (H:) — SQLite and network filesystems disagree about file
+  locking.
 - Rebuild data manually if needed: `python -m app.importer` (from the project
   folder) reloads the seed CSVs; `python scripts/make_demo_data.py` rebuilds
   the demo week.
