@@ -49,6 +49,13 @@
   {% if generated_at %}<span class="muted small">Sist generert {{ generated_at.replace("T", " kl. ") }}</span>{% endif %}
 </div>
 
+{% if checks %}
+  <h2>Trenger oppmerksomhet</h2>
+  <ul class="warn-list">
+    {% for finding in checks %}<li class="{{ finding.level }}">{{ finding.text }}</li>{% endfor %}
+  </ul>
+{% endif %}
+
 {% if not has_plan %}
   <p class="muted">Ingen plan for denne dagen{% if not roster_count %} (og ingen vaktliste){% endif %}.</p>
 {% endif %}
@@ -88,7 +95,7 @@
           <div class="tl-fnrow"><span>{{ fn.function_name }}</span><span></span></div>
           {% for person in fn.people %}
             <div class="tl-row">
-              <span class="tl-name">{{ person.name }}</span>
+              <span class="tl-name"><a href="/plan/ansatt?id={{ person.employee_id }}&fra={{ plan_date }}">{{ person.name }}</a></span>
               <span class="tl-track">
                 {% for bar in person.bars %}
                   <span class="tl-bar {{ zone.zone_id }}" style="left:{{ bar.left }}%; width:{{ bar.width }}%"
@@ -108,6 +115,56 @@
       rutenettet viser halvtimer · 🔒 = manuelt satt, beholdes ved nytt forslag
     </p>
   {% endif %}
+{% endif %}
+
+<h2>Fravær</h2>
+{% if absences %}
+  <div class="tablewrap"><table>
+    <tr><th style="width:14rem">Ansatt</th><th style="width:10rem">Type</th><th style="width:10rem">Tid</th><th>Merknad</th><th style="width:6rem"></th></tr>
+    {% for absence in absences %}
+      <tr>
+        <td>{{ absence.display_name }}</td><td>{{ absence.type }}</td>
+        <td>{% if absence.start %}{{ absence.start }}–{{ absence.end }}{% else %}hele dagen{% endif %}</td>
+        <td class="muted">{{ absence.note }}</td>
+        <td>
+          <form method="post" action="/fravaer/slett">
+            <input type="hidden" name="absence_id" value="{{ absence.absence_id }}">
+            <input type="hidden" name="back" value="/plan/dag?date={{ plan_date }}">
+            <button class="btn secondary small" type="submit">Fjern</button>
+          </form>
+        </td>
+      </tr>
+    {% endfor %}
+  </table></div>
+  <p class="muted small">Fravær fjerner plasseringene til den ansatte for dagen.
+  Bruk «Lag forslag på nytt» for å fylle hullene – låste rader beholdes.</p>
+{% else %}
+  <p class="muted">Ingen fravær registrert for denne dagen.</p>
+{% endif %}
+
+{% if employee_options %}
+  <form method="post" action="/fravaer/ny" class="card">
+    <input type="hidden" name="date" value="{{ plan_date }}">
+    <input type="hidden" name="back" value="/plan/dag?date={{ plan_date }}">
+    <div class="actions" style="margin:0">
+      <label>Meld fravær:
+        <select name="employee_id" required>
+          {% for option in employee_options %}
+            <option value="{{ option.employee_id }}">{{ option.display_name }} ({{ option.shift_code }})</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Type:
+        <select name="type">
+          {% for type in absence_types %}<option>{{ type }}</option>{% endfor %}
+        </select>
+      </label>
+      <label class="muted small">Deler av dagen (valgfritt):
+        <input type="time" name="start"> – <input type="time" name="end">
+      </label>
+      <button class="btn" type="submit">Registrer</button>
+    </div>
+  </form>
 {% endif %}
 
 <h2>Vaktliste denne dagen</h2>

@@ -11,8 +11,15 @@ import sqlite3
 
 from app import domain, planner, service
 
-WEEK_START = dt.date(2026, 9, 7)  # a Monday
 N_WEEKS = 4
+
+
+def week_start(today: dt.date | None = None) -> dt.date:
+    """Demo data is anchored to the current week, so "today" always has a
+    roster. (With the real roster import this whole module goes away.)"""
+    today = today or dt.date.today()
+    return today - dt.timedelta(days=today.weekday())
+
 
 # 16 early / 15 late / 7 night on weekdays (matching total_on_duty), 6 on
 # weekend days (H1/H2, D36).
@@ -23,12 +30,13 @@ WEEKEND_CODES = ["H1"] * 3 + ["H2"] * 3
 
 
 def demo_range() -> tuple[str, str]:
-    return WEEK_START.isoformat(), (WEEK_START + dt.timedelta(days=N_WEEKS * 7 - 1)).isoformat()
+    start = week_start()
+    return start.isoformat(), (start + dt.timedelta(days=N_WEEKS * 7 - 1)).isoformat()
 
 
 def pick_crews(conn: sqlite3.Connection) -> dict[str, list[str]]:
     """Deterministic crews with the qualifications each shift needs."""
-    eligibility = service.eligible_functions(conn, WEEK_START)
+    eligibility = service.eligible_functions(conn, week_start())
     employees = sorted(eligibility)
     taken: set[str] = set()
 
@@ -67,14 +75,18 @@ def pick_crews(conn: sqlite3.Connection) -> dict[str, list[str]]:
 def build(conn: sqlite3.Connection, verbose: bool = True) -> None:
     """Rebuild the demo roster (4 weeks) and the published week-1 plan."""
     first, last = demo_range()
+    start = week_start()
     crews = pick_crews(conn)
     with conn:
-        conn.execute("DELETE FROM assignments WHERE plan_date BETWEEN ? AND ?", (first, last))
-        conn.execute("DELETE FROM plan_days WHERE plan_date BETWEEN ? AND ?", (first, last))
-        conn.execute("DELETE FROM roster WHERE date BETWEEN ? AND ?", (first, last))
+        # Demo-only: the roster table holds nothing but demo rows at this
+        # stage, so a rebuild clears it wholesale (including an older anchor).
+        conn.execute("DELETE FROM assignments WHERE plan_date IN "
+                     "(SELECT plan_date FROM plan_days WHERE note = 'demo')")
+        conn.execute("DELETE FROM plan_days WHERE note = 'demo'")
+        conn.execute("DELETE FROM roster")
 
         for offset in range(N_WEEKS * 7):
-            date = WEEK_START + dt.timedelta(days=offset)
+            date = start + dt.timedelta(days=offset)
             if domain.day_kind(date) == "weekday":
                 roster = {}
                 for phase in ("early", "late", "night"):
@@ -89,7 +101,7 @@ def build(conn: sqlite3.Connection, verbose: bool = True) -> None:
             )
 
     for offset in range(7):  # plans for week 1 only, published
-        date = WEEK_START + dt.timedelta(days=offset)
+        date = start + dt.timedelta(days=offset)
         count = planner.suggest_day(conn, date, source="demo")
         with conn:
             conn.execute(
@@ -103,11 +115,16 @@ def build(conn: sqlite3.Connection, verbose: bool = True) -> None:
 
 
 def ensure(conn: sqlite3.Connection) -> None:
-    """Build the demo data if it is missing or from an older version."""
-    first, last = demo_range()
-    weeks_covered = conn.execute(
-        "SELECT COUNT(DISTINCT date) FROM roster WHERE date BETWEEN ? AND ?", (first, last)
+    """Build demo data when today has no roster — unless someone has made
+    manual edits, in which case their work is left alone."""
+    today = dt.date.today().isoformat()
+    if conn.execute("SELECT COUNT(*) FROM roster WHERE date = ?", (today,)).fetchone()[0]:
+        return
+    hand_edited = conn.execute(
+        "SELECT COUNT(*) FROM assignments WHERE locked = 1 OR source = 'manuell'"
     ).fetchone()[0]
-    if weeks_covered < N_WEEKS * 7:
-        print("Bygger demo-data (vaktliste 4 uker, plan for uke 1) ...")
-        build(conn, verbose=False)
+    has_roster = conn.execute("SELECT COUNT(*) FROM roster").fetchone()[0]
+    if has_roster and hand_edited:
+        return
+    print("Bygger demo-data (vaktliste 4 uker fra denne uken, plan for uke 1) ...")
+    build(conn, verbose=False)

@@ -258,6 +258,11 @@ def _day_status(conn: sqlite3.Connection, date: dt.date) -> dict:
     }
 
 
+def day_status(conn: sqlite3.Connection, date: dt.date) -> dict:
+    """Public wrapper: one day's roster/plan state."""
+    return _day_status(conn, date)
+
+
 def build_overview_model(conn: sqlite3.Connection, from_date: dt.date, n_weeks: int = 5) -> dict:
     start = monday_of(from_date)
     weeks = []
@@ -422,7 +427,7 @@ def build_day_model(conn: sqlite3.Connection, plan_date: dt.date) -> dict:
             "people": {},
         })
         person = fn["people"].setdefault(row["employee_id"], {
-            "name": row["display_name"], "bars": [],
+            "employee_id": row["employee_id"], "name": row["display_name"], "bars": [],
         })
         if axis:
             person["bars"].append(bar(row))
@@ -532,3 +537,81 @@ def build_edit_model(conn: sqlite3.Connection, plan_date: dt.date) -> dict:
         for (start, end), items in sorted(blocks.items())
     ]
     return model
+
+
+def employee_options(conn: sqlite3.Connection, plan_date: dt.date) -> list[sqlite3.Row]:
+    """Everyone rostered that day — the candidate list for absence reporting."""
+    return list(conn.execute(
+        """SELECT r.employee_id, e.display_name, r.shift_code
+           FROM roster r JOIN employees e ON e.employee_id = r.employee_id
+           WHERE r.date = ? ORDER BY e.display_name""",
+        (plan_date.isoformat(),),
+    ))
+
+
+def build_person_model(
+    conn: sqlite3.Connection, employee_id: str, first: dt.date, last: dt.date
+) -> dict | None:
+    """One employee's period: shifts, placements and rotation pattern.
+    Preferences and fritak are deliberately absent — those live only in the
+    admin view (D32/D11)."""
+    employee = conn.execute(
+        "SELECT * FROM employees WHERE employee_id = ?", (employee_id,)).fetchone()
+    if employee is None:
+        return None
+
+    competencies = [
+        {"name": row["name"], "status": row["status"]}
+        for row in conn.execute(
+            """SELECT ct.name, ec.status FROM employee_competencies ec
+               JOIN competency_types ct ON ct.competency_id = ec.competency_id
+               WHERE ec.employee_id = ? ORDER BY ct.name""", (employee_id,))
+    ]
+
+    shifts = {
+        row["date"]: row["shift_code"]
+        for row in conn.execute(
+            "SELECT date, shift_code FROM roster WHERE employee_id = ? AND date BETWEEN ? AND ?",
+            (employee_id, first.isoformat(), last.isoformat()))
+    }
+    placements: dict[str, list] = defaultdict(list)
+    for row in conn.execute(
+        """SELECT a.plan_date, a.start, a.end, a.locked, f.name AS function_name,
+                  f.zone_id, f.sort_order
+           FROM assignments a JOIN functions f ON f.function_id = a.function_id
+           WHERE a.employee_id = ? AND a.plan_date BETWEEN ? AND ?
+           ORDER BY a.plan_date, a.start""",
+        (employee_id, first.isoformat(), last.isoformat()),
+    ):
+        placements[row["plan_date"]].append({
+            "function_name": row["function_name"], "zone_id": row["zone_id"],
+            "span": f"{row['start']}–{row['end']}", "locked": bool(row["locked"]),
+        })
+    absences = {
+        row["date"]: row["type"]
+        for row in conn.execute(
+            "SELECT date, type FROM absences WHERE employee_id = ? AND date BETWEEN ? AND ?",
+            (employee_id, first.isoformat(), last.isoformat()))
+    }
+
+    days = []
+    cursor = first
+    while cursor <= last:
+        key = cursor.isoformat()
+        if key in shifts or key in placements or key in absences:
+            days.append({
+                "date": cursor,
+                "weekday": WEEKDAYS_SHORT_NB[cursor.weekday()],
+                "shift_code": shifts.get(key),
+                "placements": placements.get(key, []),
+                "absence": absences.get(key),
+            })
+        cursor += dt.timedelta(days=1)
+
+    return {
+        "employee": employee,
+        "competencies": competencies,
+        "days": days,
+        "first": first,
+        "last": last,
+    }

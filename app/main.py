@@ -19,7 +19,8 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from app import db, domain, planner, service
+from app import absences as absences_mod
+from app import checks, db, domain, planner, service
 
 try:
     TZ = ZoneInfo("Europe/Oslo")
@@ -57,8 +58,30 @@ def resolve_now(date: str | None, time: str | None) -> dt.datetime:
 
 
 @app.get("/", response_class=HTMLResponse)
-def index(request: Request):
-    return TEMPLATES.TemplateResponse(request, "index.html", {})
+def today_page(request: Request):
+    """The manager's morning page: today's state, what needs attention, and
+    the way into the coming weeks."""
+    now = local_now()
+    conn = get_conn()
+    try:
+        today = domain.operational_day(now)
+        horizon = []
+        for offset in range(3):
+            date = today + dt.timedelta(days=offset)
+            status = service.day_status(conn, date)
+            status["checks"] = checks.day_checks(conn, date)
+            horizon.append(status)
+        model = {
+            "now": now,
+            "today": today,
+            "horizon": horizon,
+            "weeks": service.build_overview_model(conn, today, n_weeks=3)["weeks"],
+            "display": service.build_display_model(conn, now),
+            "absences": absences_mod.day_absences(conn, today),
+        }
+    finally:
+        conn.close()
+    return TEMPLATES.TemplateResponse(request, "today.html", model)
 
 
 @app.get("/display", response_class=HTMLResponse)
@@ -103,6 +126,10 @@ def plan_day(request: Request, date: str, visning: str | None = None):
     conn = get_conn()
     try:
         model = service.build_day_model(conn, plan_date)
+        model["checks"] = checks.day_checks(conn, plan_date)
+        model["absences"] = absences_mod.day_absences(conn, plan_date)
+        model["absence_types"] = absences_mod.ABSENCE_TYPES
+        model["employee_options"] = service.employee_options(conn, plan_date)
     finally:
         conn.close()
     model["prev_date"] = (plan_date - dt.timedelta(days=1)).isoformat()
@@ -219,6 +246,62 @@ async def plan_unlock(request: Request):
     finally:
         conn.close()
     return RedirectResponse(f"/plan/dag?date={plan_date}", status_code=303)
+
+
+@app.get("/plan/ansatt", response_class=HTMLResponse)
+def plan_person(request: Request, id: str, fra: str | None = None):
+    """One employee's period. Shows placements and heavy-work exposure —
+    never preferences or fritak, which are admin-only (D32/D11)."""
+    anchor = dt.date.fromisoformat(fra) if fra else local_now().date()
+    first = service.monday_of(anchor) - dt.timedelta(days=7)
+    last = first + dt.timedelta(days=27)
+    conn = get_conn()
+    try:
+        model = service.build_person_model(conn, id, first, last)
+        if model is None:
+            return HTMLResponse("Ukjent ansatt", status_code=404)
+        model["heavy_hours"] = checks.intensity_hours(conn, id, first, last)
+        model["heavy_week"] = checks.week_heavy_counts(
+            conn, service.monday_of(anchor)).get(id, 0)
+        settings = {row["key"]: row["value"] for row in conn.execute(
+            "SELECT key, value FROM planner_settings")}
+    finally:
+        conn.close()
+    model["heavy_cap"] = int(settings.get("heavy_occurrence_hard_cap_per_week", 3))
+    model["heavy_target"] = int(settings.get("heavy_occurrence_target_per_week", 1))
+    model["anchor"] = anchor
+    return TEMPLATES.TemplateResponse(request, "person.html", model)
+
+
+@app.post("/fravaer/ny")
+async def absence_add(request: Request):
+    form = await request.form()
+    plan_date = dt.date.fromisoformat(str(form["date"]))
+    conn = get_conn()
+    try:
+        absences_mod.register(
+            conn,
+            employee_id=str(form["employee_id"]),
+            date=plan_date,
+            absence_type=str(form.get("type", "Annet")),
+            start=str(form.get("start", "")) or None,
+            end=str(form.get("end", "")) or None,
+            note=str(form.get("note", "")),
+        )
+    finally:
+        conn.close()
+    return RedirectResponse(str(form.get("back", f"/plan/dag?date={plan_date}")), status_code=303)
+
+
+@app.post("/fravaer/slett")
+async def absence_delete(request: Request):
+    form = await request.form()
+    conn = get_conn()
+    try:
+        absences_mod.remove(conn, int(str(form["absence_id"])))
+    finally:
+        conn.close()
+    return RedirectResponse(str(form.get("back", "/")), status_code=303)
 
 
 # ---------------------------------------------------------------------------

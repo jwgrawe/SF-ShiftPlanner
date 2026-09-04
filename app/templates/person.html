@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}{{ employee.display_name }} – SF-Planlegger{% endblock %}
+{% block content %}
+<h1>{{ employee.first_name }} {{ employee.last_name }}
+  <span class="muted" style="font-size:1rem">({{ employee.display_name }})</span></h1>
+<p><a href="/plan/uke?start={{ anchor }}">&larr; tilbake til ukevisning</a></p>
+
+<div class="card">
+  <strong>Tungt arbeid denne uken:</strong> {{ heavy_week }} økt{% if heavy_week != 1 %}er{% endif %}
+  <span class="muted">(mål {{ heavy_target }}, grense {{ heavy_cap }})</span>
+  {% if heavy_week > heavy_cap %}<span class="badge alert">over grensen</span>{% endif %}
+  · <strong>Tunge timer i perioden:</strong> {{ heavy_hours }} t
+  <div class="muted small" style="margin-top:0.3rem">
+    Perioden {{ first.strftime("%d.%m") }}–{{ last.strftime("%d.%m.%Y") }}. Tunge timer vektes
+    etter funksjonens intensitet, og natt regnes ikke som tungt.
+  </div>
+</div>
+
+<h2>Kompetanse</h2>
+<p>
+  {% for comp in competencies %}
+    <span class="badge soft">{{ comp.name }}{% if comp.status == "uncertain" %} ?{% endif %}</span>
+  {% else %}<span class="muted">Ingen registrert kompetanse.</span>{% endfor %}
+</p>
+
+<h2>Vakter og plasseringer</h2>
+<div class="tablewrap"><table>
+  <tr><th style="width:10rem">Dag</th><th style="width:7rem">Vaktkode</th><th>Plassering</th></tr>
+  {% for day in days %}
+    <tr>
+      <td><a href="/plan/dag?date={{ day.date }}">{{ day.weekday }} {{ day.date.strftime("%d.%m") }}</a></td>
+      <td>{{ day.shift_code or "–" }}</td>
+      <td>
+        {% if day.absence %}<span class="badge alert">fravær: {{ day.absence }}</span>{% endif %}
+        {% for placement in day.placements %}
+          <span class="badge {{ placement.zone_id }}">{{ placement.function_name }}</span>
+          <span class="muted small">{{ placement.span }}</span>{% if placement.locked %} 🔒{% endif %}
+          {% if not loop.last %} → {% endif %}
+        {% else %}
+          {% if not day.absence %}<span class="muted">ingen plassering</span>{% endif %}
+        {% endfor %}
+      </td>
+    </tr>
+  {% else %}
+    <tr><td colspan="3" class="muted">Ingen vakter i perioden.</td></tr>
+  {% endfor %}
+</table></div>
+{% endblock %}

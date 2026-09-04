@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block title %}I dag – SF-Planlegger{% endblock %}
+{% block content %}
+{% set now_day = horizon[0] %}
+<h1>I dag – {{ now_day.weekday|lower }} {{ today.strftime("%d.%m.%Y") }}
+  {% if now_day.status == "published" %}<span class="badge published">publisert</span>
+  {% elif now_day.status == "draft" %}<span class="badge draft">utkast</span>
+  {% elif now_day.roster_count %}<span class="badge alert">ingen plan</span>{% endif %}
+  {% if now_day.manually_edited %}<span class="badge edited">manuelt endret</span>{% endif %}
+</h1>
+
+<div class="card">
+  {% if not now_day.roster_count %}
+    Ingen vaktliste for i dag. Demo-dataene dekker fire uker fra mandag denne uken –
+    kjør <code>python scripts/make_demo_data.py</code> for å bygge dem på nytt.
+  {% else %}
+  <strong>{{ now_day.roster_count }}</strong> på vakt i dag ·
+  {% if display.next_change %}neste rullering kl. <strong>{{ display.next_change.strftime("%H:%M") }}</strong>
+  {% else %}ingen flere rulleringer i dag{% endif %}
+  {% if absences %} · <strong>{{ absences|length }}</strong> registrert fravær{% endif %}
+  {% endif %}
+</div>
+
+<div class="actions">
+  <a class="btn" href="/plan/dag?date={{ today }}">Åpne dagens plan</a>
+  <a class="btn secondary" href="/display" target="_blank" rel="noopener">Åpne tavlen</a>
+  <a class="btn secondary" href="/plan">Planlegg kommende uker</a>
+</div>
+
+<h2>Trenger oppmerksomhet</h2>
+{% set total = horizon|map(attribute="checks")|map("length")|sum %}
+{% if total %}
+  {% for day in horizon %}
+    {% if day.checks %}
+      <h3>
+        <a href="/plan/dag?date={{ day.date }}">{{ day.weekday }} {{ day.date.strftime("%d.%m") }}</a>
+        {% if loop.index0 == 0 %}<span class="muted small">(i dag)</span>
+        {% elif loop.index0 == 1 %}<span class="muted small">(i morgen)</span>{% endif %}
+      </h3>
+      <ul class="warn-list">
+        {% for finding in day.checks %}
+          <li class="{{ finding.level }}">{{ finding.text }}</li>
+        {% endfor %}
+      </ul>
+    {% endif %}
+  {% endfor %}
+{% else %}
+  <p class="muted">Ingen avvik funnet for i dag eller de neste to dagene.</p>
+{% endif %}
+
+<h2>Kommende uker</h2>
+<div class="gridwrap"><div class="weekgrid">
+  <div class="head"></div>
+  {% for name in ["Man","Tir","Ons","Tor","Fre","Lør","Søn"] %}<div class="head">{{ name }}</div>{% endfor %}
+  {% for week in weeks %}
+    <div class="weeklabel">
+      <a class="stretch" href="/plan/uke?start={{ week.monday }}">Uke {{ week.iso_week }}</a><br>
+      <span class="muted small">{% if week.has_roster %}{{ week.published_days }}/7 publisert{% else %}ingen vaktliste{% endif %}</span>
+    </div>
+    {% for day in week.days %}
+      <div class="daycell">
+        <a class="stretch" href="/plan/dag?date={{ day.date }}">{{ day.date.strftime("%d.%m") }}</a>
+        <div class="meta">
+          {% if day.status == "published" %}<span class="badge published">publisert</span>
+          {% elif day.status == "draft" %}<span class="badge draft">utkast</span>
+          {% elif day.roster_count %}<span class="badge soft">ingen plan</span>
+          {% else %}<span class="muted">–</span>{% endif %}
+        </div>
+      </div>
+    {% endfor %}
+  {% endfor %}
+</div></div>
+
+{% if absences %}
+  <h2>Fravær i dag</h2>
+  <div class="tablewrap"><table>
+    <tr><th>Ansatt</th><th>Type</th><th>Tid</th><th>Merknad</th><th></th></tr>
+    {% for absence in absences %}
+      <tr>
+        <td>{{ absence.display_name }}</td><td>{{ absence.type }}</td>
+        <td>{% if absence.start %}{{ absence.start }}–{{ absence.end }}{% else %}hele dagen{% endif %}</td>
+        <td class="muted">{{ absence.note }}</td>
+        <td>
+          <form method="post" action="/fravaer/slett">
+            <input type="hidden" name="absence_id" value="{{ absence.absence_id }}">
+            <input type="hidden" name="back" value="/">
+            <button class="btn secondary small" type="submit">Fjern</button>
+          </form>
+        </td>
+      </tr>
+    {% endfor %}
+  </table></div>
+{% endif %}
+{% endblock %}

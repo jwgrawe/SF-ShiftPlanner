@@ -38,7 +38,7 @@
   </tr>
   {% for emp in employees %}
     <tr>
-      <td>{{ emp.name }}</td>
+      <td><a href="/plan/ansatt?id={{ emp.employee_id }}&fra={{ monday }}">{{ emp.name }}</a></td>
       {% for cell in emp.cells %}
         <td class="cell">
           {% if cell is none %}<span class="muted">–</span>
