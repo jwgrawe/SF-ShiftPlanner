@@ -1,11 +1,11 @@
 # SF-ShiftPlanner — assessment & proposed design
 
-*Status: v0.4 (2026-09-02, round 3). Settled points in
+*Status: v0.5 (2026-09-04, round 4). Settled points in
 [decisions.md](decisions.md) (D-numbers), unsettled ones in
 [open-questions.md](open-questions.md) (Q-numbers). Headline changes in this
-version: two-tier intensity makes the heavy-exposure rule feasible, every
-shift gets a DK/ansvarsvakt (weekends included), utpost days derive from
-roster U-codes, and imports gain structure-drift detection.*
+version: the plan day view became a swimlane timeline, plan checks and the
+"I dag" page landed, absences can be reported, and all styling moved into one
+token set.*
 
 A prototype web app for a hospital CSSD (sterilforsyning, "SF") of ~69
 employees that (1) suggests a daily placement of employees onto functions,
@@ -164,20 +164,25 @@ relative paths only, so the app can move machines or to a shared drive by
 copying the folder:
 
 ```
-SF-Planlegger/                 (deployed folder, outside this repo)
-├── app/                       code (from this repo)
-├── .venv/                     python -m venv .venv; pip install -r requirements.txt
+SF-Planlegger/                 (the cloned repo folder is the deployment)
+├── app/                       code, templates and static/app.css
 ├── data/
 │   ├── sf_planlegger.db       SQLite
+│   ├── seed/                  master data as CSV (re-imported on each start)
 │   ├── import/                grunndata.xlsx · personal.xlsx · turnus_*.xlsx
-│   └── backup/                dated copies, written on each start
-└── start.bat                  activates venv, runs uvicorn, opens browser
+│   └── backup/                dated copies (planned)
+└── run.py                     python run.py — no venv, works from any folder
 ```
+
+No virtual environment and no `.bat`: group policy on the work PC blocks
+both, so dependencies install per-user and `python run.py` is the canonical
+launch (D61).
 
 | Mode | URL | Access (D25) | Does |
 |---|---|---|---|
-| Display | `/display` | none, read-only | Portrait, grouped by zones; assignments + next-rotation takeovers; ad-hoc badges fall out of the data (D47). **Never shows absences** — just the current plan (D46). No preference/restriction information visible. |
-| Manager | `/plan` | shared PIN | Day/week board per block; generate, edit, lock, publish; absences (full/partial day, importable and definable, D60); sees and acknowledges rule-violation warnings (D53) |
+| I dag | `/` | shared PIN | The manager's morning page: today's status, findings for today and the next two days, three-week outlook, today's absences |
+| Display | `/display` | none, read-only | Portrait, grouped **zone → funksjon → ansatt** (D62); each row carries the person's next destination; ad-hoc badges fall out of the data (D47). **Never shows absences** — just the current plan (D46). No preference/restriction information visible. |
+| Manager | `/plan` | shared PIN | Overview → week matrix → day (swimlane timeline by default, or blocks by shift category, D63) → editor; generate, lock, publish; absence reporting; person view (`/plan/ansatt`) with placements and heavy-work exposure — never preferences or fritak; findings panel per day (D53) |
 | Admin | `/admin` | separate PIN | Master data; **competency editor** (D33); **preference lists** (D32, only visible here); restrictions incl. tilrettelegging (D56); re-import with drift warnings (D54); **planner settings** — intensity tiers, occurrence target/cap, ledger window (D51); ledger reports |
 
 ## 4. Data flow
@@ -253,7 +258,7 @@ admin), and identical inputs give identical plans.
 |---|---|---|
 | **M0 — done** | Repo, decoded data, competency/eligibility architecture, rotation framework, two-tier intensity, decision log | Q18 (zone-swap scope) answered; Q1 (roster sample) delivered |
 | **M1 — built** | SQLite schema, seed importer, eligibility service, `/display` (portrait, rotation preview, ad-hoc weekend view), `/plan` (read-only day board), `/admin` (browser incl. preferences/fritak), demo week, domain unit tests, one-command startup | ✔ Display renders weekday, night and weekend correctly. Outstanding for M1 exit: the two manager-editable Excel workbooks are generated at the start of M2 instead |
-| **M2 — in progress** | ✔ Plan management: overview (weeks × days with statuses), week matrix (employees × days), day view, day editor with eligibility-filtered dropdowns, generate/publish/regenerate-with-locks, "manuelt endret" flags; compact display with inline rotation destinations. Remaining: absence registration UI, PINs, roster adapter against the real export (Q1), Excel import UI with drift warnings | Planning tomorrow by hand beats paper |
+| **M2 — in progress** | ✔ Plan management: overview, week matrix, swimlane day view + category blocks, editor with eligibility-filtered dropdowns, generate/publish/regenerate-with-locks, "manuelt endret" flags. ✔ Display grouped zone→funksjon→ansatt with inline rotation destinations. ✔ Plan checks + "I dag" page, absence reporting, person view, print stylesheet, unified design tokens. Remaining: PINs, roster adapter against the real export (Q1), Excel import UI with drift warnings | Planning tomorrow by hand beats paper |
 | **M3 — suggestions** | Engine v1: zone swap + heavy cap + ledger, 2-week horizon, regenerate-with-locks, shortfall warnings | A normal week accepted with < ~10 corrections |
 | **M4 — hardening** | Admin CRUD incl. competency editor & preferences, holiday calendar, reports, backups | A live pilot week |
 | **Later** | Wall display, utposter reactivation, GAT/API, SSO, preference weights in the objective, per-worktable planning | — |
@@ -266,12 +271,12 @@ rated (usefulness × effort) and sorted by recommended order:
 
 | # | Idea | Usefulness | Effort | When | Assessment |
 |---|---|---|---|---|---|
-| 1 | **Absence quick-flow**: click a person → "Meld fravær" → their slots are highlighted and the planner proposes replacements for just those slots | Very high — sickness is *the* daily disruption and today's biggest time sink | Medium — absence CRUD (already M2 scope) + a targeted re-suggest for freed slots | M2 tail | The single highest-value addition; builds directly on the existing locked-regeneration machinery |
-| 2 | **"Today" start page**: today's status + loud warnings (shortfalls, missing DK/ansvarsvakt, absent-but-assigned) with one-click jumps | Very high — becomes the natural entry point every morning | Medium — needs warning detection (demand vs. coverage arithmetic) | M2 tail | Do together with #3; the warnings are the same computation |
-| 3 | **Warnings as acknowledgeable objects** (D53) | High — mandated by decision D53, and the trust-carrier for the generator | Medium-high — detection engine + ack storage + audit | With M3 | Read-only warnings can ship with #2 earlier; the ack/override flow lands with the real generator |
+| 1 | **Absence quick-flow** — ✅ **built** | Very high | Medium | done | Reporting an absence removes the affected placements immediately and the day's findings show the resulting gaps; «Lag forslag på nytt» refills them while keeping locks |
+| 2 | **"I dag" start page** — ✅ **built** | Very high | Medium | done | Findings for today + next two days, three-week outlook, today's absences. Already surfacing real defects in the demo plan (weekend DK gap, heavy-work over cap) |
+| 3 | **Warnings as acknowledgeable objects** (D53) — *detection built, acknowledgement pending* | High | Medium-high | With M3 | `app/checks.py` detects; the ack/override/audit flow lands with the real generator |
 | 4 | **Import screen** with per-file timestamps and drift warnings (D54); roster refresh shows which published days it conflicts with | High — required for real operation | Medium | After Q1 | The turnus part is gated on the roster sample; the grunndata/personal workbook part could be built any time |
-| 5 | **Person view**: one employee's week/month, rotation pattern, intensity-hours ledger | Medium-high — answers "hvor er Kari denne uka?" and "hvem står for tur til tungt?"; essential for trusting M3's fairness | Low-medium — read-only aggregation over existing tables | Quick win | Good candidate whenever a small task slot opens |
-| 6 | **Print-friendly day plan** (browser print stylesheet) | Medium — paper fallback for sluice walls | Low — a `@media print` stylesheet | Quick win | True PDF export can wait; printing the page covers the need |
+| 5 | **Person view** — ✅ **built** (`/plan/ansatt`) | Medium-high | Low-medium | done | Shifts, placements, rotation pattern and weighted heavy-hours; linked from the week and day views. Excludes preferences/fritak by design |
+| 6 | **Print-friendly plan** — ✅ **built** | Medium | Low | done | `@media print` block in `app/static/app.css`: nav/actions hidden, colours preserved, rows kept off page breaks |
 | 7 | **Undo/history**: audit list of edits and publishes, one-step revert | Medium — safety net, and D53's audit implies half the work | Medium | M4 | Piggybacks on the acknowledgement audit trail |
 | 8 | **Display niceties**: page auto-rotation for big crews; progress bar toward next rullering | Low-medium now (single screen, crew fits) | Low | With the wall display | The progress bar is trivial and could slip into any display round |
 | 9 | **Touch/drag-and-drop editing** | Medium-high long-term (ward touch screens) | High — real client-side JS | Post-M3 | Don't build until the dropdown editor demonstrably annoys people |

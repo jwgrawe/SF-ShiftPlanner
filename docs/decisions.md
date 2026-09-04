@@ -6,7 +6,8 @@ Q-number). ~~Struck~~ = superseded; kept for traceability.
 
 Rounds: **R1** = 2026-08-31 (first briefing + answers), **R2** = 2026-09-02
 (question round after the department meeting), **R3** = 2026-09-02 (follow-up
-answers on intensity, imports and product details).
+answers on intensity, imports and product details), **R4** = 2026-09-04
+(UI review of the running prototype).
 
 ## Domain & terminology
 
@@ -90,6 +91,9 @@ answers on intensity, imports and product details).
 | D57 | R3 | **Every shift has a DK/ansvarsvakt** — weekends and holidays included (1 person 08–18 on weekend days; the rest of the weekend crew stays ad hoc). The planner warns when no qualified person is available. |
 | D60 | R3 | Absences are both **importable from file and definable in-app** (manager/admin). Default type list *(interim, Q29)*: Syk · Ferie · Kurs/opplæring · Permisjon · Annet. |
 | D47 | R2 | The weekend view is **data-driven**, not special-cased: views render from the day's blocks and rotation rules, so a weekend naturally produces one ad-hoc block. Same for holidays. |
+| D62 | R4 | **Display grouping is zone → funksjon → ansatt(e)**, with each person's post-rotation destination on their own row. Heading: «Fordeling, SF». |
+| D63 | R4 | The day view has two shapes: **«Per sone» (swimlane timeline) is the default** — one row per employee under each function, time left→right on a half-hour grid, with rotation markers (11:00/18:00 solid, mellomvakt 16:00 dashed and subtler) — and «Tidsblokker», which groups by **shift category** (tidligvakt → mellomvakt → senvakt → nattevakt → helgevakt) before time block. Management views use the full window width; only the display stays portrait-constrained. |
+| D64 | R4 | **One stylesheet, one token set** (`app/static/app.css`): zone colours are defined once and softened/desaturated. Zone chips are solid with white text; status chips (publisert/utkast/endret) are soft tints with dark text — so a status can never be mistaken for a zone. Staffing modes are shown in Norwegian (Resterende / Påkrevd / Ad hoc); planner setting keys stay in English since the explanation column carries the meaning. |
 
 ## Technical & deployment
 

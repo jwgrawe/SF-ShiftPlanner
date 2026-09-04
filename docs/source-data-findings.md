@@ -59,13 +59,15 @@ These are structured in `weekday_rules.csv`.
 - `Ark1` gives Gastrolab (fast) up to **3** people at midday, while `Dagsvis`
   describes only **2** (09–16 and 10–17), and only on Thu/Fri.
 - The `Dagsvis` sheet also splits "Sterrad" and "Poliklinikker" into separate
-  rows, while `Ark1` combines them as one function — *now two functions per
-  D16; the combined demand/competency split remains open (Q5).*
+  rows, while `Ark1` combines them as one function — *now two functions and
+  two competencies (D43); the combined hourly demand still needs splitting
+  (Q20).*
 
-The utposter conflict is still under investigation (Q10); the seed keeps both
-versions verbatim (in `staffing_demand.csv` and `weekday_rules.csv`) rather
-than guessing which is right. Fast utpost staff are display-only, not planned
-(D20).
+*Resolved (D39): utposter are out of planning scope until the department
+settles their staffing, so the conflict no longer blocks anything.* The seed
+keeps both versions verbatim (in `staffing_demand.csv` and
+`weekday_rules.csv`) for the eventual reactivation; utpost days are meanwhile
+derived from the roster's U-codes (D55).
 
 ## 2. `Vaktkoder_SF.xlsx` → `shift_codes.csv`
 

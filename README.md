@@ -6,13 +6,22 @@ zones (uren, ren, steril), planning the mid-shift zone rotations
 ("rullering"), handling absences, and showing the day's plan on a portrait
 display.
 
-**Status: milestone M2 in progress** — a runnable prototype with plan
-management: the wall display (`/display`, published plans only, with inline
-rotation destinations), the planning section (`/plan`: week overview → week
-matrix → day view → day editor, with generate/publish and locked manual
-edits), and a master-data browser (`/admin`). Demo data covers four weeks of
-roster with week 1 pre-published. Remaining in M2: absences, PINs, the real
-roster adapter (Q1) and the Excel import UI.
+**Status: milestone M2 in progress** — a runnable prototype:
+
+- **`/`** «I dag» — the manager's morning page: today's status, plan findings
+  for today and the next two days, a three-week outlook, today's absences.
+- **`/display`** — the wall board (published plans only), grouped
+  zone → funksjon → ansatt, each row showing where that person goes at the
+  next rullering.
+- **`/plan`** — overview → week matrix → day → editor. The day view is a
+  swimlane timeline per zone (one row per employee, time left→right, rotation
+  markers) or, optionally, blocks grouped by shift category. Generate,
+  publish, edit with locks, report absences, and open a person view.
+- **`/admin`** — master-data browser, incl. preferences and fritak (only here).
+
+Demo data covers four weeks of roster from the current week, with week 1
+pre-published. Remaining in M2: PINs, the real roster adapter (Q1) and the
+Excel import UI.
 
 ## Running the prototype
 
@@ -29,8 +38,9 @@ python run.py
 
 `run.py` prepares the database on first start (seed import + demo week),
 opens the browser, and serves on <http://127.0.0.1:8000/>. Stop with Ctrl+C.
-The demo week is 2026-09-07 – 2026-09-13; preview any moment with e.g.
-`/display?date=2026-09-07&time=10:30`.
+Demo data covers four weeks from the Monday of the current week, so "today"
+always has a roster. Preview any moment with e.g.
+`/display?date=ÅÅÅÅ-MM-DD&time=10:30`.
 
 Easiest way to open a terminal in the project folder: open the folder in
 Explorer and type `cmd` in the address bar, or right-click → "Åpne i
@@ -61,7 +71,7 @@ Tips for the hospital PC:
 |---|---|
 | [docs/assessment.md](docs/assessment.md) | Proposed architecture, eligibility model, rotation framework, planning engine, roadmap |
 | [docs/decisions.md](docs/decisions.md) | **Decision log** — everything settled, as referenceable D-numbers (superseded ones struck through) |
-| [docs/open-questions.md](docs/open-questions.md) | **Open questions** — stable Q-numbers; currently Q1 + Q18–Q26 |
+| [docs/open-questions.md](docs/open-questions.md) | **Open questions** — stable Q-numbers; currently Q1, Q18–Q20, Q27, Q29 |
 | [docs/source-data-findings.md](docs/source-data-findings.md) | What the source workbooks contain, how they were restructured, and how each flag got resolved |
 
 ## Repository layout
@@ -69,7 +79,10 @@ Tips for the hospital PC:
 ```
 app/           FastAPI web app: db.py (schema), importer.py (seed -> SQLite),
                domain.py (operational day, blocks, holidays), service.py
-               (eligibility + view models), main.py + templates/ (Norwegian UI)
+               (eligibility + view models), planner.py (suggestion filler),
+               checks.py (plan findings + intensity ledger), absences.py,
+               demo.py (stand-in roster), main.py + templates/ (Norwegian UI),
+               static/app.css (all styling and design tokens)
 data/source/   Original Excel workbooks, committed unmodified (provenance)
 data/seed/     Editable master data as CSV — decoded from the workbooks.
                Source of truth for development; edit in Excel/LibreOffice,
@@ -82,7 +95,8 @@ scripts/       generate_fake_employees.py  (fictional identities, deterministic)
                                             NOT the planning engine)
 tests/         Unit tests for the domain logic (python -m unittest discover -s tests)
 docs/          Assessment, decisions, open questions, data findings
-start.sh/.bat  One-command startup (venv + install + import + run)
+start.sh/.bat  Convenience wrappers (blocked by group policy on some PCs)
+run.py         Canonical launch: python run.py, from any folder
 ```
 
 ## Seed data overview
@@ -140,3 +154,5 @@ Requires Python ≥ 3.11; only `import_competencies.py` needs a package
 | Turnus | roster | Who works which shift code on which date (10-week base, repeats ~6 months) |
 | DK/ansvarsvakt | (kept as-is) | Merged responsible-person function — always someone in charge |
 | Utpost | outpost | CSSD work site elsewhere in the hospital |
+| Fravær | absence | Affects supply only; never shown on the display (D46) |
+| Utkast / publisert | draft / published | Only published plans reach the wall display |
