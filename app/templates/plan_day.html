@@ -1,5 +1,11 @@
 {% extends "base.html" %}
 {% block title %}{{ weekday }} {{ plan_date.strftime("%d.%m") }} – SF-Planlegger{% endblock %}
+{% block style %}
+    .slot { display: inline-block; background: #eef2f4; border: 1px solid var(--line); border-radius: 6px; padding: 0.15rem 0.5rem; margin: 0.12rem 0.25rem 0.12rem 0; font-size: 0.85rem; white-space: nowrap; }
+    .slot .t { color: var(--ink-soft); font-variant-numeric: tabular-nums; margin-right: 0.3rem; }
+    .viewtoggle { font-size: 0.9rem; }
+    .viewtoggle strong { color: var(--ink); }
+{% endblock %}
 {% block content %}
 <h1>
   {{ weekday }} {{ plan_date.strftime("%d.%m.%Y") }}
@@ -14,10 +20,15 @@
   <a href="/plan">oversikt</a> ·
   <a href="/plan/dag?date={{ next_date }}">neste dag &rarr;</a>
 </p>
+<p class="viewtoggle">Visning:
+  {% if visning == "soner" %}<a href="/plan/dag?date={{ plan_date }}">Tidsblokker</a> · <strong>Per sone</strong>
+  {% else %}<strong>Tidsblokker</strong> · <a href="/plan/dag?date={{ plan_date }}&visning=soner">Per sone</a>{% endif %}
+</p>
 
 <div class="actions">
   {% if has_plan %}
     <a class="btn" href="/plan/dag/rediger?date={{ plan_date }}">Rediger planen</a>
+    <a class="btn secondary" target="_blank" rel="noopener" href="/display?date={{ plan_date }}&time=10:00">Forhåndsvis tavle</a>
     {% if status == "draft" %}
       <form method="post" action="/plan/publiser">
         <input type="hidden" name="start" value="{{ plan_date }}">
@@ -47,20 +58,37 @@
   <p class="muted">Ingen plan for denne dagen{% if not roster_count %} (og ingen vaktliste){% endif %}.</p>
 {% endif %}
 
-{% for block in blocks %}
-  <h2>{{ block.start.strftime("%H:%M") }}–{{ block.end.strftime("%H:%M") }}
-      {% if block.end.date() != plan_date %}<span class="muted">(neste dag)</span>{% endif %}</h2>
-  <div class="tablewrap"><table>
-    <tr><th style="width:9rem">Sone</th><th style="width:16rem">Funksjon</th><th>Ansatte</th></tr>
-    {% for fn in block.functions %}
-      <tr>
-        <td><span class="badge {{ fn.zone_id }}">{{ fn.zone_name }}</span></td>
-        <td>{{ fn.function_name }}</td>
-        <td>{% for person in fn.people %}{{ person.name }}{% if person.locked %} 🔒{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}</td>
-      </tr>
-    {% endfor %}
-  </table></div>
-{% endfor %}
+{% if visning != "soner" %}
+  {% for block in blocks %}
+    <h2>{{ block.start.strftime("%H:%M") }}–{{ block.end.strftime("%H:%M") }}
+        {% if block.end.date() != plan_date %}<span class="muted">(neste dag)</span>{% endif %}</h2>
+    <div class="tablewrap"><table>
+      <tr><th style="width:9rem">Sone</th><th style="width:16rem">Funksjon</th><th>Ansatte</th></tr>
+      {% for fn in block.functions %}
+        <tr>
+          <td><span class="badge {{ fn.zone_id }}">{{ fn.zone_name }}</span></td>
+          <td>{{ fn.function_name }}</td>
+          <td>{% for person in fn.people %}{{ person.name }}{% if person.locked %} 🔒{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}</td>
+        </tr>
+      {% endfor %}
+    </table></div>
+  {% endfor %}
+{% else %}
+  {% for zone in zones %}
+    <h2><span class="badge {{ zone.zone_id }}">{{ zone.zone_name }}</span></h2>
+    <div class="tablewrap"><table>
+      <tr><th style="width:16rem">Funksjon</th><th>Dagens forløp (tidligst til senest)</th></tr>
+      {% for fn in zone.functions %}
+        <tr>
+          <td>{{ fn.function_name }}</td>
+          <td>
+            {% for entry in fn.entries %}<span class="slot"><span class="t">{{ entry.start.strftime("%H:%M") }}–{{ entry.end.strftime("%H:%M") }}</span>{{ entry.name }}{% if entry.locked %} 🔒{% endif %}</span>{% endfor %}
+          </td>
+        </tr>
+      {% endfor %}
+    </table></div>
+  {% endfor %}
+{% endif %}
 
 <h2>Vaktliste denne dagen</h2>
 <div class="tablewrap"><table>

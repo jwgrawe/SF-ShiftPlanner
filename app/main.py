@@ -94,7 +94,7 @@ def plan_week(request: Request, start: str):
 
 
 @app.get("/plan/dag", response_class=HTMLResponse)
-def plan_day(request: Request, date: str):
+def plan_day(request: Request, date: str, visning: str | None = None):
     plan_date = dt.date.fromisoformat(date)
     conn = get_conn()
     try:
@@ -103,6 +103,7 @@ def plan_day(request: Request, date: str):
         conn.close()
     model["prev_date"] = (plan_date - dt.timedelta(days=1)).isoformat()
     model["next_date"] = (plan_date + dt.timedelta(days=1)).isoformat()
+    model["visning"] = visning
     return TEMPLATES.TemplateResponse(request, "plan_day.html", model)
 
 

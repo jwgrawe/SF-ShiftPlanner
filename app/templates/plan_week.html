@@ -7,6 +7,9 @@
     .arrow { color: var(--ink-soft); }
     th.dayhead a { text-decoration: none; }
     th.dayhead .sub { display: block; font-weight: 400; text-transform: none; letter-spacing: 0; }
+    th.dayhead { position: relative; cursor: pointer; }
+    th.dayhead:hover { background: color-mix(in srgb, var(--accent) 9%, var(--surface)); }
+    a.stretch::after { content: ""; position: absolute; inset: 0; }
 {% endblock %}
 {% block content %}
 <h1>Uke {{ iso_week }} <span class="muted" style="font-size:1rem">{{ monday.strftime("%d.%m.%Y") }} –</span></h1>
@@ -34,7 +37,7 @@
     <th>Ansatt</th>
     {% for day in days %}
       <th class="dayhead">
-        <a href="/plan/dag?date={{ day.date }}">{{ ["Man","Tir","Ons","Tor","Fre","Lør","Søn"][loop.index0] }} {{ day.date.strftime("%d.%m") }}</a>
+        <a class="stretch" href="/plan/dag?date={{ day.date }}">{{ ["Man","Tir","Ons","Tor","Fre","Lør","Søn"][loop.index0] }} {{ day.date.strftime("%d.%m") }}</a>
         <span class="sub">
           {% if day.status == "published" %}<span class="badge published">publ.</span>
           {% elif day.status == "draft" %}<span class="badge draft">utkast</span>

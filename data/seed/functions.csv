@@ -1,15 +1,15 @@
 function_id,zone_id,name,short_name,staffing_mode,active,sort_order,notes
-uren_produksjon,uren,"Produksjon, uren sone","Uren prod.",remainder,yes,1,"Default-funksjon i uren sone: alle øvrige i sonen plasseres her"
-uren_daglige_rutiner,uren,"Ansvar daglige rutiner (uren sone)","Dagl. rutiner",demand,yes,2,
-uren_manuell_rengjoring,uren,"Manuell rengjøring","Man. rengj.",demand,yes,3,
-uren_gangen,uren,"Gangen","Gangen",demand,yes,4,
-ren_dk_ansvarsvakt,ren,"DK/ansvarsvakt","DK/AV",demand,yes,5,"Sammenslått av Driftskoordinator og Ansvarsvakt (D41): sikrer én ansvarlig på vakt hele døgnet. DK-vaktkode (DK/DKK) prioriteres; ellers velges ansvarsvakt-kompetent"
-ren_kontrollsone,ren,"Kontrollsone","Kontroll",demand,yes,6,
-ren_arbeidsbord,ren,"Arbeidsbord/brikkelegging","Bord",remainder,yes,7,"Default-funksjon for hele avdelingen – absorberer alle som ikke trengs andre steder, også om natten (D13/D14). 10 arbeidsbord, 8 generiske bordtyper – se worktable_types.csv (D18)"
-ren_sterrad,ren,"Sterrad","Sterrad",demand,yes,8,"Delt fra «Sterrad + poliklinikker/løspakk» (D43). Behovstall foreligger kun samlet – se Q20"
-ren_poliklinikker_lospakk,ren,"Poliklinikker/løspakk","Poliklin.",demand,yes,9,"Delt fra «Sterrad + poliklinikker/løspakk» (D43). Behovstall foreligger kun samlet – se Q20"
-steril_produksjon,steril,"Produksjon, steril sone","Steril",adhoc_zone,yes,10,"Bemannes via sonetotalen for steril sone; fordeles ad hoc innad i sonen"
-steril_gang_vognvask,steril,"Gang/vognvaskere","Vognvask",adhoc_zone,yes,11,"Bemannes via sonetotalen; fordeles ad hoc. Heter «Gang/vognvaskemaskiner» i kompetansefilen"
-utpost_kir_pol,utpost,"Kir. Pol.","Kir.pol.",demand,no,12,"Utposter er utenfor planleggingsomfanget inntil videre (D39); modellen beholdes klar for reaktivering"
-utpost_gastrolab,utpost,"Gastrolab.","Gastro",demand,no,13,"Utposter er utenfor planleggingsomfanget inntil videre (D39)"
-utpost_kop_barn,utpost,"KOP barn","KOP barn",demand,no,14,"Utposter er utenfor planleggingsomfanget inntil videre (D39)"
+uren_produksjon,uren,"Produksjon, uren sone",Produksjon uren,remainder,yes,1,Default-funksjon i uren sone: alle øvrige i sonen plasseres her
+uren_daglige_rutiner,uren,Ansvar daglige rutiner (uren sone),Daglige rutiner,demand,yes,2,
+uren_manuell_rengjoring,uren,Manuell rengjøring,Manuell rengjøring,demand,yes,3,
+uren_gangen,uren,Gangen,Gangen,demand,yes,4,
+ren_dk_ansvarsvakt,ren,DK/ansvarsvakt,DK/ansvarsvakt,demand,yes,5,Sammenslått av Driftskoordinator og Ansvarsvakt (D41): sikrer én ansvarlig på vakt hele døgnet. DK-vaktkode (DK/DKK) prioriteres; ellers velges ansvarsvakt-kompetent
+ren_kontrollsone,ren,Kontrollsone,Kontrollsone,demand,yes,6,
+ren_arbeidsbord,ren,Arbeidsbord/brikkelegging,Brikkelegging,remainder,yes,7,"Default-funksjon for hele avdelingen – absorberer alle som ikke trengs andre steder, også om natten (D13/D14). 10 arbeidsbord, 8 generiske bordtyper – se worktable_types.csv (D18)"
+ren_sterrad,ren,Sterrad,Sterrad,demand,yes,8,Delt fra «Sterrad + poliklinikker/løspakk» (D43). Behovstall foreligger kun samlet – se Q20
+ren_poliklinikker_lospakk,ren,Poliklinikker/løspakk,Poliklinikker,demand,yes,9,Delt fra «Sterrad + poliklinikker/løspakk» (D43). Behovstall foreligger kun samlet – se Q20
+steril_produksjon,steril,"Produksjon, steril sone",Produksjon steril,adhoc_zone,yes,10,Bemannes via sonetotalen for steril sone; fordeles ad hoc innad i sonen
+steril_gang_vognvask,steril,Gang/vognvaskere,Gang/vognvask,adhoc_zone,yes,11,Bemannes via sonetotalen; fordeles ad hoc. Heter «Gang/vognvaskemaskiner» i kompetansefilen
+utpost_kir_pol,utpost,Kir. Pol.,Kir. Pol.,demand,no,12,Utposter er utenfor planleggingsomfanget inntil videre (D39); modellen beholdes klar for reaktivering
+utpost_gastrolab,utpost,Gastrolab.,Gastrolab.,demand,no,13,Utposter er utenfor planleggingsomfanget inntil videre (D39)
+utpost_kop_barn,utpost,KOP barn,KOP barn,demand,no,14,Utposter er utenfor planleggingsomfanget inntil videre (D39)

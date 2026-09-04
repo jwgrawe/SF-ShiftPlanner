@@ -2,7 +2,7 @@
 {% block title %}Administrasjon – SF-Planlegger{% endblock %}
 {% block content %}
 <h1>Administrasjon</h1>
-<p class="note">Kun lesing i denne versjonen (M1). Redigering, re-import med
+<p class="note">Kun lesing i denne versjonen. Redigering, re-import med
 strukturvarsling og kompetanseredigering kommer i M2/M4. <strong>Preferanser og
 fritak vises kun her</strong> – aldri på tavle eller plan (D32/D11).</p>
 
@@ -12,7 +12,8 @@ fritak vises kun her</strong> – aldri på tavle eller plan (D32/D11).</p>
   {% for fn in functions %}
     <tr>
       <td><span class="badge {{ fn.zone_id }}">{{ fn.zone_name }}</span></td>
-      <td>{{ fn.name }}</td><td>{{ fn.staffing_mode }}</td>
+      <td>{{ fn.name }}</td>
+      <td>{{ {"remainder": "Resterende", "demand": "Påkrevd", "adhoc_zone": "Ad hoc"}[fn.staffing_mode] }}</td>
       <td>{% if fn.active == "yes" %}ja{% else %}<span class="badge soft">parkert</span>{% endif %}</td>
       <td class="muted">{{ fn.notes }}</td>
     </tr>

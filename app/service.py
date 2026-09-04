@@ -343,6 +343,30 @@ def build_day_model(conn: sqlite3.Connection, plan_date: dt.date) -> dict:
             "functions": sorted(by_function.values(), key=lambda item: item["order"]),
         })
 
+    # Alternative grouping: per zone -> function, people laid out along the
+    # day's timeline (chronological, left to right).
+    zone_groups: dict[str, dict] = {}
+    for row in rows:
+        start, end = _to_datetimes(plan_date, row)
+        zone = zone_groups.setdefault(row["zone_id"], {
+            "zone_id": row["zone_id"], "zone_name": row["zone_name"],
+            "order": row["zone_order"], "functions": {},
+        })
+        fn = zone["functions"].setdefault(row["function_id"], {
+            "function_name": row["function_name"], "order": row["function_order"],
+            "entries": [],
+        })
+        fn["entries"].append({
+            "start": start, "end": end,
+            "name": row["display_name"], "locked": bool(row["locked"]),
+        })
+    zone_list = []
+    for zone in sorted(zone_groups.values(), key=lambda z: z["order"]):
+        functions = sorted(zone["functions"].values(), key=lambda f: f["order"])
+        for fn in functions:
+            fn["entries"].sort(key=lambda e: (e["start"], e["name"]))
+        zone_list.append({**zone, "functions": functions})
+
     roster_rows = list(conn.execute(
         """SELECT e.display_name, r.shift_code, s.category, s.start, s.end
            FROM roster r JOIN employees e ON e.employee_id = r.employee_id
@@ -353,6 +377,7 @@ def build_day_model(conn: sqlite3.Connection, plan_date: dt.date) -> dict:
     status = _day_status(conn, plan_date)
     plan = plan_day_row(conn, plan_date)
     return {
+        "zones": zone_list,
         "plan_date": plan_date,
         "weekday": WEEKDAYS_NB[plan_date.weekday()],
         "day_kind": status["day_kind"],

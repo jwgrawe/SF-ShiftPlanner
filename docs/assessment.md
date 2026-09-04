@@ -258,34 +258,24 @@ admin), and identical inputs give identical plans.
 | **M4 — hardening** | Admin CRUD incl. competency editor & preferences, holiday calendar, reports, backups | A live pilot week |
 | **Later** | Wall display, utposter reactivation, GAT/API, SSO, preference weights in the objective, per-worktable planning | — |
 
-## 8. UX backlog (brainstorm, unprioritized)
+## 8. UX backlog, assessed
 
 The core manager journey — open app → refresh roster → generate next week →
-review → edit → publish — is served by the M2 views. Candidate improvements
-around it, roughly in the order they'd pay off:
+review → edit → publish — is served by the M2 views. Candidate improvements,
+rated (usefulness × effort) and sorted by recommended order:
 
-1. **A "today" start page for managers**: today's plan status, loud warnings
-   (shortfalls, no DK/ansvarsvakt, absent people still assigned), one-click
-   jump to fixing them.
-2. **Warnings as first-class objects** (D53): every rule the plan bends
-   listed on the day view, each dismissible with an audited acknowledgement.
-3. **Absence quick-flow**: click a person anywhere → "Meld fravær" → their
-   assignments are highlighted and the planner proposes replacements for
-   just those slots.
-4. **Import screen** with per-file "last imported" timestamps and the drift
-   warnings (D54); a roster refresh shows exactly which published days it
-   conflicts with.
-5. **Person view**: one employee's week/month, their rotation pattern and
-   intensity-hours ledger — answers "where is Kari this week?" and "who is
-   due for a heavy stint?".
-6. **Print/PDF of the day plan** — paper fallback for the sluice walls.
-7. **Undo/history**: every manual edit and publish in an audit list, with
-   one-step revert.
-8. **Display niceties**: auto-rotation between pages if the crew outgrows
-   the screen; a subtle progress bar toward the next rullering.
-9. **Copy patterns**: "gjenta forrige uke" for near-identical weeks.
-10. **Touch-friendly editing** (big tap targets) — ward PCs often have
-    touch screens, and drag-and-drop between functions beats dropdowns.
+| # | Idea | Usefulness | Effort | When | Assessment |
+|---|---|---|---|---|---|
+| 1 | **Absence quick-flow**: click a person → "Meld fravær" → their slots are highlighted and the planner proposes replacements for just those slots | Very high — sickness is *the* daily disruption and today's biggest time sink | Medium — absence CRUD (already M2 scope) + a targeted re-suggest for freed slots | M2 tail | The single highest-value addition; builds directly on the existing locked-regeneration machinery |
+| 2 | **"Today" start page**: today's status + loud warnings (shortfalls, missing DK/ansvarsvakt, absent-but-assigned) with one-click jumps | Very high — becomes the natural entry point every morning | Medium — needs warning detection (demand vs. coverage arithmetic) | M2 tail | Do together with #3; the warnings are the same computation |
+| 3 | **Warnings as acknowledgeable objects** (D53) | High — mandated by decision D53, and the trust-carrier for the generator | Medium-high — detection engine + ack storage + audit | With M3 | Read-only warnings can ship with #2 earlier; the ack/override flow lands with the real generator |
+| 4 | **Import screen** with per-file timestamps and drift warnings (D54); roster refresh shows which published days it conflicts with | High — required for real operation | Medium | After Q1 | The turnus part is gated on the roster sample; the grunndata/personal workbook part could be built any time |
+| 5 | **Person view**: one employee's week/month, rotation pattern, intensity-hours ledger | Medium-high — answers "hvor er Kari denne uka?" and "hvem står for tur til tungt?"; essential for trusting M3's fairness | Low-medium — read-only aggregation over existing tables | Quick win | Good candidate whenever a small task slot opens |
+| 6 | **Print-friendly day plan** (browser print stylesheet) | Medium — paper fallback for sluice walls | Low — a `@media print` stylesheet | Quick win | True PDF export can wait; printing the page covers the need |
+| 7 | **Undo/history**: audit list of edits and publishes, one-step revert | Medium — safety net, and D53's audit implies half the work | Medium | M4 | Piggybacks on the acknowledgement audit trail |
+| 8 | **Display niceties**: page auto-rotation for big crews; progress bar toward next rullering | Low-medium now (single screen, crew fits) | Low | With the wall display | The progress bar is trivial and could slip into any display round |
+| 9 | **Touch/drag-and-drop editing** | Medium-high long-term (ward touch screens) | High — real client-side JS | Post-M3 | Don't build until the dropdown editor demonstrably annoys people |
+| 10 | **"Gjenta forrige uke"** copy function | Medium-low — the generator largely supersedes it | Low | Only if needed | Revisit only if generated suggestions disappoint |
 
 ## 9. Risks
 
