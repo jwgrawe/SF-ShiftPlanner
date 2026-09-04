@@ -1,11 +1,5 @@
 {% extends "base.html" %}
 {% block title %}{{ weekday }} {{ plan_date.strftime("%d.%m") }} – SF-Planlegger{% endblock %}
-{% block style %}
-    .slot { display: inline-block; background: #eef2f4; border: 1px solid var(--line); border-radius: 6px; padding: 0.15rem 0.5rem; margin: 0.12rem 0.25rem 0.12rem 0; font-size: 0.85rem; white-space: nowrap; }
-    .slot .t { color: var(--ink-soft); font-variant-numeric: tabular-nums; margin-right: 0.3rem; }
-    .viewtoggle { font-size: 0.9rem; }
-    .viewtoggle strong { color: var(--ink); }
-{% endblock %}
 {% block content %}
 <h1>
   {{ weekday }} {{ plan_date.strftime("%d.%m.%Y") }}
@@ -20,9 +14,12 @@
   <a href="/plan">oversikt</a> ·
   <a href="/plan/dag?date={{ next_date }}">neste dag &rarr;</a>
 </p>
-<p class="viewtoggle">Visning:
-  {% if visning == "soner" %}<a href="/plan/dag?date={{ plan_date }}">Tidsblokker</a> · <strong>Per sone</strong>
-  {% else %}<strong>Tidsblokker</strong> · <a href="/plan/dag?date={{ plan_date }}&visning=soner">Per sone</a>{% endif %}
+<p class="viewtoggle small">Visning:
+  {% if visning == "blokker" %}
+    <a href="/plan/dag?date={{ plan_date }}">Per sone (tidslinje)</a> · <strong>Tidsblokker</strong>
+  {% else %}
+    <strong>Per sone (tidslinje)</strong> · <a href="/plan/dag?date={{ plan_date }}&visning=blokker">Tidsblokker</a>
+  {% endif %}
 </p>
 
 <div class="actions">
@@ -39,6 +36,7 @@
   {% if roster_count %}
     <form method="post" action="/plan/generer">
       <input type="hidden" name="start" value="{{ plan_date }}"><input type="hidden" name="days" value="1">
+      <input type="hidden" name="back" value="/plan/dag?date={{ plan_date }}">
       <button class="btn secondary" type="submit">{% if has_plan %}Lag forslag på nytt{% else %}Lag forslag{% endif %}</button>
     </form>
   {% endif %}
@@ -48,46 +46,68 @@
       <button class="btn secondary" type="submit">Lås opp alle rader</button>
     </form>
   {% endif %}
-  {% if generated_at %}<span class="muted" style="font-size:0.85rem">Sist generert {{ generated_at.replace("T", " kl. ") }}</span>{% endif %}
+  {% if generated_at %}<span class="muted small">Sist generert {{ generated_at.replace("T", " kl. ") }}</span>{% endif %}
 </div>
-{% if has_plan %}
-  <p class="muted" style="font-size:0.88rem">🔒 = manuelt satt; beholdes uendret når forslaget lages på nytt.</p>
-{% endif %}
 
 {% if not has_plan %}
   <p class="muted">Ingen plan for denne dagen{% if not roster_count %} (og ingen vaktliste){% endif %}.</p>
 {% endif %}
 
-{% if visning != "soner" %}
-  {% for block in blocks %}
-    <h2>{{ block.start.strftime("%H:%M") }}–{{ block.end.strftime("%H:%M") }}
-        {% if block.end.date() != plan_date %}<span class="muted">(neste dag)</span>{% endif %}</h2>
-    <div class="tablewrap"><table>
-      <tr><th style="width:9rem">Sone</th><th style="width:16rem">Funksjon</th><th>Ansatte</th></tr>
-      {% for fn in block.functions %}
-        <tr>
-          <td><span class="badge {{ fn.zone_id }}">{{ fn.zone_name }}</span></td>
-          <td>{{ fn.function_name }}</td>
-          <td>{% for person in fn.people %}{{ person.name }}{% if person.locked %} 🔒{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}</td>
-        </tr>
-      {% endfor %}
-    </table></div>
+{% if visning == "blokker" %}
+  {# ---- grouped by shift category, then time block ---- #}
+  {% for category in categories %}
+    <h2>{{ category.label }}</h2>
+    {% for block in category.blocks %}
+      <h3>{{ block.start.strftime("%H:%M") }}–{{ block.end.strftime("%H:%M") }}
+          {% if block.end.date() != plan_date %}<span class="muted">(neste dag)</span>{% endif %}</h3>
+      <div class="tablewrap"><table>
+        <tr><th style="width:9rem">Sone</th><th style="width:18rem">Funksjon</th><th>Ansatte</th></tr>
+        {% for fn in block.functions %}
+          <tr>
+            <td><span class="badge {{ fn.zone_id }}">{{ fn.zone_name }}</span></td>
+            <td>{{ fn.function_name }}</td>
+            <td>{% for person in fn.people %}{{ person.name }}{% if person.locked %} 🔒{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}</td>
+          </tr>
+        {% endfor %}
+      </table></div>
+    {% endfor %}
   {% endfor %}
-{% else %}
+{% elif axis %}
+  {# ---- swimlane timeline, grouped per zone -> function -> employee ---- #}
   {% for zone in zones %}
     <h2><span class="badge {{ zone.zone_id }}">{{ zone.zone_name }}</span></h2>
-    <div class="tablewrap"><table>
-      <tr><th style="width:16rem">Funksjon</th><th>Dagens forløp (tidligst til senest)</th></tr>
-      {% for fn in zone.functions %}
-        <tr>
-          <td>{{ fn.function_name }}</td>
-          <td>
-            {% for entry in fn.entries %}<span class="slot"><span class="t">{{ entry.start.strftime("%H:%M") }}–{{ entry.end.strftime("%H:%M") }}</span>{{ entry.name }}{% if entry.locked %} 🔒{% endif %}</span>{% endfor %}
-          </td>
-        </tr>
-      {% endfor %}
-    </table></div>
+    <div class="tl" style="--tl-seg: {{ axis.segment_pct }}%">
+      <div class="tl-head">
+        {% for tick in axis.ticks %}<span class="tl-tick" style="left:{{ tick.pct }}%">{{ tick.label }}</span>{% endfor %}
+      </div>
+      <div class="tl-body">
+        <div class="tl-overlay">
+          {% for mark in axis.marks %}<span class="tl-mark {{ mark.kind }}" style="left:{{ mark.pct }}%" title="Rullering {{ mark.label }}"></span>{% endfor %}
+        </div>
+        {% for fn in zone.functions %}
+          <div class="tl-fnrow"><span>{{ fn.function_name }}</span><span></span></div>
+          {% for person in fn.people %}
+            <div class="tl-row">
+              <span class="tl-name">{{ person.name }}</span>
+              <span class="tl-track">
+                {% for bar in person.bars %}
+                  <span class="tl-bar {{ zone.zone_id }}" style="left:{{ bar.left }}%; width:{{ bar.width }}%"
+                        title="{{ person.name }} · {{ fn.function_name }} · {{ bar.label }}">{{ bar.label }}{% if bar.locked %} 🔒{% endif %}</span>
+                {% endfor %}
+              </span>
+            </div>
+          {% endfor %}
+        {% endfor %}
+      </div>
+    </div>
   {% endfor %}
+  {% if axis.marks %}
+    <p class="tl-legend">
+      <span class="key"></span> rulleringstidspunkt{% for mark in axis.marks %}{% if mark.kind == "primary" %} {{ mark.label }}{% endif %}{% endfor %} ·
+      <span class="key secondary"></span> mellomvakt{% for mark in axis.marks %}{% if mark.kind == "secondary" %} {{ mark.label }}{% endif %}{% endfor %} ·
+      rutenettet viser halvtimer · 🔒 = manuelt satt, beholdes ved nytt forslag
+    </p>
+  {% endif %}
 {% endif %}
 
 <h2>Vaktliste denne dagen</h2>

@@ -14,6 +14,14 @@ from collections import defaultdict
 from app import domain
 
 WEEKDAYS_NB = ["Mandag", "Tirsdag", "Onsdag", "Torsdag", "Fredag", "Lørdag", "Søndag"]
+WEEKDAYS_SHORT_NB = ["Man", "Tir", "Ons", "Tor", "Fre", "Lør", "Søn"]
+
+# Display order and labels for shift categories (D35/D36).
+SHIFT_CATEGORY_ORDER = ["tidligvakt", "mellomvakt", "senvakt", "nattevakt", "helgevakt"]
+SHIFT_CATEGORY_LABELS = {
+    "tidligvakt": "Tidligvakt", "mellomvakt": "Mellomvakt", "senvakt": "Senvakt",
+    "nattevakt": "Nattevakt", "helgevakt": "Helgevakt", "": "Ukjent vaktkategori",
+}
 
 
 def rotation_times(conn: sqlite3.Connection) -> dict[str, dt.time | None]:
@@ -27,7 +35,8 @@ def heavy_function_ids(conn: sqlite3.Connection) -> set[str]:
     """Functions with any intensity > 0 window — the scope of a heavy-work fritak."""
     return {
         row["function_id"]
-        for row in conn.execute("SELECT DISTINCT function_id FROM function_intensity WHERE intensity > 0")
+        for row in conn.execute(
+            "SELECT DISTINCT function_id FROM function_intensity WHERE intensity > 0")
     }
 
 
@@ -83,17 +92,22 @@ def eligible_functions(conn: sqlite3.Connection, on_date: dt.date) -> dict[str, 
 def day_assignments(
     conn: sqlite3.Connection, plan_date: dt.date, published_only: bool = False
 ) -> list[sqlite3.Row]:
+    """Assignments for a day, joined with the employee's roster shift so views
+    can group by shift category (tidligvakt/mellomvakt/…)."""
     status_filter = "AND p.status = 'published'" if published_only else ""
     return list(conn.execute(
         f"""SELECT a.*, e.display_name, f.name AS function_name, f.short_name,
                    f.zone_id, f.staffing_mode,
                    z.name AS zone_name, z.sort_order AS zone_order,
-                   f.sort_order AS function_order
+                   f.sort_order AS function_order,
+                   r.shift_code, COALESCE(sc.category, '') AS shift_category
             FROM assignments a
             JOIN plan_days p ON p.plan_date = a.plan_date
             JOIN employees e ON e.employee_id = a.employee_id
             JOIN functions f ON f.function_id = a.function_id
             JOIN zones z ON z.zone_id = f.zone_id
+            LEFT JOIN roster r ON r.date = a.plan_date AND r.employee_id = a.employee_id
+            LEFT JOIN shift_codes sc ON sc.code = r.shift_code
             WHERE a.plan_date = ? {status_filter}
             ORDER BY z.sort_order, f.sort_order, a.start, e.display_name""",
         (plan_date.isoformat(),),
@@ -119,7 +133,7 @@ def _to_datetimes(plan_date: dt.date, row: sqlite3.Row) -> tuple[dt.datetime, dt
 
 def build_display_model(conn: sqlite3.Connection, now: dt.datetime) -> dict:
     """Everything the wall display needs for the operational day containing
-    `now`. Shows published plans only (D22)."""
+    `now`. Grouped zone -> function -> employees. Published plans only (D22)."""
     plan_date = domain.operational_day(now)
     kind = domain.day_kind(plan_date)
     rows = day_assignments(conn, plan_date, published_only=True)
@@ -129,7 +143,7 @@ def build_display_model(conn: sqlite3.Connection, now: dt.datetime) -> dict:
     for row in rows:
         start, end = _to_datetimes(plan_date, row)
         if start <= now < end:
-            active.append((row, start, end))
+            active.append(row)
         elif start > now:
             upcoming_times.add(start)
             next_by_employee[row["employee_id"]].append((start, row))
@@ -147,11 +161,10 @@ def build_display_model(conn: sqlite3.Connection, now: dt.datetime) -> dict:
         return {
             "short_name": row["short_name"],
             "zone_id": row["zone_id"],
-            "adhoc": row["staffing_mode"] == "adhoc_zone",
             "time": start.strftime("%H:%M") if next_change and start != next_change else None,
         }
 
-    active_ids = {row["employee_id"] for row, _, _ in active}
+    active_ids = {row["employee_id"] for row in active}
     arrivals = []
     if next_change is not None:
         for row in rows:
@@ -165,24 +178,31 @@ def build_display_model(conn: sqlite3.Connection, now: dt.datetime) -> dict:
 
     zones: list[dict] = []
     for zone in conn.execute("SELECT * FROM zones ORDER BY sort_order"):
-        zone_people = []
-        for row, _, _ in active:
+        functions: dict[str, dict] = {}
+        for row in active:
             if row["zone_id"] != zone["zone_id"]:
                 continue
-            zone_people.append({
-                "display_name": row["display_name"],
+            entry = functions.setdefault(row["function_id"], {
                 "function_name": row["function_name"],
                 "adhoc": row["staffing_mode"] == "adhoc_zone",
+                "order": row["function_order"],
+                "people": [],
+            })
+            entry["people"].append({
+                "display_name": row["display_name"],
                 "next": next_move(row["employee_id"], row["function_id"]),
             })
+        function_list = sorted(functions.values(), key=lambda f: f["order"])
         has_active_functions = conn.execute(
             "SELECT COUNT(*) FROM functions WHERE zone_id = ? AND active = 'yes'",
             (zone["zone_id"],),
         ).fetchone()[0]
         if has_active_functions:
-            zones.append({"zone_id": zone["zone_id"], "name": zone["name"],
-                          "people": zone_people,
-                          "adhoc_zone": all(p["adhoc"] for p in zone_people) and bool(zone_people)})
+            zones.append({
+                "zone_id": zone["zone_id"], "name": zone["name"],
+                "functions": function_list,
+                "adhoc_zone": bool(function_list) and all(f["adhoc"] for f in function_list),
+            })
 
     # Weekend/holiday: the crew largely self-manages (D21) — show the rostered
     # crew, not only explicit assignments.
@@ -306,7 +326,11 @@ def build_week_model(conn: sqlite3.Connection, monday: dt.date) -> dict:
                     "locked": cell["locked"],
                     "adhoc": not sequence,
                 })
-        employees.append({"name": names.get(employee_id, employee_id), "cells": row_cells})
+        employees.append({
+            "employee_id": employee_id,
+            "name": names.get(employee_id, employee_id),
+            "cells": row_cells,
+        })
 
     return {
         "monday": monday,
@@ -318,54 +342,135 @@ def build_week_model(conn: sqlite3.Connection, monday: dt.date) -> dict:
     }
 
 
+def _timeline_axis(
+    conn: sqlite3.Connection, plan_date: dt.date, spans: list[tuple[dt.datetime, dt.datetime]]
+) -> dict | None:
+    """Time axis for the swimlane view: hour ticks, rotation marks and the
+    30-minute grid, all as percentages of the day's actual span."""
+    if not spans:
+        return None
+    axis_start = min(start for start, _ in spans)
+    axis_end = max(end for _, end in spans)
+    total = (axis_end - axis_start).total_seconds() / 60
+    if total <= 0:
+        return None
+
+    def pct(when: dt.datetime) -> float:
+        return (when - axis_start).total_seconds() / 60 / total * 100
+
+    step = 1 if total <= 12 * 60 else 2
+    ticks = []
+    cursor = axis_start.replace(minute=0, second=0, microsecond=0)
+    if cursor < axis_start:
+        cursor += dt.timedelta(hours=1)
+    while cursor <= axis_end:
+        if cursor.hour % step == 0:
+            ticks.append({"label": cursor.strftime("%H"), "pct": round(pct(cursor), 4)})
+        cursor += dt.timedelta(hours=1)
+
+    # Rotation markers (D35): mellomvakt's 16:00 is drawn subtler than the
+    # main 11:00/18:00 points, since only mid shifts use it.
+    marks: dict[dt.datetime, dict] = {}
+    for row in conn.execute(
+        """SELECT category, rotation_time FROM rotation_rules
+           WHERE rotation_time IS NOT NULL AND rotation_time <> ''"""
+    ):
+        rotation = domain.parse_time(row["rotation_time"])
+        kind = "secondary" if row["category"] == "mellomvakt" else "primary"
+        for day_offset in (0, 1):
+            when = dt.datetime.combine(plan_date + dt.timedelta(days=day_offset), rotation)
+            if axis_start < when < axis_end:
+                existing = marks.get(when)
+                if existing is None or kind == "primary":
+                    marks[when] = {
+                        "pct": round(pct(when), 4), "label": when.strftime("%H:%M"), "kind": kind,
+                    }
+    return {
+        "start": axis_start, "end": axis_end, "total_minutes": total,
+        "ticks": ticks,
+        "marks": [marks[key] for key in sorted(marks)],
+        "segment_pct": round(30 / total * 100, 4),
+    }
+
+
 def build_day_model(conn: sqlite3.Connection, plan_date: dt.date) -> dict:
-    """Manager day view: the whole day as blocks × functions × people."""
+    """Manager day view, in two shapes: grouped per zone as a timeline
+    (default), and grouped by shift category → time block."""
     rows = day_assignments(conn, plan_date)
-    blocks: dict[tuple[dt.datetime, dt.datetime], list] = defaultdict(list)
-    for row in rows:
-        start, end = _to_datetimes(plan_date, row)
-        blocks[(start, end)].append(row)
+    spans = {row["assignment_id"]: _to_datetimes(plan_date, row) for row in rows}
+    axis = _timeline_axis(conn, plan_date, list(spans.values()))
 
-    block_list = []
-    for (start, end) in sorted(blocks):
-        by_function: dict[str, dict] = {}
-        for row in blocks[(start, end)]:
-            entry = by_function.setdefault(row["function_id"], {
-                "function_name": row["function_name"], "zone_name": row["zone_name"],
-                "zone_id": row["zone_id"], "people": [],
-                "order": (row["zone_order"], row["function_order"]),
-            })
-            entry["people"].append(
-                {"name": row["display_name"], "locked": bool(row["locked"])}
-            )
-        block_list.append({
-            "start": start, "end": end,
-            "functions": sorted(by_function.values(), key=lambda item: item["order"]),
-        })
+    def bar(row) -> dict:
+        start, end = spans[row["assignment_id"]]
+        left = (start - axis["start"]).total_seconds() / 60 / axis["total_minutes"] * 100
+        width = (end - start).total_seconds() / 60 / axis["total_minutes"] * 100
+        return {
+            "left": round(left, 4), "width": round(width, 4),
+            "start": start, "end": end, "locked": bool(row["locked"]),
+            "label": f"{start.strftime('%H:%M')}–{end.strftime('%H:%M')}",
+        }
 
-    # Alternative grouping: per zone -> function, people laid out along the
-    # day's timeline (chronological, left to right).
+    # --- shape 1: zone -> function -> one row per employee (timeline)
     zone_groups: dict[str, dict] = {}
     for row in rows:
-        start, end = _to_datetimes(plan_date, row)
         zone = zone_groups.setdefault(row["zone_id"], {
             "zone_id": row["zone_id"], "zone_name": row["zone_name"],
             "order": row["zone_order"], "functions": {},
         })
         fn = zone["functions"].setdefault(row["function_id"], {
             "function_name": row["function_name"], "order": row["function_order"],
-            "entries": [],
+            "people": {},
         })
-        fn["entries"].append({
-            "start": start, "end": end,
-            "name": row["display_name"], "locked": bool(row["locked"]),
+        person = fn["people"].setdefault(row["employee_id"], {
+            "name": row["display_name"], "bars": [],
         })
+        if axis:
+            person["bars"].append(bar(row))
+
     zone_list = []
     for zone in sorted(zone_groups.values(), key=lambda z: z["order"]):
-        functions = sorted(zone["functions"].values(), key=lambda f: f["order"])
-        for fn in functions:
-            fn["entries"].sort(key=lambda e: (e["start"], e["name"]))
-        zone_list.append({**zone, "functions": functions})
+        functions = []
+        for fn in sorted(zone["functions"].values(), key=lambda f: f["order"]):
+            people = []
+            for person in fn["people"].values():
+                person["bars"].sort(key=lambda b: b["start"])
+                people.append(person)
+            people.sort(key=lambda p: (p["bars"][0]["start"] if p["bars"] else dt.datetime.max,
+                                       p["name"]))
+            functions.append({"function_name": fn["function_name"], "people": people})
+        zone_list.append({
+            "zone_id": zone["zone_id"], "zone_name": zone["zone_name"], "functions": functions,
+        })
+
+    # --- shape 2: shift category -> time block -> function -> people
+    by_category: dict[str, dict] = {}
+    for row in rows:
+        start, end = spans[row["assignment_id"]]
+        category = row["shift_category"] or ""
+        group = by_category.setdefault(category, {})
+        block = group.setdefault((start, end), {})
+        entry = block.setdefault(row["function_id"], {
+            "function_name": row["function_name"], "zone_name": row["zone_name"],
+            "zone_id": row["zone_id"], "order": (row["zone_order"], row["function_order"]),
+            "people": [],
+        })
+        entry["people"].append({"name": row["display_name"], "locked": bool(row["locked"])})
+
+    category_list = []
+    for category in sorted(
+        by_category,
+        key=lambda c: SHIFT_CATEGORY_ORDER.index(c) if c in SHIFT_CATEGORY_ORDER else 99,
+    ):
+        blocks = [
+            {"start": start, "end": end,
+             "functions": sorted(block.values(), key=lambda item: item["order"])}
+            for (start, end), block in sorted(by_category[category].items())
+        ]
+        category_list.append({
+            "category": category,
+            "label": SHIFT_CATEGORY_LABELS.get(category, category.capitalize()),
+            "blocks": blocks,
+        })
 
     roster_rows = list(conn.execute(
         """SELECT e.display_name, r.shift_code, s.category, s.start, s.end
@@ -378,13 +483,14 @@ def build_day_model(conn: sqlite3.Connection, plan_date: dt.date) -> dict:
     plan = plan_day_row(conn, plan_date)
     return {
         "zones": zone_list,
+        "axis": axis,
+        "categories": category_list,
         "plan_date": plan_date,
         "weekday": WEEKDAYS_NB[plan_date.weekday()],
         "day_kind": status["day_kind"],
         "status": status["status"],
         "manually_edited": status["manually_edited"],
         "generated_at": plan["generated_at"] if plan else None,
-        "blocks": block_list,
         "roster": roster_rows,
         "roster_count": status["roster_count"],
         "has_plan": bool(rows),

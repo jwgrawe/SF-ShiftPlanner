@@ -1,18 +1,5 @@
 {% extends "base.html" %}
 {% block title %}Planlegging – SF-Planlegger{% endblock %}
-{% block style %}
-    .weekgrid { display: grid; grid-template-columns: 10rem repeat(7, 1fr); gap: 0; align-items: stretch; }
-    .weekgrid > div { border-bottom: 1px solid var(--line); padding: 0.5rem 0.6rem; background: var(--surface); }
-    .weekgrid .weeklabel { font-weight: 600; }
-    .weekgrid .head { background: var(--surface-2, #eef2f4); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-soft); }
-    .daycell a, .weeklabel a { text-decoration: none; font-weight: 600; }
-    .daycell .meta { font-size: 0.78rem; color: var(--ink-soft); }
-    .gridwrap { border: 1px solid var(--line); border-radius: 8px; overflow-x: auto; margin: 1rem 0; }
-    /* The whole cell is clickable: a stretched link + hover highlight. */
-    .daycell, .weeklabel { position: relative; cursor: pointer; }
-    .daycell:hover, .weeklabel:hover { background: color-mix(in srgb, var(--accent) 9%, var(--surface)); }
-    a.stretch::after { content: ""; position: absolute; inset: 0; }
-{% endblock %}
 {% block content %}
 <h1>Planlegging</h1>
 <p>Oversikt over de kommende ukene: hvilke dager som har vaktliste, forslag

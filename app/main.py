@@ -16,6 +16,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from app import db, domain, planner, service
@@ -30,6 +31,9 @@ except ZoneInfoNotFoundError:
 TEMPLATES = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 
 app = FastAPI(title="SF-Planlegger", docs_url=None, redoc_url=None)
+app.mount(
+    "/static", StaticFiles(directory=str(Path(__file__).parent / "static")), name="static"
+)
 
 
 def get_conn():
@@ -131,7 +135,8 @@ async def plan_generate(request: Request):
                 planner.suggest_day(conn, date)
     finally:
         conn.close()
-    return RedirectResponse(f"/plan/uke?start={service.monday_of(start)}", status_code=303)
+    target = str(form.get("back", f"/plan/uke?start={service.monday_of(start)}"))
+    return RedirectResponse(target, status_code=303)
 
 
 @app.post("/plan/publiser")

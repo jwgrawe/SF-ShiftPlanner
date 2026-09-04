@@ -1,16 +1,5 @@
 {% extends "base.html" %}
 {% block title %}Uke {{ iso_week }} – SF-Planlegger{% endblock %}
-{% block style %}
-    td.cell { font-size: 0.78rem; white-space: nowrap; }
-    .seq { display: inline-flex; gap: 0.15rem; align-items: center; flex-wrap: wrap; }
-    .chip { font-size: 0.7rem; padding: 0.06rem 0.4rem; }
-    .arrow { color: var(--ink-soft); }
-    th.dayhead a { text-decoration: none; }
-    th.dayhead .sub { display: block; font-weight: 400; text-transform: none; letter-spacing: 0; }
-    th.dayhead { position: relative; cursor: pointer; }
-    th.dayhead:hover { background: color-mix(in srgb, var(--accent) 9%, var(--surface)); }
-    a.stretch::after { content: ""; position: absolute; inset: 0; }
-{% endblock %}
 {% block content %}
 <h1>Uke {{ iso_week }} <span class="muted" style="font-size:1rem">{{ monday.strftime("%d.%m.%Y") }} –</span></h1>
 <p>

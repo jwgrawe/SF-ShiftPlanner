@@ -1,43 +1,8 @@
 {% extends "base.html" %}
 {% block title %}Tavle – SF-Planlegger{% endblock %}
+{% block body_class %}display{% endblock %}
 {% block header %}{% endblock %}
 {% block head %}{% if not preview %}<meta http-equiv="refresh" content="60">{% endif %}{% endblock %}
-{% block style %}
-    body { background: #101a1f; color: #e8eef1; }
-    main { max-width: 54rem; padding: 1rem 1.4rem; }
-    .top { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 0.4rem; }
-    .top h1 { font-size: 1.7rem; margin: 0; color: #ffffff; }
-    .top .clock { font-size: 1.7rem; font-weight: 700; font-variant-numeric: tabular-nums; }
-    .daylabel { color: #9fb2bb; font-size: 0.95rem; margin-bottom: 0.7rem; }
-    .zone { border-radius: 10px; overflow: hidden; margin: 0.7rem 0; background: #18242b; border: 1px solid #24343d; }
-    .zone header { padding: 0.35rem 0.9rem; font-size: 1.05rem; font-weight: 700; color: #fff; display: flex; justify-content: space-between; align-items: center; }
-    .zone.uren header { background: var(--uren); } .zone.ren header { background: var(--ren); }
-    .zone.steril header { background: var(--steril); } .zone.utpost header { background: var(--utpost); }
-    .zone ul { list-style: none; margin: 0; padding: 0.3rem 0.9rem 0.45rem; }
-    /* Fixed column widths so every row aligns identically regardless of
-       whether it carries a rotation chip (each li is its own grid). */
-    .zone li {
-      display: grid; grid-template-columns: 11rem 1fr 15rem;
-      gap: 0.8rem; align-items: baseline;
-      padding: 0.18rem 0; font-size: 1.05rem; border-bottom: 1px solid #22313a;
-    }
-    .zone li:last-child { border-bottom: none; }
-    .zone li .fn { color: #9fb2bb; font-size: 0.95rem; text-align: left; }
-    .nextchip {
-      justify-self: end; font-size: 0.85rem; font-weight: 600; white-space: nowrap;
-      border-radius: 999px; padding: 0.08rem 0.6rem; color: #fff;
-    }
-    .nextchip.uren { background: var(--uren); } .nextchip.ren { background: var(--ren); }
-    .nextchip.steril { background: var(--steril); } .nextchip.utpost { background: var(--utpost); }
-    .nextchip.none { background: transparent; color: #52646d; font-weight: 400; }
-    .adhoc { font-size: 0.75rem; font-weight: 600; background: rgba(255,255,255,0.22); border-radius: 999px; padding: 0.1rem 0.6rem; }
-    .next { background: #1c343b; border: 1px solid #2d505a; border-radius: 10px; padding: 0.6rem 0.9rem; margin-top: 0.9rem; }
-    .next h2 { margin: 0 0 0.3rem; font-size: 1rem; color: #7fc6d4; }
-    .next li { font-size: 1rem; padding: 0.1rem 0; list-style: none; }
-    .next ul { margin: 0; padding: 0; }
-    .empty { color: #9fb2bb; font-size: 1.05rem; padding: 1.6rem 0; }
-    .previewtag { color: #d9a544; font-size: 0.85rem; }
-{% endblock %}
 {% block content %}
   <div class="top">
     <h1>Fordeling, SF</h1>
@@ -56,27 +21,31 @@
   {% endif %}
 
   {% for zone in zones %}
-    {% if zone.people or day_kind == "weekday" %}
+    {% if zone.functions or day_kind == "weekday" %}
     <section class="zone {{ zone.zone_id }}">
       <header>
         {{ zone.name }}
         {% if zone.adhoc_zone %}<span class="adhoc">fordeles ad hoc</span>{% endif %}
       </header>
-      <ul>
-        {% for person in zone.people %}
-          <li>
-            <span>{{ person.display_name }}</span>
-            <span class="fn">{% if not person.adhoc %}{{ person.function_name }}{% endif %}</span>
-            {% if person.next %}
-              <span class="nextchip {{ person.next.zone_id }}">→ {{ person.next.short_name }}{% if person.next.time %} {{ person.next.time }}{% endif %}</span>
-            {% else %}
-              <span class="nextchip none"></span>
-            {% endif %}
-          </li>
+      <div class="fngroup">
+        {% for fn in zone.functions %}
+          <div class="fnname">{{ fn.function_name }}</div>
+          <ul class="people">
+            {% for person in fn.people %}
+              <li>
+                <span>{{ person.display_name }}</span>
+                {% if person.next %}
+                  <span class="nextchip {{ person.next.zone_id }}">→ {{ person.next.short_name }}{% if person.next.time %} {{ person.next.time }}{% endif %}</span>
+                {% else %}
+                  <span class="nextchip none"></span>
+                {% endif %}
+              </li>
+            {% endfor %}
+          </ul>
         {% else %}
-          <li class="muted" style="border:none">–</li>
+          <p class="muted">–</p>
         {% endfor %}
-      </ul>
+      </div>
     </section>
     {% endif %}
   {% endfor %}
@@ -84,11 +53,13 @@
   {% if adhoc_crew %}
     <section class="zone ren">
       <header>På jobb i dag <span class="adhoc">fordeles ad hoc</span></header>
-      <ul>
-        {% for person in adhoc_crew %}
-          <li><span>{{ person.display_name }}</span><span class="fn">{{ person.hours }}</span><span class="nextchip none"></span></li>
-        {% endfor %}
-      </ul>
+      <div class="fngroup">
+        <ul class="people">
+          {% for person in adhoc_crew %}
+            <li><span>{{ person.display_name }}</span><span class="nextchip none">{{ person.hours }}</span></li>
+          {% endfor %}
+        </ul>
+      </div>
     </section>
   {% endif %}
 
