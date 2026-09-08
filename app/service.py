@@ -436,26 +436,34 @@ def build_day_model(conn: sqlite3.Connection, plan_date: dt.date) -> dict:
         start, end = spans[row["assignment_id"]]
         per_employee[row["employee_id"]].append((start, end, row["function_id"]))
 
-    def edge_kind(employee_id: str, when: dt.datetime, function_id: str, side: str) -> str:
-        """'rotation' (changes function here), 'same' (continues in the same
+    function_names = {row["function_id"]: row["function_name"] for row in rows}
+
+    def edge(employee_id: str, when: dt.datetime, function_id: str, side: str
+             ) -> tuple[str, str | None]:
+        """The meaning of one end of a bar: 'rotation' (changes function here,
+        with the other function's name), 'same' (continues in the same
         function) or 'shift' (start/end of the working day)."""
         for other_start, other_end, other_function in per_employee[employee_id]:
             neighbour = other_end if side == "from" else other_start
             if neighbour == when:
-                return "same" if other_function == function_id else "rotation"
-        return "shift"
+                if other_function == function_id:
+                    return "same", None
+                return "rotation", function_names.get(other_function, other_function)
+        return "shift", None
 
     def bar(row) -> dict:
         start, end = spans[row["assignment_id"]]
         left = (start - axis["start"]).total_seconds() / 60 / axis["total_minutes"] * 100
         width = (end - start).total_seconds() / 60 / axis["total_minutes"] * 100
         employee_id, function_id = row["employee_id"], row["function_id"]
+        from_kind, from_function = edge(employee_id, start, function_id, "from")
+        to_kind, to_function = edge(employee_id, end, function_id, "to")
         return {
             "left": round(left, 4), "width": round(width, 4),
             "start": start, "end": end, "locked": bool(row["locked"]),
             "label": f"{start.strftime('%H:%M')}–{end.strftime('%H:%M')}",
-            "from_kind": edge_kind(employee_id, start, function_id, "from"),
-            "to_kind": edge_kind(employee_id, end, function_id, "to"),
+            "from_kind": from_kind, "from_function": from_function,
+            "to_kind": to_kind, "to_function": to_function,
         }
 
     # --- shape 1: zone -> function -> one row per employee (timeline)

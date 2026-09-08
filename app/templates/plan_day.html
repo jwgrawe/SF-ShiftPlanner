@@ -111,7 +111,7 @@
                 {% for bar in person.bars %}
                   <span class="tl-bar {{ zone.zone_id }} from-{{ bar.from_kind }} to-{{ bar.to_kind }}"
                         style="left:{{ bar.left }}%; width:{{ bar.width }}%"
-                        title="{{ person.name }} · {{ fn.function_name }} · {{ bar.label }} · {{ {'rotation': 'kommer fra annen funksjon', 'same': 'fortsetter i samme funksjon', 'shift': 'vaktens start'}[bar.from_kind] }} / {{ {'rotation': 'rullerer til annen funksjon', 'same': 'fortsetter i samme funksjon', 'shift': 'vaktens slutt'}[bar.to_kind] }}">{% if bar.from_kind == "rotation" %}<span class="edge">›</span>{% endif %}{{ bar.label }}{% if bar.locked %} 🔒{% endif %}{% if bar.to_kind == "rotation" %}<span class="edge to">›</span>{% endif %}</span>
+                        title="{{ person.name }} · {{ fn.function_name }} · {{ bar.label }}{% if bar.from_kind == 'rotation' %} · kommer fra {{ bar.from_function }}{% elif bar.from_kind == 'same' %} · fortsetter fra forrige økt{% endif %}{% if bar.to_kind == 'rotation' %} · rullerer til {{ bar.to_function }}{% elif bar.to_kind == 'same' %} · fortsetter i samme funksjon{% endif %}">{% if bar.from_kind == "rotation" %}<span class="edge">›</span>{% endif %}{{ bar.label }}{% if bar.locked %} 🔒{% endif %}{% if bar.to_kind == "rotation" %}<span class="edge to">›</span>{% endif %}</span>
                 {% endfor %}
               </span>
             </div>

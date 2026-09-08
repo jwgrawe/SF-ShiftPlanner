@@ -63,6 +63,7 @@
     </section>
   {% endif %}
 
+  <div class="display-foot">
   {% if day_info %}
     <section class="dayinfo">
       <h2>Diverse info</h2>
@@ -80,4 +81,34 @@
       </ul>
     </section>
   {% endif %}
+  </div>
+
+  <script>
+    // Fit the board to the screen: the CSS sets a sensible viewport-scaled
+    // size, then this nudges it until the content just fills the height —
+    // growing on a big portrait screen, shrinking rather than scrolling when
+    // a busy day would otherwise overflow. No-op if scripting is off.
+    (function () {
+      var body = document.body, root = document.documentElement;
+      function fits() { return root.scrollHeight <= window.innerHeight; }
+      function fit() {
+        var size = parseFloat(getComputedStyle(body).fontSize), guard = 0;
+        while (!fits() && size > 14 && guard++ < 60) {
+          size -= 0.5; body.style.fontSize = size + "px";
+        }
+        guard = 0;
+        while (fits() && size < 48 && guard++ < 60) {
+          size += 0.5; body.style.fontSize = size + "px";
+        }
+        if (!fits()) { body.style.fontSize = (size - 0.5) + "px"; }
+      }
+      fit();
+      var pending;
+      window.addEventListener("resize", function () {
+        clearTimeout(pending);
+        body.style.fontSize = "";
+        pending = setTimeout(fit, 150);
+      });
+    })();
+  </script>
 {% endblock %}
