@@ -121,7 +121,8 @@ def plan_week(request: Request, start: str):
 
 
 @app.get("/plan/dag", response_class=HTMLResponse)
-def plan_day(request: Request, date: str, visning: str | None = None):
+def plan_day(request: Request, date: str, visning: str | None = None,
+             feil: str | None = None):
     plan_date = dt.date.fromisoformat(date)
     conn = get_conn()
     try:
@@ -135,6 +136,8 @@ def plan_day(request: Request, date: str, visning: str | None = None):
     model["prev_date"] = (plan_date - dt.timedelta(days=1)).isoformat()
     model["next_date"] = (plan_date + dt.timedelta(days=1)).isoformat()
     model["visning"] = visning
+    model["is_today"] = plan_date == domain.operational_day(local_now())
+    model["feil"] = feil
     return TEMPLATES.TemplateResponse(request, "plan_day.html", model)
 
 
@@ -183,6 +186,45 @@ async def plan_publish(request: Request):
         conn.close()
     target = str(form.get("back", f"/plan/dag?date={start}"))
     return RedirectResponse(target, status_code=303)
+
+
+@app.post("/plan/avpubliser")
+async def plan_unpublish(request: Request):
+    """Take a day off the wall display again, back to draft (D68)."""
+    form = await request.form()
+    plan_date = dt.date.fromisoformat(str(form["date"]))
+    conn = get_conn()
+    try:
+        with conn:
+            conn.execute(
+                "UPDATE plan_days SET status = 'draft' WHERE plan_date = ? AND status = 'published'",
+                (plan_date.isoformat(),),
+            )
+    finally:
+        conn.close()
+    return RedirectResponse(str(form.get("back", f"/plan/dag?date={plan_date}")), status_code=303)
+
+
+@app.post("/plan/dag/slett")
+async def plan_delete(request: Request):
+    """Delete a draft day outright, locked rows included (D68). A published
+    plan must be unpublished first — checked here, not just hidden in the UI."""
+    form = await request.form()
+    plan_date = dt.date.fromisoformat(str(form["date"]))
+    conn = get_conn()
+    try:
+        plan = conn.execute(
+            "SELECT status FROM plan_days WHERE plan_date = ?", (plan_date.isoformat(),)
+        ).fetchone()
+        if plan is not None and plan["status"] == "published":
+            return RedirectResponse(
+                f"/plan/dag?date={plan_date}&feil=publisert", status_code=303)
+        with conn:
+            conn.execute("DELETE FROM assignments WHERE plan_date = ?", (plan_date.isoformat(),))
+            conn.execute("DELETE FROM plan_days WHERE plan_date = ?", (plan_date.isoformat(),))
+    finally:
+        conn.close()
+    return RedirectResponse(f"/plan/dag?date={plan_date}", status_code=303)
 
 
 @app.post("/plan/dag/lagre")

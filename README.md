@@ -18,8 +18,8 @@ display.
   swimlane timeline per zone (one row per employee, time left→right, rotation
   markers, and bar ends that distinguish a rullering from the shift's own
   start/end) or, optionally, blocks grouped by shift category. Generate,
-  publish, edit with locks, report absences, set the day's «Diverse info»,
-  and open a person view.
+  publish (and unpublish, or delete a draft), edit with locks, report
+  absences, set the day's «Diverse info», and open a person view.
 - **`/admin`** — master-data browser, incl. preferences and fritak (only here).
 
 Demo data covers four weeks of roster from the current week, with week 1

@@ -31,6 +31,11 @@
         <input type="hidden" name="start" value="{{ plan_date }}">
         <button class="btn secondary" type="submit">Publiser</button>
       </form>
+    {% elif status == "published" %}
+      <form method="post" action="/plan/avpubliser" onsubmit="return confirm({% if is_today %}'Planen vises på tavlen nå. Avpubliser likevel? Tavlen blir stående uten plan til den publiseres på nytt.'{% else %}'Avpubliser planen? Den forsvinner fra tavlen og blir et utkast igjen.'{% endif %});">
+        <input type="hidden" name="date" value="{{ plan_date }}">
+        <button class="btn secondary" type="submit">Avpubliser</button>
+      </form>
     {% endif %}
   {% endif %}
   {% if roster_count %}
@@ -46,8 +51,19 @@
       <button class="btn secondary" type="submit">Lås opp alle rader</button>
     </form>
   {% endif %}
+  {% if has_plan and status != "published" %}
+    <form method="post" action="/plan/dag/slett" onsubmit="return confirm('Slett hele planen for denne dagen? Alle plasseringer, også låste, blir borte. Dette kan ikke angres.');">
+      <input type="hidden" name="date" value="{{ plan_date }}">
+      <button class="btn secondary" type="submit">Slett planen</button>
+    </form>
+  {% endif %}
   {% if generated_at %}<span class="muted small">Sist generert {{ generated_at.replace("T", " kl. ") }}</span>{% endif %}
 </div>
+
+{% if feil == "publisert" %}
+  <p class="note">Planen er publisert og kan ikke slettes. Avpubliser den først –
+  da blir den et utkast som kan slettes.</p>
+{% endif %}
 
 <form method="post" action="/plan/dag/info" class="card">
   <input type="hidden" name="date" value="{{ plan_date }}">
