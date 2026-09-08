@@ -35,7 +35,7 @@
               <li>
                 <span>{{ person.display_name }}</span>
                 {% if person.next %}
-                  <span class="nextchip {{ person.next.zone_id }}">→ {{ person.next.short_name }}{% if person.next.time %} {{ person.next.time }}{% endif %}</span>
+                  <span class="nextchip {{ person.next.zone_id }}">→ {{ person.next.zone_name }} ({{ person.next.short_name }}){% if person.next.time %} {{ person.next.time }}{% endif %}</span>
                 {% else %}
                   <span class="nextchip none"></span>
                 {% endif %}
@@ -60,6 +60,13 @@
           {% endfor %}
         </ul>
       </div>
+    </section>
+  {% endif %}
+
+  {% if day_info %}
+    <section class="dayinfo">
+      <h2>Diverse info</h2>
+      <p>{{ day_info }}</p>
     </section>
   {% endif %}
 

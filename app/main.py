@@ -232,6 +232,18 @@ async def plan_save(request: Request):
     return RedirectResponse(f"/plan/dag?date={plan_date}", status_code=303)
 
 
+@app.post("/plan/dag/info")
+async def plan_day_info(request: Request):
+    form = await request.form()
+    plan_date = dt.date.fromisoformat(str(form["date"]))
+    conn = get_conn()
+    try:
+        service.set_day_info(conn, plan_date, str(form.get("info", "")))
+    finally:
+        conn.close()
+    return RedirectResponse(f"/plan/dag?date={plan_date}", status_code=303)
+
+
 @app.post("/plan/dag/laas-opp")
 async def plan_unlock(request: Request):
     form = await request.form()

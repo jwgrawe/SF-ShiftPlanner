@@ -181,7 +181,7 @@ launch (D61).
 | Mode | URL | Access (D25) | Does |
 |---|---|---|---|
 | I dag | `/` | shared PIN | The manager's morning page: today's status, findings for today and the next two days, three-week outlook, today's absences |
-| Display | `/display` | none, read-only | Portrait, grouped **zone → funksjon → ansatt** (D62); each row carries the person's next destination; ad-hoc badges fall out of the data (D47). **Never shows absences** — just the current plan (D46). No preference/restriction information visible. |
+| Display | `/display` | none, read-only | Portrait, grouped **zone → funksjon → ansatt** (D62); each row carries the person's next destination; ad-hoc badges fall out of the data (D47); a free-text «Diverse info» notice for the day appears at the foot when set (D65). **Never shows absences** — just the current plan (D46). No preference/restriction information visible. |
 | Manager | `/plan` | shared PIN | Overview → week matrix → day (swimlane timeline by default, or blocks by shift category, D63) → editor; generate, lock, publish; absence reporting; person view (`/plan/ansatt`) with placements and heavy-work exposure — never preferences or fritak; findings panel per day (D53) |
 | Admin | `/admin` | separate PIN | Master data; **competency editor** (D33); **preference lists** (D32, only visible here); restrictions incl. tilrettelegging (D56); re-import with drift warnings (D54); **planner settings** — intensity tiers, occurrence target/cap, ledger window (D51); ledger reports |
 

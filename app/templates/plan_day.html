@@ -49,6 +49,17 @@
   {% if generated_at %}<span class="muted small">Sist generert {{ generated_at.replace("T", " kl. ") }}</span>{% endif %}
 </div>
 
+<form method="post" action="/plan/dag/info" class="card">
+  <input type="hidden" name="date" value="{{ plan_date }}">
+  <label for="dayinfo"><strong>Diverse info</strong>
+    <span class="muted small">– vises nederst på tavlen når feltet har tekst</span></label>
+  <div style="display:flex; gap:0.6rem; margin-top:0.35rem">
+    <input type="text" id="dayinfo" name="info" value="{{ day_info }}" style="flex:1"
+           placeholder="F.eks. «Ekstra vognvask etter kl. 14» eller «Brannøvelse kl. 11»">
+    <button class="btn" type="submit">Lagre</button>
+  </div>
+</form>
+
 {% if checks %}
   <h2>Trenger oppmerksomhet</h2>
   <ul class="warn-list">
@@ -98,8 +109,9 @@
               <span class="tl-name"><a href="/plan/ansatt?id={{ person.employee_id }}&fra={{ plan_date }}">{{ person.name }}</a></span>
               <span class="tl-track">
                 {% for bar in person.bars %}
-                  <span class="tl-bar {{ zone.zone_id }}" style="left:{{ bar.left }}%; width:{{ bar.width }}%"
-                        title="{{ person.name }} · {{ fn.function_name }} · {{ bar.label }}">{{ bar.label }}{% if bar.locked %} 🔒{% endif %}</span>
+                  <span class="tl-bar {{ zone.zone_id }} from-{{ bar.from_kind }} to-{{ bar.to_kind }}"
+                        style="left:{{ bar.left }}%; width:{{ bar.width }}%"
+                        title="{{ person.name }} · {{ fn.function_name }} · {{ bar.label }} · {{ {'rotation': 'kommer fra annen funksjon', 'same': 'fortsetter i samme funksjon', 'shift': 'vaktens start'}[bar.from_kind] }} / {{ {'rotation': 'rullerer til annen funksjon', 'same': 'fortsetter i samme funksjon', 'shift': 'vaktens slutt'}[bar.to_kind] }}">{% if bar.from_kind == "rotation" %}<span class="edge">›</span>{% endif %}{{ bar.label }}{% if bar.locked %} 🔒{% endif %}{% if bar.to_kind == "rotation" %}<span class="edge to">›</span>{% endif %}</span>
                 {% endfor %}
               </span>
             </div>
@@ -112,7 +124,10 @@
     <p class="tl-legend">
       <span class="key"></span> rulleringstidspunkt{% for mark in axis.marks %}{% if mark.kind == "primary" %} {{ mark.label }}{% endif %}{% endfor %} ·
       <span class="key secondary"></span> mellomvakt{% for mark in axis.marks %}{% if mark.kind == "secondary" %} {{ mark.label }}{% endif %}{% endfor %} ·
-      rutenettet viser halvtimer · 🔒 = manuelt satt, beholdes ved nytt forslag
+      rutenettet viser halvtimer<br>
+      <span class="cap round"></span> avrundet ende = vaktens start/slutt ·
+      <span class="cap"></span> rett ende med <strong>›</strong> = rullering til/fra en annen funksjon ·
+      🔒 = manuelt satt, beholdes ved nytt forslag
     </p>
   {% endif %}
 {% endif %}

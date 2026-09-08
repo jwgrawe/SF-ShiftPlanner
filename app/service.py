@@ -114,6 +114,28 @@ def day_assignments(
     ))
 
 
+def day_info(conn: sqlite3.Connection, plan_date: dt.date) -> str:
+    """Free-text notice for the day, shown at the foot of the wall display."""
+    row = conn.execute(
+        "SELECT info FROM day_info WHERE plan_date = ?", (plan_date.isoformat(),)
+    ).fetchone()
+    return (row["info"] if row else "") or ""
+
+
+def set_day_info(conn: sqlite3.Connection, plan_date: dt.date, info: str) -> None:
+    text = info.strip()
+    with conn:
+        if text:
+            conn.execute(
+                """INSERT INTO day_info (plan_date, info, updated_at) VALUES (?, ?, ?)
+                   ON CONFLICT(plan_date) DO UPDATE SET info = excluded.info,
+                                                        updated_at = excluded.updated_at""",
+                (plan_date.isoformat(), text, dt.datetime.now().isoformat(timespec="seconds")),
+            )
+        else:
+            conn.execute("DELETE FROM day_info WHERE plan_date = ?", (plan_date.isoformat(),))
+
+
 def plan_day_row(conn: sqlite3.Connection, plan_date: dt.date) -> sqlite3.Row | None:
     return conn.execute(
         "SELECT * FROM plan_days WHERE plan_date = ?", (plan_date.isoformat(),)
@@ -161,6 +183,7 @@ def build_display_model(conn: sqlite3.Connection, now: dt.datetime) -> dict:
         return {
             "short_name": row["short_name"],
             "zone_id": row["zone_id"],
+            "zone_name": row["zone_name"],
             "time": start.strftime("%H:%M") if next_change and start != next_change else None,
         }
 
@@ -227,6 +250,7 @@ def build_display_model(conn: sqlite3.Connection, now: dt.datetime) -> dict:
         "next_change": next_change,
         "arrivals": arrivals,
         "adhoc_crew": adhoc_crew,
+        "day_info": day_info(conn, plan_date),
         "has_plan": bool(rows),
     }
 
@@ -405,14 +429,33 @@ def build_day_model(conn: sqlite3.Connection, plan_date: dt.date) -> dict:
     spans = {row["assignment_id"]: _to_datetimes(plan_date, row) for row in rows}
     axis = _timeline_axis(conn, plan_date, list(spans.values()))
 
+    # Every assignment the employee holds that day, so a bar's ends can say
+    # whether they mark a rotation to/from another function or the shift edge.
+    per_employee: dict[str, list[tuple[dt.datetime, dt.datetime, str]]] = defaultdict(list)
+    for row in rows:
+        start, end = spans[row["assignment_id"]]
+        per_employee[row["employee_id"]].append((start, end, row["function_id"]))
+
+    def edge_kind(employee_id: str, when: dt.datetime, function_id: str, side: str) -> str:
+        """'rotation' (changes function here), 'same' (continues in the same
+        function) or 'shift' (start/end of the working day)."""
+        for other_start, other_end, other_function in per_employee[employee_id]:
+            neighbour = other_end if side == "from" else other_start
+            if neighbour == when:
+                return "same" if other_function == function_id else "rotation"
+        return "shift"
+
     def bar(row) -> dict:
         start, end = spans[row["assignment_id"]]
         left = (start - axis["start"]).total_seconds() / 60 / axis["total_minutes"] * 100
         width = (end - start).total_seconds() / 60 / axis["total_minutes"] * 100
+        employee_id, function_id = row["employee_id"], row["function_id"]
         return {
             "left": round(left, 4), "width": round(width, 4),
             "start": start, "end": end, "locked": bool(row["locked"]),
             "label": f"{start.strftime('%H:%M')}–{end.strftime('%H:%M')}",
+            "from_kind": edge_kind(employee_id, start, function_id, "from"),
+            "to_kind": edge_kind(employee_id, end, function_id, "to"),
         }
 
     # --- shape 1: zone -> function -> one row per employee (timeline)
@@ -499,6 +542,7 @@ def build_day_model(conn: sqlite3.Connection, plan_date: dt.date) -> dict:
         "roster": roster_rows,
         "roster_count": status["roster_count"],
         "has_plan": bool(rows),
+        "day_info": day_info(conn, plan_date),
         "monday": monday_of(plan_date).isoformat(),
     }
 

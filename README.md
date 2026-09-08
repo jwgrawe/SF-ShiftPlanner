@@ -12,11 +12,14 @@ display.
   for today and the next two days, a three-week outlook, today's absences.
 - **`/display`** — the wall board (published plans only), grouped
   zone → funksjon → ansatt, each row showing where that person goes at the
-  next rullering.
+  next rullering (`→ Ren sone (Brikkelegging)`), plus a «Diverse info» notice
+  at the foot when the day has one.
 - **`/plan`** — overview → week matrix → day → editor. The day view is a
   swimlane timeline per zone (one row per employee, time left→right, rotation
-  markers) or, optionally, blocks grouped by shift category. Generate,
-  publish, edit with locks, report absences, and open a person view.
+  markers, and bar ends that distinguish a rullering from the shift's own
+  start/end) or, optionally, blocks grouped by shift category. Generate,
+  publish, edit with locks, report absences, set the day's «Diverse info»,
+  and open a person view.
 - **`/admin`** — master-data browser, incl. preferences and fritak (only here).
 
 Demo data covers four weeks of roster from the current week, with week 1
