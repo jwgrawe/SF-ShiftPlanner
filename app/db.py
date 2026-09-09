@@ -91,6 +91,9 @@ CREATE TABLE IF NOT EXISTS assignments (
     start TEXT NOT NULL, end TEXT NOT NULL,
     locked INTEGER NOT NULL DEFAULT 0, source TEXT, note TEXT);
 CREATE INDEX IF NOT EXISTS idx_assignments_date ON assignments(plan_date);
+-- Small key/value store for app preferences set in the admin view.
+CREATE TABLE IF NOT EXISTS app_settings (
+    key TEXT PRIMARY KEY, value TEXT NOT NULL);
 -- Free-text notice per day ("diverse info"), shown on the wall display.
 CREATE TABLE IF NOT EXISTS day_info (
     plan_date TEXT PRIMARY KEY, info TEXT NOT NULL DEFAULT '', updated_at TEXT);

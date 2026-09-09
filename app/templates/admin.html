@@ -6,6 +6,23 @@
 strukturvarsling og kompetanseredigering kommer i M2/M4. <strong>Preferanser og
 fritak vises kun her</strong> – aldri på tavle eller plan (D32/D11).</p>
 
+<h2>Innstillinger</h2>
+<form method="post" action="/admin/innstillinger" class="card">
+  <div class="actions" style="margin:0">
+    <label for="display_theme"><strong>Fargevisning på tavlen</strong></label>
+    <select id="display_theme" name="display_theme">
+      <option value="mork" {% if display_theme != "lys" %}selected{% endif %}>Mørk (standard)</option>
+      <option value="lys" {% if display_theme == "lys" %}selected{% endif %}>Lys</option>
+    </select>
+    <button class="btn" type="submit">Lagre</button>
+    <a class="btn secondary" href="/display" target="_blank" rel="noopener">Åpne tavlen</a>
+  </div>
+  <p class="muted small" style="margin:0.5rem 0 0">
+    Gjelder tavlen på storskjerm. Velg lys visning i lyse lokaler. Enkeltvisninger
+    kan overstyres midlertidig med <code>?tema=lys</code> eller <code>?tema=mork</code> i adressen.
+  </p>
+</form>
+
 <h2>Funksjoner</h2>
 <div class="tablewrap"><table>
   <tr><th>Sone</th><th>Funksjon</th><th>Bemanningsmåte</th><th>Aktiv</th><th>Merknad</th></tr>

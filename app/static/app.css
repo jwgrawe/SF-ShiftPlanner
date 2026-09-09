@@ -119,17 +119,8 @@ select, input[type="text"], input[type="date"], input[type="time"], textarea {
 }
 textarea { width: 100%; resize: vertical; line-height: 1.45; }
 
-/* The day's notice: tinted and rule-marked so it reads as an editable
-   surface. Deliberately in the accent family, not the warning amber, so it
-   is not mistaken for one of the findings listed right below it. */
-.infocard {
-  background: var(--accent-soft); border-color: #b6d2d8;
-  border-left: 5px solid var(--accent);
-}
-.infocard label { color: #17505c; }
-.infocard .muted { color: #17505c; opacity: 0.85; }
 .inforow { display: flex; gap: 0.6rem; margin-top: 0.4rem; align-items: flex-start; }
-.inforow textarea { flex: 1; background: #fff; border-color: #a9cdd6; }
+.inforow textarea { flex: 1; }
 
 /* --------------------------------------------------------- overview grid */
 .weekgrid { display: grid; grid-template-columns: 10rem repeat(7, 1fr); }
@@ -248,8 +239,8 @@ body.display {
   --d-ink-soft:  #9fb2bb;
   --d-rule:      #22313a;
   --d-next-bg:   #1c343b;  --d-next-line: #2d505a;  --d-next-ink: #7fc6d4;
-  --d-info-bg:   #3a2f14;  --d-info-line: #b08a2e;  --d-info-ink: #ffe9bd;
-  --d-info-head: #e8c273;
+  --d-info-bg:   #4a3a12;  --d-info-line: #e0ae52;  --d-info-ink: #fff6e2;
+  --d-info-head: #ffcf7a;
   --d-chip-none: #52646d;
   --d-preview:   #e0ae52;
 
@@ -265,8 +256,8 @@ body.display.lys {
   --d-ink-soft:  #5a6b74;
   --d-rule:      #e4eaed;
   --d-next-bg:   #e2eef1;  --d-next-line: #a9cdd6;  --d-next-ink: #185a68;
-  --d-info-bg:   #fbeecd;  --d-info-line: #c79a3a;  --d-info-ink: #4a3608;
-  --d-info-head: #7a5716;
+  --d-info-bg:   #fde9b8;  --d-info-line: #a8791d;  --d-info-ink: #3d2c05;
+  --d-info-head: #6b4a0d;
   --d-chip-none: #a8b6bd;
   --d-preview:   #96660f;
 }
@@ -325,23 +316,20 @@ body.display .next h2 { margin: 0 0 0.25em; font-size: 0.95em; color: var(--d-ne
 body.display .next ul { margin: 0; padding: 0; }
 body.display .next li { font-size: 1em; padding: 0.08em 0; list-style: none; }
 body.display .dayinfo {
-  margin-top: 0.6em; border-radius: 0.55em; padding: 0.6em 0.9em;
-  background: var(--d-info-bg); border: 2px solid var(--d-info-line); color: var(--d-info-ink);
+  margin-top: 0.6em; border-radius: 0.55em; padding: 0.7em 1em;
+  background: var(--d-info-bg); color: var(--d-info-ink);
+  border: 2px solid var(--d-info-line); border-left-width: 0.5em;
 }
 body.display .dayinfo h2 {
-  margin: 0 0 0.2em; font-size: 0.85em; letter-spacing: 0.08em;
+  margin: 0 0 0.3em; font-size: 0.9em; font-weight: 700; letter-spacing: 0.1em;
   text-transform: uppercase; color: var(--d-info-head);
 }
-body.display .dayinfo p { margin: 0; font-size: 1.12em; white-space: pre-wrap; }
+body.display .dayinfo p {
+  margin: 0; font-size: 1.25em; font-weight: 600; line-height: 1.4; white-space: pre-wrap;
+}
 body.display .empty { color: var(--d-ink-soft); font-size: 1.05em; padding: 1.4em 0; }
 body.display .previewtag { color: var(--d-preview); font-size: 0.85em; }
 body.display .muted { color: var(--d-ink-soft); }
-body.display .themetoggle {
-  color: var(--d-ink-soft); font-size: 0.8em; text-decoration: none;
-  border: 1px solid var(--d-card-line); border-radius: 999px; padding: 0.1em 0.7em;
-}
-body.display .themetoggle:hover { color: var(--d-ink); }
-
 /* ================================================================== PRINT */
 @media print {
   header.app, .actions, .viewtoggle, form, .btn { display: none !important; }

@@ -30,6 +30,12 @@ except ZoneInfoNotFoundError:
     TZ = None
 
 TEMPLATES = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
+# Browsers cache /static/app.css heuristically (it is served without a
+# Cache-Control header), which would leave a pulled restyle invisible until a
+# hard refresh. Stamping the URL with the file's mtime makes every change a
+# new URL, so the browser fetches it.
+_CSS = Path(__file__).parent / "static" / "app.css"
+TEMPLATES.env.globals["static_version"] = int(_CSS.stat().st_mtime) if _CSS.exists() else 0
 
 app = FastAPI(title="SF-Planlegger", docs_url=None, redoc_url=None)
 app.mount(
@@ -87,19 +93,17 @@ def today_page(request: Request):
 @app.get("/display", response_class=HTMLResponse)
 def display(request: Request, date: str | None = None, time: str | None = None,
             tema: str | None = None):
-    """The wall board. `tema=lys` switches to the light palette for a bright
-    room; the wall PC simply opens the URL it should keep (D69)."""
+    """The wall board. The palette comes from the admin setting; `tema=lys`
+    or `tema=mork` overrides it for a one-off preview (D69)."""
     now = resolve_now(date, time)
     conn = get_conn()
     try:
         model = service.build_display_model(conn, now)
+        stored = service.get_setting(conn, "display_theme", "mork")
     finally:
         conn.close()
     model["preview"] = bool(date or time)
-    model["theme"] = "lys" if tema == "lys" else "mork"
-    keep = [f"{key}={value}" for key, value in (("date", date), ("time", time)) if value]
-    keep.append("tema=" + ("mork" if model["theme"] == "lys" else "lys"))
-    model["toggle_url"] = "/display?" + "&".join(keep)
+    model["theme"] = tema if tema in ("lys", "mork") else stored
     return TEMPLATES.TemplateResponse(request, "display.html", model)
 
 
@@ -401,11 +405,26 @@ def admin(request: Request):
                JOIN employees e ON e.employee_id = r.employee_id
                LEFT JOIN functions f ON f.function_id = r.function_id
                ORDER BY r.employee_id"""))
+        display_theme = service.get_setting(conn, "display_theme", "mork")
     finally:
         conn.close()
     return TEMPLATES.TemplateResponse(request, "admin.html", {
+        "display_theme": display_theme,
         "functions": functions, "intensity": intensity, "shift_codes": shift_codes,
         "rotation_rules": rotation_rules, "settings": settings, "employees": employees,
         "competencies": competencies, "preferences": preferences,
         "restrictions": restrictions,
     })
+
+
+@app.post("/admin/innstillinger")
+async def admin_settings(request: Request):
+    """Admin-set app preferences. Currently just the wall board's palette."""
+    form = await request.form()
+    theme = str(form.get("display_theme", "mork"))
+    conn = get_conn()
+    try:
+        service.set_setting(conn, "display_theme", theme if theme in ("lys", "mork") else "mork")
+    finally:
+        conn.close()
+    return RedirectResponse("/admin", status_code=303)

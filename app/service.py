@@ -114,6 +114,20 @@ def day_assignments(
     ))
 
 
+def get_setting(conn: sqlite3.Connection, key: str, default: str = "") -> str:
+    row = conn.execute("SELECT value FROM app_settings WHERE key = ?", (key,)).fetchone()
+    return row["value"] if row else default
+
+
+def set_setting(conn: sqlite3.Connection, key: str, value: str) -> None:
+    with conn:
+        conn.execute(
+            """INSERT INTO app_settings (key, value) VALUES (?, ?)
+               ON CONFLICT(key) DO UPDATE SET value = excluded.value""",
+            (key, value),
+        )
+
+
 def day_info(conn: sqlite3.Connection, plan_date: dt.date) -> str:
     """Free-text notice for the day, shown at the foot of the wall display."""
     row = conn.execute(

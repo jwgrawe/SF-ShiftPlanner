@@ -13,15 +13,16 @@ display.
 - **`/display`** — the wall board (published plans only), grouped
   zone → funksjon → ansatt, each row showing where that person goes at the
   next rullering (`→ Ren sone (Brikkelegging)`), plus a «Diverse info» notice
-  at the foot when the day has one (multi-line). Add `?tema=lys` for a light
-  palette in a bright room.
+  at the foot when the day has one (multi-line). Light or dark palette is set
+  in the admin view.
 - **`/plan`** — overview → week matrix → day → editor. The day view is a
   swimlane timeline per zone (one row per employee, time left→right, rotation
   markers, and bar ends that distinguish a rullering from the shift's own
   start/end) or, optionally, blocks grouped by shift category. Generate,
   publish (and unpublish, or delete a draft), edit with locks, report
   absences, set the day's «Diverse info», and open a person view.
-- **`/admin`** — master-data browser, incl. preferences and fritak (only here).
+- **`/admin`** — settings (incl. the board's light/dark palette) and the
+  master-data browser, incl. preferences and fritak (only here).
 
 Demo data covers four weeks of roster from the current week, with week 1
 pre-published. Remaining in M2: PINs, the real roster adapter (Q1) and the
