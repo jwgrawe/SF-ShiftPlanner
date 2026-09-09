@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Tavle – SF-Planlegger{% endblock %}
-{% block body_class %}display{% endblock %}
+{% block body_class %}display{% if theme == 'lys' %} lys{% endif %}{% endblock %}
 {% block header %}{% endblock %}
 {% block head %}{% if not preview %}<meta http-equiv="refresh" content="60">{% endif %}{% endblock %}
 {% block content %}
@@ -13,7 +13,9 @@
     {{ plan_date.strftime("%d.%m.%Y") }}
     {% if day_kind == "weekend_holiday" %} · Helg/helligdag{% endif %}
     {% if next_change %} · Neste rullering kl. {{ next_change.strftime("%H:%M") }}{% endif %}
-    {% if preview %} <span class="previewtag">(forhåndsvisning)</span>{% endif %}
+    {% if preview %} <span class="previewtag">(forhåndsvisning)</span>
+      <a class="themetoggle" href="{{ toggle_url }}">{% if theme == "lys" %}Mørk visning{% else %}Lys visning{% endif %}</a>
+    {% endif %}
   </div>
 
   {% if not has_plan %}

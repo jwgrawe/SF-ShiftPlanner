@@ -85,7 +85,10 @@ def today_page(request: Request):
 
 
 @app.get("/display", response_class=HTMLResponse)
-def display(request: Request, date: str | None = None, time: str | None = None):
+def display(request: Request, date: str | None = None, time: str | None = None,
+            tema: str | None = None):
+    """The wall board. `tema=lys` switches to the light palette for a bright
+    room; the wall PC simply opens the URL it should keep (D69)."""
     now = resolve_now(date, time)
     conn = get_conn()
     try:
@@ -93,6 +96,10 @@ def display(request: Request, date: str | None = None, time: str | None = None):
     finally:
         conn.close()
     model["preview"] = bool(date or time)
+    model["theme"] = "lys" if tema == "lys" else "mork"
+    keep = [f"{key}={value}" for key, value in (("date", date), ("time", time)) if value]
+    keep.append("tema=" + ("mork" if model["theme"] == "lys" else "lys"))
+    model["toggle_url"] = "/display?" + "&".join(keep)
     return TEMPLATES.TemplateResponse(request, "display.html", model)
 
 

@@ -65,13 +65,13 @@
   da blir den et utkast som kan slettes.</p>
 {% endif %}
 
-<form method="post" action="/plan/dag/info" class="card">
+<form method="post" action="/plan/dag/info" class="card infocard">
   <input type="hidden" name="date" value="{{ plan_date }}">
   <label for="dayinfo"><strong>Diverse info</strong>
-    <span class="muted small">– vises nederst på tavlen når feltet har tekst</span></label>
-  <div style="display:flex; gap:0.6rem; margin-top:0.35rem">
-    <input type="text" id="dayinfo" name="info" value="{{ day_info }}" style="flex:1"
-           placeholder="F.eks. «Ekstra vognvask etter kl. 14» eller «Brannøvelse kl. 11»">
+    <span class="muted small">– vises nederst på tavlen når feltet har tekst. Trykk Enter for ny linje.</span></label>
+  <div class="inforow">
+    <textarea id="dayinfo" name="info" rows="3"
+              placeholder="F.eks.&#10;Brannøvelse kl. 11:00.&#10;Ekstra vognvask etter kl. 14 – Gastro leverer mye i dag.">{{ day_info }}</textarea>
     <button class="btn" type="submit">Lagre</button>
   </div>
 </form>

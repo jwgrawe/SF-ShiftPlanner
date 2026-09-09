@@ -13,7 +13,8 @@ display.
 - **`/display`** — the wall board (published plans only), grouped
   zone → funksjon → ansatt, each row showing where that person goes at the
   next rullering (`→ Ren sone (Brikkelegging)`), plus a «Diverse info» notice
-  at the foot when the day has one.
+  at the foot when the day has one (multi-line). Add `?tema=lys` for a light
+  palette in a bright room.
 - **`/plan`** — overview → week matrix → day → editor. The day view is a
   swimlane timeline per zone (one row per employee, time left→right, rotation
   markers, and bar ends that distinguish a rullering from the shift's own

@@ -113,10 +113,23 @@ tr:last-child td { border-bottom: none; }
 }
 
 /* Forms */
-select, input[type="text"], input[type="date"], input[type="time"] {
+select, input[type="text"], input[type="date"], input[type="time"], textarea {
   font: inherit; font-size: 0.95rem; padding: 0.3rem 0.45rem;
   border: 1px solid var(--line); border-radius: 5px; background: var(--surface); color: var(--ink);
 }
+textarea { width: 100%; resize: vertical; line-height: 1.45; }
+
+/* The day's notice: tinted and rule-marked so it reads as an editable
+   surface. Deliberately in the accent family, not the warning amber, so it
+   is not mistaken for one of the findings listed right below it. */
+.infocard {
+  background: var(--accent-soft); border-color: #b6d2d8;
+  border-left: 5px solid var(--accent);
+}
+.infocard label { color: #17505c; }
+.infocard .muted { color: #17505c; opacity: 0.85; }
+.inforow { display: flex; gap: 0.6rem; margin-top: 0.4rem; align-items: flex-start; }
+.inforow textarea { flex: 1; background: #fff; border-color: #a9cdd6; }
 
 /* --------------------------------------------------------- overview grid */
 .weekgrid { display: grid; grid-template-columns: 10rem repeat(7, 1fr); }
@@ -222,25 +235,54 @@ th.dayhead .sub { display: block; font-weight: 400; text-transform: none; letter
 .warn-list .where { font-weight: 600; }
 
 /* ================================================================ DISPLAY */
-/* Wall screen: dark, portrait, published plans only. Sizes are in `em` and
-   the root size scales with the viewport, so the same markup fills a laptop
-   preview and a 1080x1920 portrait screen without a separate layout. */
+/* Wall screen: portrait, published plans only. Sizes are in `em` on a
+   viewport-scaled root, so one layout serves a laptop preview and a
+   1080x1920 screen. Colours come from the tokens below — `body.display.lys`
+   swaps them for a light room without touching any rule (D69). */
 body.display {
-  background: #101a1f; color: #e8eef1;
+  --d-bg:        #101a1f;
+  --d-card:      #18242b;
+  --d-card-line: #24343d;
+  --d-ink:       #e8eef1;
+  --d-ink-strong:#ffffff;
+  --d-ink-soft:  #9fb2bb;
+  --d-rule:      #22313a;
+  --d-next-bg:   #1c343b;  --d-next-line: #2d505a;  --d-next-ink: #7fc6d4;
+  --d-info-bg:   #3a2f14;  --d-info-line: #b08a2e;  --d-info-ink: #ffe9bd;
+  --d-info-head: #e8c273;
+  --d-chip-none: #52646d;
+  --d-preview:   #e0ae52;
+
+  background: var(--d-bg); color: var(--d-ink);
   font-size: clamp(16px, calc(0.5vw + 0.75vh), 34px);
+}
+body.display.lys {
+  --d-bg:        #eef2f4;
+  --d-card:      #ffffff;
+  --d-card-line: #cfd9de;
+  --d-ink:       #17242b;
+  --d-ink-strong:#0d161b;
+  --d-ink-soft:  #5a6b74;
+  --d-rule:      #e4eaed;
+  --d-next-bg:   #e2eef1;  --d-next-line: #a9cdd6;  --d-next-ink: #185a68;
+  --d-info-bg:   #fbeecd;  --d-info-line: #c79a3a;  --d-info-ink: #4a3608;
+  --d-info-head: #7a5716;
+  --d-chip-none: #a8b6bd;
+  --d-preview:   #96660f;
 }
 body.display main {
   max-width: none; width: 100%; padding: 0.9em 1.2em;
   min-height: 100vh; display: flex; flex-direction: column;
 }
 body.display .top { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 0.4em; }
-body.display .top h1 { font-size: 1.75em; margin: 0; color: #fff; }
+body.display .top h1 { font-size: 1.75em; margin: 0; color: var(--d-ink-strong); }
 body.display .top .clock { font-size: 1.75em; font-weight: 700; font-variant-numeric: tabular-nums; }
-body.display .daylabel { color: #9fb2bb; font-size: 0.95em; margin-bottom: 0.6em; }
+body.display .daylabel { color: var(--d-ink-soft); font-size: 0.95em; margin-bottom: 0.6em; }
 body.display .zone {
   border-radius: 0.55em; overflow: hidden; margin: 0.55em 0;
-  background: #18242b; border: 1px solid #24343d;
+  background: var(--d-card); border: 1px solid var(--d-card-line);
 }
+/* Zone headers keep their zone colour in both themes — that is the identity. */
 body.display .zone > header {
   padding: 0.3em 0.75em; font-size: 1.15em; font-weight: 700; color: #fff;
   display: flex; justify-content: space-between; align-items: center;
@@ -252,8 +294,8 @@ body.display .zone.utpost > header { background: var(--z-utpost); }
 body.display .fngroup { padding: 0.1em 0.85em 0.35em; }
 body.display .fnname {
   font-size: 0.82em; letter-spacing: 0.05em; text-transform: uppercase;
-  color: #8ea4ae; margin: 0.45em 0 0.1em;
-  border-bottom: 1px solid #22313a; padding-bottom: 0.15em;
+  color: var(--d-ink-soft); margin: 0.45em 0 0.1em;
+  border-bottom: 1px solid var(--d-rule); padding-bottom: 0.15em;
 }
 body.display ul.people { list-style: none; margin: 0; padding: 0; }
 body.display ul.people li {
@@ -268,32 +310,37 @@ body.display .nextchip.uren   { background: var(--z-uren); }
 body.display .nextchip.ren    { background: var(--z-ren); }
 body.display .nextchip.steril { background: var(--z-steril); }
 body.display .nextchip.utpost { background: var(--z-utpost); }
-body.display .nextchip.none { background: transparent; color: #52646d; font-weight: 400; }
+body.display .nextchip.none { background: transparent; color: var(--d-chip-none); font-weight: 400; }
 body.display .adhoc {
-  font-size: 0.72em; font-weight: 600; background: rgba(255,255,255,0.22);
+  font-size: 0.72em; font-weight: 600; background: rgba(255,255,255,0.25);
   border-radius: 999px; padding: 0.12em 0.7em;
 }
 /* Notices sit at the foot of the screen, however tall it is. */
 body.display .display-foot { margin-top: auto; padding-top: 0.6em; }
 body.display .next {
-  background: #1c343b; border: 1px solid #2d505a; border-radius: 0.55em;
-  padding: 0.55em 0.85em; margin-top: 0.6em;
+  background: var(--d-next-bg); border: 1px solid var(--d-next-line);
+  border-radius: 0.55em; padding: 0.55em 0.85em; margin-top: 0.6em;
 }
-body.display .next h2 { margin: 0 0 0.25em; font-size: 0.95em; color: #7fc6d4; }
+body.display .next h2 { margin: 0 0 0.25em; font-size: 0.95em; color: var(--d-next-ink); }
 body.display .next ul { margin: 0; padding: 0; }
 body.display .next li { font-size: 1em; padding: 0.08em 0; list-style: none; }
 body.display .dayinfo {
-  margin-top: 0.6em; border-radius: 0.55em; padding: 0.55em 0.85em;
-  background: #2a2417; border: 1px solid #5c4a22; color: #f0dcb4;
+  margin-top: 0.6em; border-radius: 0.55em; padding: 0.6em 0.9em;
+  background: var(--d-info-bg); border: 2px solid var(--d-info-line); color: var(--d-info-ink);
 }
 body.display .dayinfo h2 {
-  margin: 0 0 0.2em; font-size: 0.8em; letter-spacing: 0.08em;
-  text-transform: uppercase; color: #c9a05a;
+  margin: 0 0 0.2em; font-size: 0.85em; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--d-info-head);
 }
-body.display .dayinfo p { margin: 0; font-size: 1.05em; white-space: pre-wrap; }
-body.display .empty { color: #9fb2bb; font-size: 1.05em; padding: 1.4em 0; }
-body.display .previewtag { color: #d9a544; font-size: 0.85em; }
-body.display .muted { color: #9fb2bb; }
+body.display .dayinfo p { margin: 0; font-size: 1.12em; white-space: pre-wrap; }
+body.display .empty { color: var(--d-ink-soft); font-size: 1.05em; padding: 1.4em 0; }
+body.display .previewtag { color: var(--d-preview); font-size: 0.85em; }
+body.display .muted { color: var(--d-ink-soft); }
+body.display .themetoggle {
+  color: var(--d-ink-soft); font-size: 0.8em; text-decoration: none;
+  border: 1px solid var(--d-card-line); border-radius: 999px; padding: 0.1em 0.7em;
+}
+body.display .themetoggle:hover { color: var(--d-ink); }
 
 /* ================================================================== PRINT */
 @media print {
