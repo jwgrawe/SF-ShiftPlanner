@@ -35,7 +35,6 @@
               <li>
                 <span class="pname">{{ person.display_name }}</span>
                 {% if person.next %}
-                  <span class="leader"></span>
                   <span class="nextchip {{ person.next.zone_id }}">→ {{ person.next.zone_name }} ({{ person.next.short_name }}){% if person.next.time %} {{ person.next.time }}{% endif %}</span>
                 {% endif %}
               </li>
@@ -55,7 +54,7 @@
       <div class="fngroup">
         <ul class="people">
           {% for person in adhoc_crew %}
-            <li><span class="pname">{{ person.display_name }}</span><span class="leader"></span><span class="nextchip none">{{ person.hours }}</span></li>
+            <li><span class="pname">{{ person.display_name }}</span><span class="nextchip none">{{ person.hours }}</span></li>
           {% endfor %}
         </ul>
       </div>

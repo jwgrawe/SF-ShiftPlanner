@@ -243,7 +243,7 @@ body.display {
   --d-info-head: #ffcf7a;
   --d-chip-none: #52646d;
   --d-preview:   #e0ae52;
-  --d-leader:    #2f4048;
+  --d-fnrule:    #3d5a68;
 
   background: var(--d-bg); color: var(--d-ink);
   font-size: clamp(16px, calc(0.5vw + 0.75vh), 34px);
@@ -261,7 +261,7 @@ body.display.lys {
   --d-info-head: #6b4a0d;
   --d-chip-none: #a8b6bd;
   --d-preview:   #96660f;
-  --d-leader:    #c2ced4;
+  --d-fnrule:    #aebec6;
 }
 body.display main {
   max-width: none; width: 100%; padding: 0.9em 1.2em;
@@ -286,24 +286,22 @@ body.display .zone.steril > header { background: var(--z-steril); }
 body.display .zone.utpost > header { background: var(--z-utpost); }
 body.display .fngroup { padding: 0.1em 0.85em 0.35em; }
 body.display .fnname {
-  font-size: 0.82em; letter-spacing: 0.05em; text-transform: uppercase;
-  color: var(--d-ink-soft); margin: 0.45em 0 0.1em;
-  border-bottom: 1px solid var(--d-rule); padding-bottom: 0.15em;
+  font-size: 1.02em; font-weight: 700; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--d-ink-strong);
+  margin: 0.55em 0 0.15em; padding-bottom: 0.18em;
+  border-bottom: 2px solid var(--d-fnrule);
 }
+body.display .fngroup > .fnname:first-child { margin-top: 0.3em; }
 body.display ul.people { list-style: none; margin: 0; padding: 0; }
-/* A rule under every row plus a dotted leader across the gap, so the eye
-   can follow a name to its rotation chip on a wide screen. */
+/* A thin rule under every row carries the eye from a name to its rotation
+   chip; a dotted leader as well was too busy on the wall (D72). */
 body.display ul.people li {
-  display: grid; grid-template-columns: auto 1fr auto; gap: 0.55em;
+  display: grid; grid-template-columns: 1fr auto; gap: 0.55em;
   align-items: baseline; padding: 0.22em 0; font-size: 1.12em;
   border-bottom: 1px solid var(--d-rule);
 }
 body.display ul.people li:last-child { border-bottom: none; }
 body.display .pname { font-weight: 700; }
-body.display .leader {
-  align-self: center; height: 0; margin: 0 0.15em;
-  border-bottom: 1px dotted var(--d-leader);
-}
 body.display .nextchip {
   justify-self: end; font-size: 0.8em; font-weight: 600; white-space: nowrap;
   border-radius: 999px; padding: 0.1em 0.7em; color: #fff;
