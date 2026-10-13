@@ -2,7 +2,7 @@
 """Anonymise HR exports (Plan/turnus and Ajourhold/ukeplan, CSV) locally.
 
 Runs on the PC that holds the real files. Nothing is sent anywhere. Reads every
-*.csv in data/private/ (or the files given as arguments) and writes, to
+*.csv in data/import/ (or the files given as arguments) and writes, to
 data/private/anonymisert/:
 
   <fil>.csv            same layout, encoding and delimiter as the original, but
@@ -20,7 +20,7 @@ turnus and the ukeplan must still join). That key is personal data: never
 share it. Anything the script misses can be forced out by listing it, one per
 line, in data/private/ekstra_sladding.txt.
 
-  python scripts/anonymise_export.py                 # all CSVs in data/private
+  python scripts/anonymise_export.py                 # all CSVs in data/import
   python scripts/anonymise_export.py --alle          # every employee, not a sample
   python scripts/anonymise_export.py --navn-kolonne "Navn" --id-kolonne "Ansattnr"
 """
@@ -38,6 +38,7 @@ from datetime import date
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+IMPORT_DIR = ROOT / "data" / "import"
 PRIVATE = ROOT / "data" / "private"
 OUT_DIR = PRIVATE / "anonymisert"
 KEY_PATH = PRIVATE / "anonymiser_nokkel.json"
@@ -411,7 +412,7 @@ def process(grid, people, anon: Anonymiser, keep: set[str] | None):
 # ------------------------------------------------------------------ main
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description="Anonymiser turnus-/ukeplan-eksport (CSV) lokalt.")
-    parser.add_argument("filer", nargs="*", help="CSV-filer (standard: alle *.csv i data/private)")
+    parser.add_argument("filer", nargs="*", help="CSV-filer (standard: alle *.csv i data/import)")
     parser.add_argument("--utvalg", type=int, default=20, help="antall ansatte i kopien (standard 20)")
     parser.add_argument("--alle", action="store_true", help="ta med alle ansatte")
     parser.add_argument("--id-kolonne", help="overskrift på kolonnen med ansattnummer")
@@ -420,9 +421,9 @@ def main(argv=None) -> int:
     parser.add_argument("--nokkel", type=Path, default=KEY_PATH, help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
 
-    paths = [Path(p) for p in args.filer] or sorted(PRIVATE.glob("*.csv"))
+    paths = [Path(p) for p in args.filer] or sorted(IMPORT_DIR.glob("*.csv"))
     if not paths:
-        print(f"Fant ingen CSV-filer. Legg eksportfilene i {PRIVATE} og kjør på nytt.")
+        print(f"Fant ingen CSV-filer. Legg eksportfilene i {IMPORT_DIR} og kjør på nytt.")
         return 1
     codes = load_codes()
     extra = []

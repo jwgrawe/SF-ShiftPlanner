@@ -92,14 +92,14 @@ data/source/   Original Excel workbooks, committed unmodified (provenance)
 data/seed/     Editable master data as CSV — decoded from the workbooks.
                Source of truth for development; edit in Excel/LibreOffice,
                then run scripts/validate_seed.py and python -m app.importer
-data/import/   Spec for the runtime import folder (Excel files managers edit)
-data/private/  Real HR exports + anonymiser key/output — git-ignored except its
-               README (the repo is public, D78)
+data/import/   Real HR exports (Plan/Ajourhold CSV) and, later, the Excel files
+               managers edit — git-ignored except its README (repo is public, D78)
+data/private/  The anonymiser's key and output — git-ignored except its README
 scripts/       generate_fake_employees.py  (fictional identities, deterministic)
                import_competencies.py      (real competency matrix -> CSV)
                validate_seed.py            (consistency checks for data/seed/)
-               anonymise_export.py         (real Plan/Ajourhold CSV -> anonymised
-                                            copies, run locally; see data/private/)
+               anonymise_export.py         (data/import/*.csv -> anonymised copies
+                                            in data/private/, run locally)
                make_demo_data.py           (demo roster + naive demo plan;
                                             NOT the planning engine)
 tests/         Unit tests for the domain logic (python -m unittest discover -s tests)

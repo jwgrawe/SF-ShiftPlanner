@@ -1,12 +1,12 @@
-# data/private — ekte personopplysninger, kun lokalt
+# data/private — anonymiseringens nøkkel og resultat, kun lokalt
 
 Alt i denne mappa unntatt denne filen er utelatt fra git (`.gitignore`).
-Repoet er **offentlig**, så ekte eksportfiler skal aldri ligge noe annet sted
-i prosjektet.
+Repoet er **offentlig**. Selve eksportfilene ligger i `data/import/`, som også
+er utelatt fra git.
 
 | Hva | Hvor |
 |---|---|
-| Eksport fra **Plan** (turnus) og **Ajourhold** (ukeplan), CSV | rett i denne mappa |
+| Eksport fra **Plan** (turnus) og **Ajourhold** (ukeplan), CSV | `data/import/` |
 | Anonymiserte kopier + rapport + gjennomgangsliste | `anonymisert/` (lages av skriptet) |
 | Nøkkelen ekte → oppdiktet navn/nummer | `anonymiser_nokkel.json` — **del aldri** |
 | Ekstra ord som skal sladdes (ett per linje) | `ekstra_sladding.txt` (valgfri) |
@@ -17,7 +17,7 @@ i prosjektet.
 python scripts\anonymise_export.py
 ```
 
-Skriptet leser alle `*.csv` her, og skriver til `anonymisert/`:
+Skriptet leser alle `*.csv` i `data/import/`, og skriver til `anonymisert/` her:
 
 - én kopi per fil med samme oppsett, tegnsett og skilletegn — men oppdiktede
   navn og ansattnummer, kommentarer på personrader byttet ut med `[tekst]`,

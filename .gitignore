@@ -16,8 +16,11 @@ Thumbs.db
 .vscode/
 
 # Never commit real personal data. This repository is PUBLIC.
-# data/private/ is where real HR exports (Plan/turnus, Ajourhold/ukeplan),
-# the anonymiser's key and its output live — only its README is tracked.
+# data/import/ is where the real HR exports go (Plan/turnus, Ajourhold/ukeplan,
+# and later the Excel files managers edit); data/private/ holds the
+# anonymiser's key and output. Only the READMEs are tracked.
+data/import/*
+!data/import/README.md
 data/private/*
 !data/private/README.md
 # data/source/ holds the committed provenance workbooks only; anything new
