@@ -7,7 +7,8 @@ Q-number). ~~Struck~~ = superseded; kept for traceability.
 Rounds: **R1** = 2026-08-31 (first briefing + answers), **R2** = 2026-09-02
 (question round after the department meeting), **R3** = 2026-09-02 (follow-up
 answers on intensity, imports and product details), **R4** = 2026-09-04
-(UI review of the running prototype).
+(UI review of the running prototype), **R5** = 2026-10-13 (the real roster
+sources: Plan and Ajourhold).
 
 ## Domain & terminology
 
@@ -73,11 +74,22 @@ answers on intensity, imports and product details), **R4** = 2026-09-04
 | D21 | R1 | Weekends and holidays: ad hoc self-management. |
 | D36 | R2 | **`H1` and `H2` are weekend/holiday shift codes** (category helgevakt). |
 | D39 | R2 | **Utposter are entirely out of planning scope for now** (their staffing is not yet settled in the department). The model keeps them ready for reactivation (`active = no` on the functions). For now it suffices to mark each employee as working in the CSSD (`sf`) or permanently at an outpost (`utpost_fast`, excluded from SF planning) — who is which is Q21. |
-| D45 | R2 | Roster mechanics: a 10-week base roster repeats for ~6 months. Changes (forskyvning, vaktbytte) are made **in the underlying roster file** by managers and refreshed into the app by re-import; infrequent. |
+| D45 | R2 | Roster mechanics: a 10-week base roster repeats for ~6 months. ~~Changes (forskyvning, vaktbytte) are made in the underlying roster file by managers and refreshed into the app by re-import; infrequent.~~ The change-handling half is superseded by D73: changes arrive through Ajourhold. |
 | D54 | R3 | **Import drift detection**: the importer compares each file's structure against what the app has configured (columns, sheets) and warns the admin/manager on mismatch — merged, missing, renamed or new columns — before importing. Import file formats may evolve slightly over time; the competency file will be re-issued with the Sterrad/Poliklinikker split. |
 | D55 | R3 | **Utpost days are derived from the roster**: shift codes starting with `U` are flagged `utpost_code = yes`, and a day with a U-code keeps that employee out of SF planning for that day (covers both fast staff and future "rullering fra SF"). The `works_at` column remains as a manual fallback/override until the roster import exists. |
 | D58 | R3 | Steril sone confirmed: "Produksjon, steril sone" and "Gang/vognvaskere" are borderline indistinguishable and stay `adhoc_zone` — the crew organizes internally. Gang/vognvask competency covered by produksjon_steril. |
 | D59 | R3 | Shift categories stay **explicitly assigned** per vaktkode; the app adds an *advisory* heuristic that suggests a category for new codes and flags suspicious assignments, but never classifies silently. (The literal rule "covers both 11:00 and 18:00" would misclassify `ME` 12–20, which does not cover 11:00 — evidence that a hard algorithm here breeds confusion.) Confirmed by the owner 2026-09-02. |
+
+## Roster sources & personal data (R5)
+
+| # | R | Decision |
+|---|---|---|
+| D73 | R5 | **Two roster sources, one effective roster.** **Plan** (the turnus; exported for a whole year, currently 2026) gives the planned shifts. **Ajourhold** (the ukeplan; the HR system exports one week at a time, so a manager exports it weekly) carries the freshest changes — above all absence and leave. For every date inside an imported Ajourhold week, Ajourhold wins; elsewhere Plan stands. *(interim, Q32: Ajourhold is treated as authoritative for the whole week it covers, pending whether it lists every person or only the changes.)* |
+| D74 | R5 | **Terminology.** The HR system's module names are kept as proper names: **Plan** and **Ajourhold**; in the UI «Turnus (Plan)» and «Ukeplan (Ajourhold)». In English text: *planned roster* and *roster maintenance*; combined, the *effective roster*. In code: `source = 'plan' \| 'ajourhold'` — never a bare "plan" for the HR source, since the app already uses *plan* for placement plans (`plan_days`, `/plan`). |
+| D75 | R5 | **Ajourhold coverage is visible.** The planning overview shows, per week, whether an ukeplan has been imported (and when); days that rest on Plan alone are flagged, so the weekly export routine is easy to keep. |
+| D76 | R5 | **Absences carry no type.** The app only needs to know that someone is unavailable (and when) — not why. Ajourhold's absence codes are mapped by configuration to *available / unavailable*, and only that is stored. Resolves Q29: the manual absence form drops its type list when the Ajourhold import lands. Sick-leave detail never enters the app. |
+| D77 | R5 | **Identity: employee number.** Ajourhold carries ansattnr; the 2026 Plan export carries full names only, and the next Plan export will add ansattnr. Until then, Plan rows are matched by name through Ajourhold's name↔number pairs, with unmatched names reported. The mapping ansattnr ↔ app employee lives only in `data/private/`. |
+| D78 | R5 | **Real exports never leave the PC; the repo is public.** Real files live in `data/private/` (git-ignored; new files in `data/source/` are ignored too). `scripts/anonymise_export.py` runs locally and writes structure-preserving copies with invented names/numbers, person comments removed and a 20-person sample. Those copies are shared in the chat, **never committed** — a rotation pattern can identify a colleague even under an invented name. Test fixtures in the repo are synthetic, generated from the learned structure. |
 
 ## Product & workflow
 

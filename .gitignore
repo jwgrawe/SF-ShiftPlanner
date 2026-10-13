@@ -15,5 +15,15 @@ Thumbs.db
 .idea/
 .vscode/
 
-# Never commit real personal data
-data/private/
+# Never commit real personal data. This repository is PUBLIC.
+# data/private/ is where real HR exports (Plan/turnus, Ajourhold/ukeplan),
+# the anonymiser's key and its output live — only its README is tracked.
+data/private/*
+!data/private/README.md
+# data/source/ holds the committed provenance workbooks only; anything new
+# dropped here is ignored, so a real export can never slip in by accident.
+data/source/*
+!data/source/Grunnbemanning_funksjonsvis.xlsx
+!data/source/Kompetanse_Anonymisert.xlsx
+!data/source/Vaktkoder_SF.xlsx
+!data/source/Åpningstider_og_vakter_i_SF.xlsx

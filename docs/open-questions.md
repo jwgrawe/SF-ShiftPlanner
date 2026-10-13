@@ -1,6 +1,6 @@
 # Open questions
 
-Current list as of 2026-09-04 (after the round-4 UI review). Q-numbers are stable across
+Current list as of 2026-10-13 (round 5: the real roster sources). Q-numbers are stable across
 rounds — resolved ones are recorded in [decisions.md](decisions.md) and
 listed at the bottom. Where an *interim rule* is stated, work proceeds on
 that assumption; the question is whether it's right.
@@ -9,11 +9,18 @@ Priority: 🔴 gates the planning engine · 🟡 needed soon · 🟢 can wait.
 
 ## Open
 
-**Q1 🔴 The roster export.** *(Sample pending.)* Needed with it: the field
-layout, and the **identity join key** — do the roster export and the
-competency data share an employee number the app can join on? *(New since
-D55: the roster is now also the source for utpost days via U-codes, so the
-sample matters even more.)*
+**Q1 🔴 The roster export.** *(Partly answered in R5.)* The roster comes from
+two sources, Plan and Ajourhold (D73), both CSV. Join key: employee number
+(D77) — present in Ajourhold, and coming to Plan with its next export.
+**Still pending:** the field layout, via the anonymised copies
+(`scripts/anonymise_export.py`, D78), and the check of Plan's own shift-code
+explanations against `shift_codes.csv`.
+
+**Q32 🔴 What does an Ajourhold week contain?** Every person and day of the
+week, or only what changed against Plan? The owner's reading: "the freshest
+information" — some long-known absences are already in Plan too. *Interim
+(D73): Ajourhold is authoritative for the whole week it covers.* The
+anonymised sample should settle it by comparing the two files.
 
 **Q18 🔴 Scope of the zone swap.** *(Noted for follow-up by the owner.)*
 Does the entire uren crew swap at the rotation point, or a subset? Is the
@@ -41,13 +48,6 @@ functions) intensity 0.5 in the window **07:00–22:00**. Confirm those edges
 12:00–22:00. Longer term the department can tune intensity per function and
 hour freely — the model already supports it (D52).
 
-**Q29 🟢 Absence type list.** When a manager registers an absence, which
-categories should the dropdown offer? *The interim list (D60) is now live in
-the app: Syk · Ferie · Kurs/opplæring · Permisjon · Annet.* Types are visible only to
-managers/admins (D46); the display never shows absences. Confirm or edit
-the list — also relevant for the absence *import file*, whose format we can
-define ourselves.
-
 ## Resolved (all rounds)
 
 Q2–Q17: see the round-2 log in [decisions.md](decisions.md).
@@ -58,5 +58,6 @@ weekends included → D57), Q24 (steril ad hoc, vognvask via produksjon_steril
 Q26 (absence visibility and import → D46/D60, type list lives on as Q29),
 Q28 (tilrettelegging belongs in fritak, preferences stay steering → D56,
 confirmed by the owner).
+Round 5: Q29 (absence types — not needed at all → D76).
 The Q19 infeasibility itself is resolved by the two-tier scheme (D50/D51);
 what remains is the booked confirmation above.

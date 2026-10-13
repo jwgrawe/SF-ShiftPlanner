@@ -76,7 +76,7 @@ Tips for the hospital PC:
 |---|---|
 | [docs/assessment.md](docs/assessment.md) | Proposed architecture, eligibility model, rotation framework, planning engine, roadmap |
 | [docs/decisions.md](docs/decisions.md) | **Decision log** — everything settled, as referenceable D-numbers (superseded ones struck through) |
-| [docs/open-questions.md](docs/open-questions.md) | **Open questions** — stable Q-numbers; currently Q1, Q18–Q20, Q27, Q29 |
+| [docs/open-questions.md](docs/open-questions.md) | **Open questions** — stable Q-numbers; currently Q1, Q18–Q20, Q27, Q32 |
 | [docs/source-data-findings.md](docs/source-data-findings.md) | What the source workbooks contain, how they were restructured, and how each flag got resolved |
 
 ## Repository layout
@@ -93,9 +93,13 @@ data/seed/     Editable master data as CSV — decoded from the workbooks.
                Source of truth for development; edit in Excel/LibreOffice,
                then run scripts/validate_seed.py and python -m app.importer
 data/import/   Spec for the runtime import folder (Excel files managers edit)
+data/private/  Real HR exports + anonymiser key/output — git-ignored except its
+               README (the repo is public, D78)
 scripts/       generate_fake_employees.py  (fictional identities, deterministic)
                import_competencies.py      (real competency matrix -> CSV)
                validate_seed.py            (consistency checks for data/seed/)
+               anonymise_export.py         (real Plan/Ajourhold CSV -> anonymised
+                                            copies, run locally; see data/private/)
                make_demo_data.py           (demo roster + naive demo plan;
                                             NOT the planning engine)
 tests/         Unit tests for the domain logic (python -m unittest discover -s tests)
@@ -157,6 +161,8 @@ Requires Python ≥ 3.11; only `import_competencies.py` needs a package
 | Vaktkode | shift code | e.g. `D` 07–15; categorized tidlig-/sen-/mellom-/natte-/helgevakt |
 | Mellomvakt | mid shift | Shift spanning both ordinary rotation points; rotates at 16:00 |
 | Turnus | roster | Who works which shift code on which date (10-week base, repeats ~6 months) |
+| Plan *(HR system)* | planned roster | The turnus export — planned shifts, a whole year per file |
+| Ajourhold *(HR system)* | roster maintenance | The ukeplan export — the freshest changes (absence, leave), one week per file; wins over Plan for its week (D73) |
 | DK/ansvarsvakt | (kept as-is) | Merged responsible-person function — always someone in charge |
 | Utpost | outpost | CSSD work site elsewhere in the hospital |
 | Fravær | absence | Affects supply only; never shown on the display (D46) |
