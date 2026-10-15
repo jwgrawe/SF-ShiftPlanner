@@ -12,7 +12,8 @@ spec.loader.exec_module(anonymise)
 PEOPLE = [("Hansen", "Kari", "12345"), ("Johansen", "Dag Ole", "23456"),
           ("Berg", "Ingrid M.", "34567"), ("Nilsen", "Per", "45678")]
 DATES = ["05.01.2026", "06.01.2026", "07.01.2026"]
-SECRETS = ["Hansen", "Kari", "Johansen", "Nilsen", "Ingrid", "12345", "23456", "45678", "912 34 567"]
+SECRETS = ["Hansen", "Kari", "Johansen", "Nilsen", "Ingrid", "12345", "23456", "45678", "912 34 567",
+           "Anne", "Olsen", "Tor", "Lie", "Mai", "10234", "11902"]
 
 LAYOUTS = {
     # Plan/turnus today: one row per person, a column per date, names only.
@@ -27,6 +28,18 @@ LAYOUTS = {
     # A person heading a block of rows.
     "blokk.csv": [line for last, first, eid in PEOPLE
                   for line in [f"Ansatt: {first} {last};{eid};"] + [f";{d};D" for d in DATES] + [";;"]],
+    # The real turnus shape: names under "Person navn", then a summary whose
+    # headers sit one column right of their data — here with the summary names
+    # in a different column, under an empty cell. Includes a lower-case
+    # particle and first names that double as ordinary words (Tor, Mai).
+    "turnus_rapport.csv": ["Turnusrapport;;;;", ";;;;", "Person navn;05.01.2026;06.01.2026;;"]
+    + ["Hansen Kari;D;A;;", "van der Berg Anne;N;D;;", "Olsen Tor;A;A;;", "Lie Mai;D;N;;"]
+    + [";;;;", ";;Person navn;Sum timer;Snitt"]
+    + [";Hansen Kari;120,5;30;", ";van der Berg Anne;80;20;", ";Olsen Tor;40;10;", ";Lie Mai;60;15;"],
+    # Ajourhold's real headers.
+    "ukeplan_ekte.csv": ["Ukeplan uke 2;;;", "PersonID;Navn;Dato;Vakt"]
+    + ["10234;Kari Hansen;05.01.2026;D", "10877;Anne van der Berg;05.01.2026;N",
+       "11902;Tor Olsen;05.01.2026;A", "12007;Mai Lie;05.01.2026;D"],
     # People as columns.
     "kolonner.csv": ["Dato;" + ";".join(f"{first} {last}" for last, first, _ in PEOPLE)]
     + [f"{d};D;A;N;D" for d in DATES],
@@ -48,7 +61,19 @@ class AnonymiseTest(unittest.TestCase):
         for path in out.iterdir():
             text = path.read_text(encoding="utf-8")
             for secret in SECRETS:
-                self.assertNotIn(secret, text, f"{secret!r} leaked into {path.name}")
+                self.assertNotRegex(text, rf"(?<![A-Za-zæøåÆØÅ0-9]){secret}(?![A-Za-zæøåÆØÅ0-9])",
+                                    f"{secret!r} leaked into {path.name}")
+
+    def test_turnus_layout_with_shifted_summary_headers(self):
+        out = self.run_on("--alle")
+        rows = (out / "turnus_rapport.csv").read_text(encoding="utf-8").splitlines()
+        self.assertEqual(rows[2], "Person navn;05.01.2026;06.01.2026;;")
+        self.assertEqual(rows[8], ";;Person navn;Sum timer;Snitt")
+        first_section = [r.split(";")[0] for r in rows[3:7]]
+        summary = [r.split(";")[1] for r in rows[9:13]]
+        self.assertEqual(first_section, summary)  # same invented names in both places
+        report = (out / "_rapport.txt").read_text(encoding="utf-8")
+        self.assertIn("NAVN funnet i:      A4:A7, B10:B13", report)
 
     def test_structure_and_codes_are_kept(self):
         out = self.run_on("--alle")

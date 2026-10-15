@@ -24,7 +24,10 @@ Skriptet leser alle `*.csv` i `data/import/`, og skriver til `anonymisert/` her:
   telefon/e-post fjernet, og bare et utvalg på 20 ansatte (`--alle` for alle).
   Samme person får samme oppdiktede navn i alle filene, så turnus og ukeplan
   kan fortsatt kobles.
-- `_rapport.txt` — bare struktur: tegnsett, kolonner, vaktkoder funnet.
+- `_rapport.txt` — bare struktur: tegnsett, kolonner, vaktkoder funnet, og
+  **hvor** navn og ansattnummer ble funnet, i Excel-celler
+  (f.eks. `NAVN funnet i: A4:A72, A80:A148`). Sammenlign med originalen i
+  Excel: dekker områdene alle navnene — og bare dem?
 - `_gjennomgang.txt` — **alle** tekstverdier som står igjen. Les den før du
   deler noe. Står det et ekte navn der, skriv det i `ekstra_sladding.txt` og
   kjør på nytt.

@@ -33,7 +33,7 @@ import json
 import random
 import re
 import sys
-from collections import Counter
+from collections import Counter, defaultdict
 from datetime import date
 from pathlib import Path
 
@@ -62,6 +62,9 @@ ID_HEADER = re.compile(
     r"(ansatt|ans\.?|lønns|lonns|ressurs|person|pers\.?|tjeneste)\s*-?\s*(nr|nummer|id)\b|^nr\.?$|^id$",
     re.I)
 NAME_HEADER = re.compile(r"\bnavn\b|^ansatt$|^medarbeider$|^ressurs$", re.I)
+# Name particles may be lower case: "van der Berg Anne", "de Souza Maria".
+PARTICLES = {"van", "von", "der", "den", "de", "da", "di", "du", "la", "le", "af",
+             "av", "ter", "ten", "el", "al", "bin", "dos", "das", "del"}
 
 # Structural words that are never treated as names on their own.
 VOCAB = set("""
@@ -76,7 +79,8 @@ permisjon kurs fri fridag helg helligdag natt kveld aften dagvakt kveldsvakt
 nattevakt langvakt senvakt tidligvakt mellomvakt helgevakt sterilforsyning sf og i på
 med av for kl rapport utskrift periode side ja nei x ren uren steril sone produksjon
 vikar ekstravakt overtid bytte vaktbytte avspasering tilkalling ledig ubesatt
-utpost gjelder ukedag hverdag år måned dato tidsrom
+utpost gjelder ukedag hverdag år måned dato tidsrom person personid snitt
+gjennomsnitt antall saldo normtid arbeidstid avvik turnusrapport per uker
 """.split())
 
 
@@ -201,44 +205,95 @@ def is_id(value: str) -> bool:
     return bool(ID_RE.match(value)) and not HHMM.match(value)
 
 
-def name_part(value: str, codes: set[str]) -> str | None:
-    """The name in a cell that holds one ("Hansen, Kari" or "Ansatt: Kari Hansen")."""
-    m = LABELLED_NAME.match(value)
-    if m and looks_like_full_name(m[2], codes):
-        return m[2]
-    return value.strip() if looks_like_full_name(value, codes) else None
-
-
-def looks_like_full_name(value: str, codes: set[str]) -> bool:
+def name_like(value: str, codes: set[str], loose: bool = False) -> bool:
+    """Letters-only cell that reads as a name. Strict (no header to go by): two
+    or more capitalised words. Loose (the cell sits under a "Navn"-type header):
+    anything letters-only that isn't purely structural words or shift codes."""
     value = value.strip()
     if not NAME_CELL.match(value):
         return False
     words = WORD.findall(value)
-    if len(words) < 2 or not all(w[0].isupper() for w in words):
+    if not words or all(w.lower() in VOCAB or w in codes for w in words):
         return False
-    return not all(w.lower() in VOCAB or w in codes for w in words)
+    if all(w.isupper() and len(w) <= 4 for w in words):
+        return False  # "FE", "SYK", "AVSP": a code, not a name
+    if loose:
+        # Full names only — a lone word under the names is more likely a
+        # legend label; single-word names still show up in _gjennomgang.txt.
+        return len(words) >= 2
+    significant = [w for w in words if w.lower() not in PARTICLES]
+    return len(words) >= 2 and bool(significant) and all(w[0].isupper() for w in significant)
+
+
+def looks_like_full_name(value: str, codes: set[str]) -> bool:
+    return name_like(value, codes)
+
+
+def name_in(value: str, codes: set[str], loose: bool = False) -> str | None:
+    """The name in a cell that holds one ("Hansen, Kari" or "Ansatt: Kari Hansen")."""
+    m = LABELLED_NAME.match(value)
+    if m and name_like(m[2], codes, loose=True):
+        return m[2]
+    return value.strip() if name_like(value, codes, loose) else None
+
+
+def name_part(value: str, codes: set[str]) -> str | None:
+    return name_in(value, codes)
+
+
+def is_header(value: str, kind: str) -> bool:
+    value = " ".join(value.strip().split())
+    if not value or len(value) > 30:
+        return False
+    return bool(ID_HEADER.search(value) if kind == "id" else NAME_HEADER.search(value))
 
 
 def find_lines(grid, axis, codes, force_header=None, kind="id"):
-    """Indices of columns (axis='col') or rows (axis='row') holding IDs or names."""
-    found = []
+    """Columns (axis='col') or rows (axis='row') holding IDs or names, as
+    {index: position of its header, or -1 when found by pattern alone}.
+
+    A known header ("Person navn", "Navn", "PersonID", or --navn-/--id-kolonne)
+    anchors the line: every name/ID-looking cell after it counts. Headers that
+    sit next to, not above, their data (the shifted header row in the turnus
+    summary) anchor nothing — those names are caught as the same people anyway.
+    """
+    found = {}
     for idx, cells in enumerate(axis_lines(grid, axis)):
-        values = [c.strip() for c in cells if c.strip()]
-        if not values:
-            continue
-        head = values[0]
-        if force_header and any(v.lower() == force_header.lower() for v in values[:15]):
-            found.append(idx)
+        header = next((p for p, c in enumerate(cells)
+                       if (force_header and c.strip().lower() == force_header.lower())
+                       or is_header(c, kind)), -1)
+        after = [c.strip() for c in cells[header + 1:] if c.strip()]
+        if not after:
             continue
         if kind == "id":
-            hits = [v for v in values if is_id(v)]
-            headed = bool(ID_HEADER.search(head))
+            hits = [v for v in after if is_id(v)]
         else:
-            hits = [v for v in values if name_part(v, codes)]
-            headed = bool(NAME_HEADER.search(head))
-        if (len(set(hits)) >= 3 and len(hits) >= 0.2 * len(values)) or (headed and hits):
-            found.append(idx)
+            hits = [v for v in after if name_in(v, codes, loose=header >= 0)]
+        if header >= 0 and hits:
+            found[idx] = header
+        elif header < 0 and len(set(hits)) >= 3 and len(hits) >= 0.2 * len(after):
+            found[idx] = -1
+    if axis == "col":
+        shifted_headers(grid, codes, force_header, kind, found)
     return found
+
+
+def shifted_headers(grid, codes, force_header, kind, found):
+    """The turnus summary puts every header one column right of its data: a
+    name header with nothing name-like under it, but names under the (empty)
+    cell to its left, anchors that left column from the header's row."""
+    for i, row in enumerate(grid):
+        for j, value in enumerate(row):
+            if j == 0 or not ((force_header and value.strip().lower() == force_header.lower())
+                              or is_header(value, kind)):
+                continue
+            left = j - 1
+            if row[left].strip() or left in found and found[left] < i:
+                continue
+            below = [r[left].strip() for r in grid[i + 1:] if left < len(r) and r[left].strip()]
+            check = is_id if kind == "id" else (lambda v: name_in(v, codes, loose=True))
+            if below and check(below[0]):
+                found[left] = i
 
 
 def name_key(value: str) -> str:
@@ -251,23 +306,26 @@ def detect_people(grid, codes, id_header=None, name_header=None):
         id_lines = find_lines(grid, axis, codes, id_header, "id")
         name_lines = find_lines(grid, axis, codes, name_header, "name")
         if axis == "row":  # a single header row of names = persons as columns
-            id_lines = [i for i in id_lines if i < 15]
-            name_lines = [i for i in name_lines if i < 15]
+            id_lines = {i: h for i, h in id_lines.items() if i < 15}
+            name_lines = {i: h for i, h in name_lines.items() if i < 15}
         if id_lines or name_lines:
             break
     else:
         return None
     lines = axis_lines(grid, axis)
-    key_line = name_lines[0] if name_lines else id_lines[0]
+    key_line = min(name_lines) if name_lines else min(id_lines)
+    header = name_lines.get(key_line, id_lines.get(key_line, -1))
     cells = lines[key_line]
     owners: dict[int, str] = {}
     for entry, value in enumerate(cells):
         value = value.strip()
-        if not value:
+        if not value or entry <= header:
             continue
-        if key_line in name_lines and name_part(value, codes):
-            owners[entry] = name_key(name_part(value, codes))
-        elif key_line in id_lines and is_id(value):
+        if key_line in name_lines:
+            name = name_in(value, codes, loose=header >= 0)
+            if name:
+                owners[entry] = name_key(name)
+        elif is_id(value):
             owners[entry] = value
     # Sparse key column = block layout (a person heads several rows): fill
     # forward until the next person or a blank line.
@@ -288,6 +346,14 @@ def detect_people(grid, codes, id_header=None, name_header=None):
                     owners[entry] = current
     return {"axis": axis, "id_lines": id_lines, "name_lines": name_lines,
             "key_line": key_line, "owners": owners, "filled": filled}
+
+
+def name_at(people, codes, line, pos, value):
+    """The name in this cell if it sits in a detected name line, else None."""
+    header = people["name_lines"].get(line)
+    if header is None or pos <= header:
+        return None
+    return name_in(value, codes, loose=header >= 0)
 
 
 # ------------------------------------------------------------ anonymise
@@ -313,14 +379,15 @@ class Anonymiser:
     def collect(self, grid, people):
         """First pass: learn every real ID and name token in this file."""
         lines = axis_lines(grid, people["axis"])
-        for idx in people["id_lines"]:
-            for value in lines[idx]:
+        for idx, header in people["id_lines"].items():
+            for value in lines[idx][header + 1:]:
                 if is_id(value.strip()):
                     self.key.fake_id(value.strip())
         for idx in people["name_lines"]:
-            for value in lines[idx]:
-                if name_part(value, self.codes):
-                    self.learn_name(name_part(value, self.codes))
+            for pos, value in enumerate(lines[idx]):
+                name = name_at(people, self.codes, idx, pos, value)
+                if name:
+                    self.learn_name(name)
         for row in grid:
             for value in row:
                 m = LABELLED_NAME.match(value)
@@ -334,24 +401,34 @@ class Anonymiser:
             self.key.fake_token(token)
 
     def compile(self):
-        tokens = [t for t in self.key.tokens if t not in VOCAB and t.upper() not in self.codes]
+        tokens = [t for t in self.key.tokens
+                  if t not in VOCAB and t not in PARTICLES and t.upper() not in self.codes]
         tokens.sort(key=len, reverse=True)
         self.token_re = re.compile(
             rf"(?<![{L}])(" + "|".join(map(re.escape, tokens)) + rf")(?![{L}])", re.I) if tokens else None
         ids = sorted(self.key.ids, key=len, reverse=True)
         self.id_re = re.compile(r"(?<!\d)(" + "|".join(ids) + r")(?!\d)") if ids else None
 
+    def only_name(self, value) -> bool:
+        """True if every word is a known name part, a particle, an initial, or a
+        word that doubles as a first name ("Tor", "Mai") — i.e. the cell is a
+        name and nothing else, so it can be replaced whole."""
+        if not NAME_CELL.match(value.strip()):
+            return False
+        return all(w.lower() in self.key.tokens or w.lower() in PARTICLES or len(w) == 1
+                   or w.lower() in VOCAB for w in WORD.findall(value))
+
     def name(self, value):
         """Replace every word of a cell known to be a name, initials included."""
         self.stats["navneceller"] += 1
         return re.sub(rf"[{L}]+", lambda m: self.key.fake_token(m[0]), value)
 
-    def cell(self, value: str, is_name: bool, personal: bool) -> tuple[str, bool]:
+    def cell(self, value: str, name: str | None, personal: bool) -> tuple[str, bool]:
         stripped = value.strip()
         if not stripped:
             return value, False
-        if is_name:
-            return self.name(value), True
+        if name:
+            return (self.name(value) if name == stripped else value.replace(name, self.name(name))), True
         if stripped in self.key.ids:
             self.stats["ansattnr"] += 1
             return value.replace(stripped, self.key.ids[stripped]), True
@@ -377,6 +454,12 @@ class Anonymiser:
         if when and abs((when - date.today()).days) > 3 * 366:
             self.stats["dato utenfor turnusperiode"] += 1
             return "[dato]", False
+        if self.token_re and self.token_re.search(out) and self.only_name(out):
+            # A known name outside the name column (e.g. "Olsen Tor" in a
+            # summary): replace the whole cell, so a first name that doubles
+            # as an ordinary word ("Tor", "Mai", "Dag") goes too.
+            self.stats["navn i andre kolonner"] += 1
+            return self.name(out), True
         if self.token_re:
             replaced = self.token_re.sub(lambda m: self.key.fake_token(m[0]), out)
             if replaced != out:
@@ -390,7 +473,6 @@ class Anonymiser:
 
 def process(grid, people, anon: Anonymiser, keep: set[str] | None):
     axis, owners = people["axis"], people["owners"]
-    name_lines = set(people["name_lines"])
     out, survivors = [], Counter()
     for i, row in enumerate(grid):
         if axis == "col" and i in owners and keep is not None and owners[i] not in keep:
@@ -400,13 +482,70 @@ def process(grid, people, anon: Anonymiser, keep: set[str] | None):
             entry, line = (i, j) if axis == "col" else (j, i)
             if axis == "row" and entry in owners and keep is not None and owners[entry] not in keep:
                 continue
-            is_name = line in name_lines and looks_like_full_name(value, anon.codes)
-            new, mapped = anon.cell(value, is_name, entry in owners)
+            name = name_at(people, anon.codes, line, entry, value)
+            new, mapped = anon.cell(value, name, entry in owners)
             new_row.append(new)
             if not mapped and re.search(rf"[{L}]{{2}}", new):
                 survivors[new.strip()] += 1
         out.append(new_row)
     return out, survivors
+
+
+def col_letter(j: int) -> str:
+    letters, j = "", j + 1
+    while j:
+        j, r = divmod(j - 1, 26)
+        letters = chr(65 + r) + letters
+    return letters
+
+
+def cell_ranges(cells) -> str:
+    """{(row, col)} -> "A4:A11, A15:A22" (1-based, as in Excel)."""
+    by_col = defaultdict(list)
+    for i, j in cells:
+        by_col[j].append(i)
+    parts = []
+    for j in sorted(by_col):
+        rows = sorted(set(by_col[j]))
+        start = prev = rows[0]
+        for r in rows[1:] + [None]:
+            if r is not None and r == prev + 1:
+                prev = r
+                continue
+            c = col_letter(j)
+            parts.append(f"{c}{start + 1}" if start == prev else f"{c}{start + 1}:{c}{prev + 1}")
+            if r is not None:
+                start = prev = r
+    return ", ".join(parts) or "–"
+
+
+def locate(grid, people, anon):
+    """Where names and IDs are, on the full file (before sampling)."""
+    names, ids, other = set(), set(), set()
+    for i, row in enumerate(grid):
+        for j, value in enumerate(row):
+            entry, line = (i, j) if people["axis"] == "col" else (j, i)
+            v = value.strip()
+            if not v:
+                continue
+            if name_at(people, anon.codes, line, entry, value):
+                names.add((i, j))
+            elif v in anon.key.ids:
+                ids.add((i, j))
+            elif anon.token_re and anon.token_re.search(v):
+                other.add((i, j))
+    return names, ids, other
+
+
+def header_cells(grid, people, kind):
+    lines = people["name_lines"] if kind == "name" else people["id_lines"]
+    out = []
+    for line, header in sorted(lines.items()):
+        if header < 0:
+            continue
+        i, j = (header, line) if people["axis"] == "col" else (line, header)
+        out.append(f"{col_letter(j)}{i + 1} «{grid[i][j].strip()}»")
+    return ", ".join(out)
 
 
 # ------------------------------------------------------------------ main
@@ -442,12 +581,13 @@ def main(argv=None) -> int:
             anon.collect(meta["grid"], people)
     anon.compile()
 
-    # Same employees in every file, so the files still join after sampling.
+    # Prefer people found in the most files, so the files still join after
+    # sampling (the same employees in the turnus and the ukeplan).
     keysets = [set(p["owners"].values()) for _, _, p in files if p]
     keep = None
     if not args.alle and keysets:
-        common = set.intersection(*keysets)
-        ordered = sorted(common) + sorted(set.union(*keysets) - common)
+        seen = Counter(person for keys in keysets for person in keys)
+        ordered = sorted(seen, key=lambda person: (-seen[person], person))
         keep = set(ordered[:args.utvalg])
 
     args.ut.mkdir(parents=True, exist_ok=True)
@@ -468,14 +608,17 @@ def main(argv=None) -> int:
             report.append("      Kjør igjen med --navn-kolonne \"<overskrift>\" og/eller --id-kolonne \"<overskrift>\".\n")
             print(f"[{n}] {path.name}: fant ingen navn/ansattnr — hoppet over (se rapporten).")
             continue
-        where = "kolonne" if people["axis"] == "col" else "rad"
-        report.append(f"   personer ligger i {'rader' if people['axis'] == 'col' else 'kolonner'}; "
-                      f"ansattnr-{where}: {[i + 1 for i in people['id_lines']] or 'ingen'}; "
-                      f"navne-{where}: {[i + 1 for i in people['name_lines']] or 'ingen'}"
+        report.append(f"   personer ligger i {'rader' if people['axis'] == 'col' else 'kolonner'}"
                       + ("; blokkoppsett (person over flere rader)" if people["filled"] else ""))
+        names_at, ids_at, other_at = locate(grid, people, anon)
+        report.append(f"   overskrift for navn: {header_cells(grid, people, 'name') or 'ingen (funnet på mønster)'}")
+        report.append(f"   overskrift for ansattnr: {header_cells(grid, people, 'id') or 'ingen'}")
+        report.append(f"   NAVN funnet i:      {cell_ranges(names_at)}")
+        report.append(f"   ANSATTNR funnet i:  {cell_ranges(ids_at)}")
+        report.append(f"   navn i andre celler: {cell_ranges(other_at)}")
         persons = set(people["owners"].values())
         kept = persons if keep is None else persons & keep
-        report.append(f"   {len(persons)} personer i filen, {len(kept)} med i kopien")
+        report.append(f"   {len(persons)} ulike personer i filen, {len(kept)} med i kopien")
         before = Counter(anon.stats)
         out, survivors = process(grid, people, anon, keep)
         dates = sorted(d for row in grid for c in row if (d := valid_date(c.strip())))
