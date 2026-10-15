@@ -51,6 +51,7 @@ NAME_CELL = re.compile(rf"^[{L}][{L}.'\-]*(?:,?\s+[{L}][{L}.'\-]*){{0,5}},?$")
 COMMA_NAME = re.compile(rf"^[{L}][{L}'\-]+(?:\s[{L}][{L}'\-]+)*,\s*[{L}][{L}.'\-]+(?:\s[{L}][{L}.'\-]*)*$")
 LABELLED_NAME = re.compile(r"^\s*(ansatt|navn|medarbeider|arbeidstaker)\s*:\s*(.+?)\s*$", re.I)
 ID_RE = re.compile(r"^\d{4,11}$")
+ANCHORED_ID = re.compile(r"^\d{3,11}$")  # under a PersonID header: any integer
 HHMM = re.compile(r"^([01]\d|2[0-3])[0-5]\d$")
 DATE_DMY = re.compile(r"^(\d{1,2})[./-](\d{1,2})[./-](\d{4}|\d{2})\b")
 DATE_ISO = re.compile(r"^(\d{4})-(\d{1,2})-(\d{1,2})\b")
@@ -201,7 +202,11 @@ def axis_lines(grid, axis):
     return [column(grid, j) for j in range(width)]
 
 
-def is_id(value: str) -> bool:
+def is_id(value: str, anchored: bool = False) -> bool:
+    """Employee number. Under a known ID header every 3+ digit integer counts —
+    "1153" is a PersonID there, not 11:53; elsewhere clock-like values don't."""
+    if anchored:
+        return bool(ANCHORED_ID.match(value))
     return bool(ID_RE.match(value)) and not HHMM.match(value)
 
 
@@ -266,7 +271,7 @@ def find_lines(grid, axis, codes, force_header=None, kind="id"):
         if not after:
             continue
         if kind == "id":
-            hits = [v for v in after if is_id(v)]
+            hits = [v for v in after if is_id(v, anchored=header >= 0)]
         else:
             hits = [v for v in after if name_in(v, codes, loose=header >= 0)]
         if header >= 0 and hits:
@@ -288,12 +293,18 @@ def shifted_headers(grid, codes, force_header, kind, found):
                               or is_header(value, kind)):
                 continue
             left = j - 1
-            if row[left].strip() or left in found and found[left] < i:
+            if row[left].strip():
                 continue
             below = [r[left].strip() for r in grid[i + 1:] if left < len(r) and r[left].strip()]
-            check = is_id if kind == "id" else (lambda v: name_in(v, codes, loose=True))
-            if below and check(below[0]):
+            check = (lambda v: is_id(v, anchored=True)) if kind == "id" else (lambda v: name_in(v, codes, loose=True))
+            if not (below and check(below[0])):
+                continue
+            if left not in found or found[left] > i:
                 found[left] = i
+            # The shifted header belongs to the column on its left; under it
+            # sits the next field's data (e.g. job titles), not names.
+            if found.get(j) == i:
+                del found[j]
 
 
 def name_key(value: str) -> str:
@@ -325,7 +336,7 @@ def detect_people(grid, codes, id_header=None, name_header=None):
             name = name_in(value, codes, loose=header >= 0)
             if name:
                 owners[entry] = name_key(name)
-        elif is_id(value):
+        elif is_id(value, anchored=header >= 0):
             owners[entry] = value
     # Sparse key column = block layout (a person heads several rows): fill
     # forward until the next person or a blank line.
@@ -381,7 +392,7 @@ class Anonymiser:
         lines = axis_lines(grid, people["axis"])
         for idx, header in people["id_lines"].items():
             for value in lines[idx][header + 1:]:
-                if is_id(value.strip()):
+                if is_id(value.strip(), anchored=header >= 0):
                     self.key.fake_id(value.strip())
         for idx in people["name_lines"]:
             for pos, value in enumerate(lines[idx]):

@@ -13,7 +13,7 @@ PEOPLE = [("Hansen", "Kari", "12345"), ("Johansen", "Dag Ole", "23456"),
           ("Berg", "Ingrid M.", "34567"), ("Nilsen", "Per", "45678")]
 DATES = ["05.01.2026", "06.01.2026", "07.01.2026"]
 SECRETS = ["Hansen", "Kari", "Johansen", "Nilsen", "Ingrid", "12345", "23456", "45678", "912 34 567",
-           "Anne", "Olsen", "Tor", "Lie", "Mai", "10234", "11902"]
+           "Anne", "Olsen", "Tor", "Lie", "Mai", "10234", "11902", "1153"]
 
 LAYOUTS = {
     # Plan/turnus today: one row per person, a column per date, names only.
@@ -36,9 +36,17 @@ LAYOUTS = {
     + ["Hansen Kari;D;A;;", "van der Berg Anne;N;D;;", "Olsen Tor;A;A;;", "Lie Mai;D;N;;"]
     + [";;;;", ";;Person navn;Sum timer;Snitt"]
     + [";Hansen Kari;120,5;30;", ";van der Berg Anne;80;20;", ";Olsen Tor;40;10;", ";Lie Mai;60;15;"],
+    # The exact turnus export shape: titles in column B, and a summary whose
+    # "Person navn" header sits over the titles column (shifted right).
+    "fleksiplan.csv": [";;;", "Person navn;Stillingsbetegnelse;Sum uke;Ma 05.01",
+                       "Hansen Kari;Sterilforsyningstekniker;37;D", "Olsen Tor;IKT-konsulent;20;",
+                       "Lie Mai;Kvalitetskoordinator;30;A", ";;;",
+                       ";Person navn;Stillingsbetegnelse;Sum uke",
+                       "Hansen Kari;Sterilforsyningstekniker;37;", "Olsen Tor;IKT-konsulent;20;",
+                       "Lie Mai;Kvalitetskoordinator;30;"],
     # Ajourhold's real headers.
     "ukeplan_ekte.csv": ["Ukeplan uke 2;;;", "PersonID;Navn;Dato;Vakt"]
-    + ["10234;Kari Hansen;05.01.2026;D", "10877;Anne van der Berg;05.01.2026;N",
+    + ["10234;Kari Hansen;05.01.2026;D", "1153;Anne van der Berg;05.01.2026;N",
        "11902;Tor Olsen;05.01.2026;A", "12007;Mai Lie;05.01.2026;D"],
     # People as columns.
     "kolonner.csv": ["Dato;" + ";".join(f"{first} {last}" for last, first, _ in PEOPLE)]
@@ -63,6 +71,12 @@ class AnonymiseTest(unittest.TestCase):
             for secret in SECRETS:
                 self.assertNotRegex(text, rf"(?<![A-Za-zæøåÆØÅ0-9]){secret}(?![A-Za-zæøåÆØÅ0-9])",
                                     f"{secret!r} leaked into {path.name}")
+
+    def test_job_titles_are_not_names(self):
+        out = self.run_on("--alle")
+        text = (out / "fleksiplan.csv").read_text(encoding="utf-8")
+        for title in ("Sterilforsyningstekniker", "IKT-konsulent", "Kvalitetskoordinator"):
+            self.assertEqual(text.count(title), 2, title)
 
     def test_turnus_layout_with_shifted_summary_headers(self):
         out = self.run_on("--alle")
