@@ -18,6 +18,12 @@ for detaljer og redigering.</p>
       {% else %}
         <span class="muted" style="font-size:0.78rem">ingen vaktliste</span>
       {% endif %}
+      {% if not is_demo() %}
+        {% if not week.sources.plan %}<span class="src src-miss">turnus mangler</span>
+        {% elif not week.sources.plan_full %}<span class="src src-part">turnus delvis</span>{% endif %}
+        {% if week.sources.ukeplan %}<span class="src src-ok" title="Eksportert {{ week.sources.ukeplan_at.strftime('%d.%m %H:%M') }}">ukeplan ✓</span>
+        {% else %}<span class="src src-miss">ingen ukeplan</span>{% endif %}
+      {% endif %}
     </div>
     {% for day in week.days %}
       <div class="daycell">
@@ -36,6 +42,10 @@ for detaljer og redigering.</p>
   {% endfor %}
 </div></div>
 
-<p class="muted">Vaktlisten er foreløpig demo-data (fire uker). Når eksporten
-fra turnussystemet er på plass, importeres den her i stedet.</p>
+{% if is_demo() %}
+<p class="muted">Demo-modus: vaktlisten er generert (fire uker, fiktive ansatte).</p>
+{% else %}
+<p class="muted">Vaktlisten bygges fra turnus og ukeplaner – se <a href="/import">Datagrunnlag</a>
+for hvilke filer hver uke hviler på.</p>
+{% endif %}
 {% endblock %}

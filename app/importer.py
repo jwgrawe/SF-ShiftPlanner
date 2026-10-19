@@ -1,6 +1,6 @@
 """Import data/seed/*.csv into the SQLite database.
 
-Usage:  python -m app.importer [--db PATH]
+Usage:  python -m app.importer [--demo] [--db PATH]
 
 M1 scope: master data is fully reloaded (wipe + insert) from the seed CSVs;
 runtime tables (roster, absences, plans) are left untouched. The richer
@@ -34,10 +34,14 @@ def insert(conn: sqlite3.Connection, table: str, columns: list[str], rows: list[
     return len(rows)
 
 
-def import_seed(conn: sqlite3.Connection) -> dict[str, int]:
+def import_seed(conn: sqlite3.Connection, people: bool = True) -> dict[str, int]:
+    """Reload master data from data/seed/. With people=False (real mode, D89)
+    the people tables are left alone — real staff come from the imports and
+    the seed's fictional staff must never mix with them."""
     counts: dict[str, int] = {}
     for table in db.MASTER_TABLES:
-        conn.execute(f"DELETE FROM {table}")
+        if people or table not in db.PEOPLE_TABLES:
+            conn.execute(f"DELETE FROM {table}")
 
     counts["zones"] = insert(conn, "zones", ["zone_id", "name", "sort_order", "notes"], [
         (r["zone_id"], r["name"], int(r["sort_order"]), r["notes"]) for r in read_csv("zones.csv")
@@ -112,6 +116,10 @@ def import_seed(conn: sqlite3.Connection) -> dict[str, int]:
         [(r["function_id"], r["category"], r["weekday"], r["rule"], r["start"], r["end"],
           int(r["count"] or 0), r["source_text"]) for r in read_csv("weekday_rules.csv")],
     )
+    db.merge_learned_codes(conn)
+    seed_positions(conn)
+    if not people:
+        return counts
     counts["employees"] = insert(
         conn, "employees",
         ["employee_id", "source_label", "first_name", "last_name", "display_name", "works_at"],
@@ -138,10 +146,22 @@ def import_seed(conn: sqlite3.Connection) -> dict[str, int]:
     return counts
 
 
+def seed_positions(conn: sqlite3.Connection) -> None:
+    """Default rules per job title (D79/D87). Only fills in titles the
+    database doesn't know yet — an admin's classification always stands."""
+    for r in read_csv("positions.csv"):
+        conn.execute(
+            "INSERT OR IGNORE INTO positions (title, rule, first_seen, classified_at, notes) "
+            "VALUES (?, ?, NULL, 'standard', ?)", (r["title"].strip(), r["rule"], r["notes"]))
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--db", default=str(db.DEFAULT_DB_PATH))
+    parser.add_argument("--demo", action="store_true", help="the demo database (with seed staff)")
+    parser.add_argument("--db", default=None)
     args = parser.parse_args()
+    db.set_mode("demo" if args.demo else "real")
+    args.db = args.db or str(db.current_db_path())
 
     conn = db.get_conn(args.db)
     db.init_schema(conn)
@@ -152,7 +172,7 @@ def main() -> None:
     conn.execute("PRAGMA foreign_keys = OFF")
     try:
         with conn:
-            counts = import_seed(conn)
+            counts = import_seed(conn, people=db.is_demo())
             violations = conn.execute("PRAGMA foreign_key_check").fetchall()
             if violations:
                 details = ", ".join(

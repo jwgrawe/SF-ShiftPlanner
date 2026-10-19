@@ -21,12 +21,18 @@ display.
   start/end) or, optionally, blocks grouped by shift category. Generate,
   publish (and unpublish, or delete a draft), edit with locks, report
   absences, set the day's «Diverse info», and open a person view.
-- **`/admin`** — settings (incl. the board's light/dark palette) and the
-  master-data browser, incl. preferences and fritak (only here).
+- **`/import`** «Datagrunnlag» — the real roster's sources: which turnus
+  (Plan) and ukeplan (Ajourhold) each week rests on, what needs attention,
+  files read or refused, upload, and a log.
+- **`/admin`** — settings (board palette, retention), job-title rules,
+  shift codes learned from the turnus, and the master-data browser, incl.
+  preferences and fritak (only here).
 
-Demo data covers four weeks of roster from the current week, with week 1
-pre-published. Remaining in M2: PINs, the real roster adapter (Q1) and the
-Excel import UI.
+Two modes (D89): **`python run.py`** is the real planner — the roster comes
+from the HR exports in `data/import/`; **`python run.py --demo`** is the
+presentation demo with fictional staff and a generated four-week roster, in
+its own database, marked DEMO. Remaining in M2: PINs, and the competency file
+in export name form (Q40).
 
 ## Running the prototype
 
@@ -41,11 +47,31 @@ python -m pip install --user -r requirements.txt
 python run.py
 ```
 
-`run.py` prepares the database on first start (seed import + demo week),
-opens the browser, and serves on <http://127.0.0.1:8000/>. Stop with Ctrl+C.
-Demo data covers four weeks from the Monday of the current week, so "today"
-always has a roster. Preview any moment with e.g.
-`/display?date=ÅÅÅÅ-MM-DD&time=10:30`.
+`run.py` prepares the database (seed import, then the files in
+`data/import/`), opens the browser, and serves on <http://127.0.0.1:8000/>.
+Stop with Ctrl+C. For presentations use `python run.py --demo` (fictional
+staff; the demo roster covers four weeks from the Monday of the current
+week). Preview any moment with e.g. `/display?date=ÅÅÅÅ-MM-DD&time=10:30`.
+
+### The weekly routine (real mode)
+
+1. Export from the HR system and save the file in **`data\import\`** — or
+   upload it under «Datagrunnlag»:
+   - **turnus** (Plan → «Utskrift fleksiplan»): `Utskrift_fleksiplan_….csv`,
+     whenever a new or revised turnus exists;
+   - **ukeplan** (Ajourhold): `Ukeplan_….csv`, one file per week, e.g. every
+     Monday morning (re-exporting a week later in the week is fine — the
+     newest wins);
+   - **kompetansefil**: `.xlsx` in today's layout, names written exactly as
+     in the turnus.
+2. That's it. The app picks files up within 30 seconds while it's open,
+   moves them to `arkiv/` (or `avvist/` with a .txt saying why), rebuilds the
+   roster, and shows on «I dag» and «Datagrunnlag» if anything is missing or
+   odd — e.g. no ukeplan for this week, turnus running out, a new job title
+   to classify, an unknown shift code.
+
+Nothing in `data/import/` or the databases ever reaches git (the repository
+is public, D78); data older than 92 days is deleted automatically (D94).
 
 Easiest way to open a terminal in the project folder: open the folder in
 Explorer and type `cmd` in the address bar, or right-click → "Åpne i
@@ -76,18 +102,20 @@ Tips for the hospital PC:
 |---|---|
 | [docs/assessment.md](docs/assessment.md) | Proposed architecture, eligibility model, rotation framework, planning engine, roadmap |
 | [docs/decisions.md](docs/decisions.md) | **Decision log** — everything settled, as referenceable D-numbers (superseded ones struck through) |
-| [docs/open-questions.md](docs/open-questions.md) | **Open questions** — stable Q-numbers; currently Q18–Q20, Q27, Q32–Q41 |
+| [docs/open-questions.md](docs/open-questions.md) | **Open questions** — stable Q-numbers; currently Q18–Q20, Q27, Q40, Q42–Q44 |
 | [docs/source-data-findings.md](docs/source-data-findings.md) | What the source workbooks contain, how they were restructured, and how each flag got resolved |
 
 ## Repository layout
 
 ```
-app/           FastAPI web app: db.py (schema), importer.py (seed -> SQLite),
-               domain.py (operational day, blocks, holidays), service.py
-               (eligibility + view models), planner.py (suggestion filler),
-               checks.py (plan findings + intensity ledger), absences.py,
-               demo.py (stand-in roster), main.py + templates/ (Norwegian UI),
-               static/app.css (all styling and design tokens)
+app/           FastAPI web app: db.py (schema, modes), importer.py (seed ->
+               SQLite), hr_export.py (reads the turnus/ukeplan exports by
+               structure), hr_import.py (inbox, roster building, findings,
+               retention), domain.py (operational day, blocks, holidays),
+               service.py (eligibility + view models), planner.py (suggestion
+               filler), checks.py (plan findings + intensity ledger),
+               absences.py, demo.py (demo roster), main.py + templates/
+               (Norwegian UI), static/app.css (all styling and design tokens)
 data/source/   Original Excel workbooks, committed unmodified (provenance)
 data/seed/     Editable master data as CSV — decoded from the workbooks.
                Source of truth for development; edit in Excel/LibreOffice,
@@ -102,7 +130,8 @@ scripts/       generate_fake_employees.py  (fictional identities, deterministic)
                                             in data/private/, run locally)
                make_demo_data.py           (demo roster + naive demo plan;
                                             NOT the planning engine)
-tests/         Unit tests for the domain logic (python -m unittest discover -s tests)
+tests/         Unit tests (python -m unittest discover -s tests); hr_fixtures.py
+               builds synthetic exports in the real format
 docs/          Assessment, decisions, open questions, data findings
 start.sh/.bat  Convenience wrappers (blocked by group policy on some PCs)
 run.py         Canonical launch: python run.py, from any folder
@@ -128,6 +157,7 @@ run.py         Canonical launch: python run.py, from any folder
 | `employee_competencies.csv` | The **real** anonymized competency matrix: employee × competency, status `qualified`/`uncertain` |
 | `employee_preferences.csv` | Per-employee allowlists of functions (admin-only information, D32) — fictional example |
 | `employee_restrictions.csv` | Exemptions from heavy work / specific functions — fictional examples |
+| `positions.csv` | Default rule per job title (planned normally / never on the functions); new titles are classified once in the app (D87) |
 
 All assumptions are marked in `notes` columns with D/Q references — nothing
 was silently guessed.

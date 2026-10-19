@@ -2,9 +2,9 @@
 {% block title %}Administrasjon – SF-Planlegger{% endblock %}
 {% block content %}
 <h1>Administrasjon</h1>
-<p class="note">Kun lesing i denne versjonen. Redigering, re-import med
-strukturvarsling og kompetanseredigering kommer i M2/M4. <strong>Preferanser og
-fritak vises kun her</strong> – aldri på tavle eller plan (D32/D11).</p>
+<p class="note">Innstillinger, stillinger og lærte vaktkoder kan endres her; øvrige
+grunndata vises kun (redigering kommer senere). <strong>Preferanser og fritak vises kun
+her</strong> – aldri på tavle eller plan (D32/D11).</p>
 
 <h2>Innstillinger</h2>
 <form method="post" action="/admin/innstillinger" class="card">
@@ -14,14 +14,83 @@ fritak vises kun her</strong> – aldri på tavle eller plan (D32/D11).</p>
       <option value="mork" {% if display_theme != "lys" %}selected{% endif %}>Mørk (standard)</option>
       <option value="lys" {% if display_theme == "lys" %}selected{% endif %}>Lys</option>
     </select>
+    <label for="retention_days"><strong>Behold data i</strong></label>
+    <input id="retention_days" name="retention_days" type="number" min="14" max="730"
+           value="{{ retention }}" style="width:5.5rem"> dager
     <button class="btn" type="submit">Lagre</button>
     <a class="btn secondary" href="/display" target="_blank" rel="noopener">Åpne tavlen</a>
   </div>
   <p class="muted small" style="margin:0.5rem 0 0">
-    Gjelder tavlen på storskjerm. Velg lys visning i lyse lokaler. Enkeltvisninger
-    kan overstyres midlertidig med <code>?tema=lys</code> eller <code>?tema=mork</code> i adressen.
+    Fargevisningen gjelder tavlen på storskjerm – velg lys i lyse lokaler (overstyr midlertidig
+    med <code>?tema=lys</code> / <code>?tema=mork</code>). Vaktlister, planer og fravær eldre enn
+    antall dager over slettes automatisk, sammen med importfilene (D94).
   </p>
 </form>
+
+<h2 id="stillinger">Stillinger</h2>
+<p class="small">Hver stillingsbetegnelse i turnusen klassifiseres én gang. En ny betegnelse
+holdes utenfor planen til den er klassifisert her (D87).</p>
+<form method="post" action="/admin/stillinger">
+<div class="tablewrap"><table>
+  <tr><th style="width:16rem">Stilling</th><th style="width:15rem">Planlegges</th><th>Ikke på disse funksjonene (ved «begrenset»)</th><th style="width:6rem">Ansatte</th></tr>
+  {% for position in positions %}
+    <tr>
+      <td><input type="hidden" name="title_{{ loop.index }}" value="{{ position.title }}">
+        <strong>{{ position.title }}</strong>
+        {% if position.rule == "uavklart" %}<br><span class="badge alert">må klassifiseres</span>{% endif %}</td>
+      <td>
+        <select name="rule_{{ loop.index }}" data-excl="excl-{{ loop.index }}" class="rule-select">
+          {% for value, label in [("vanlig", "Som vanlig"), ("begrenset", "Begrenset"), ("aldri", "Aldri på funksjonene"), ("uavklart", "Uavklart (holdes utenfor)")] %}
+            <option value="{{ value }}" {% if position.rule == value %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </td>
+      <td>{% set row_index = loop.index %}<div class="excl" id="excl-{{ row_index }}" {% if position.rule != "begrenset" %}hidden{% endif %}>
+        {% for fn in all_functions %}
+          <label><input type="checkbox" name="excl_{{ row_index }}" value="{{ fn.function_id }}"
+            {% if fn.function_id in position.excluded %}checked{% endif %}> {{ fn.name }}</label>
+        {% endfor %}
+      </div></td>
+      <td>{{ position.people }}</td>
+    </tr>
+  {% else %}
+    <tr><td colspan="4" class="muted">Ingen stillinger registrert.</td></tr>
+  {% endfor %}
+</table></div>
+<button class="btn" type="submit">Lagre stillinger</button>
+</form>
+<script>
+  // The function list only matters for «Begrenset».
+  document.querySelectorAll(".rule-select").forEach(function (select) {
+    select.addEventListener("change", function () {
+      document.getElementById(select.dataset.excl).hidden = select.value !== "begrenset";
+    });
+  });
+</script>
+
+{% if learned %}
+<h2 id="vaktkoder">Vaktkoder lært fra turnusen</h2>
+<p class="small">Koder som står i turnusens forklaring, men ikke i appens vaktkodeliste.
+Tidene er hentet fra turnusen; kategorien (som styrer rulleringstidspunktet) er foreslått
+automatisk – bekreft eller endre.</p>
+<form method="post" action="/admin/vaktkoder">
+<div class="tablewrap"><table>
+  <tr><th>Kode</th><th>Tid</th><th>Utpost</th><th>Kategori</th><th>Status</th></tr>
+  {% for code in learned %}
+    <tr>
+      <td><input type="hidden" name="code_{{ loop.index }}" value="{{ code.code }}"><strong>{{ code.code }}</strong></td>
+      <td>{{ code.start }}–{{ code.end }}</td>
+      <td>{% if code.utpost_code == "yes" %}ja{% endif %}</td>
+      <td><select name="category_{{ loop.index }}">
+        {% for category in categories %}<option {% if code.category == category %}selected{% endif %}>{{ category }}</option>{% endfor %}
+      </select></td>
+      <td>{% if code.confirmed %}<span class="badge published">bekreftet</span>{% else %}<span class="badge draft">foreslått</span>{% endif %}</td>
+    </tr>
+  {% endfor %}
+</table></div>
+<button class="btn" type="submit">Bekreft kategoriene</button>
+</form>
+{% endif %}
 
 <h2>Funksjoner</h2>
 <div class="tablewrap"><table>
@@ -73,13 +142,13 @@ fritak vises kun her</strong> – aldri på tavle eller plan (D32/D11).</p>
   {% endfor %}
 </table></div>
 
-<h2>Ansatte og kompetanse <span class="badge soft">fiktive testdata</span></h2>
+<h2>Ansatte og kompetanse {% if is_demo() %}<span class="badge soft">fiktive testdata</span>{% endif %}</h2>
 <div class="tablewrap"><table>
   <tr><th>Id</th><th>Navn</th><th>Arbeidssted</th><th>Kompetanse</th></tr>
   {% for emp in employees %}
     <tr>
       <td>{{ emp.employee_id }}</td>
-      <td>{{ emp.first_name }} {{ emp.last_name }}</td>
+      <td>{{ emp.full_name or (emp.first_name ~ " " ~ emp.last_name) }}{% if emp.person_id %} <span class="muted small">({{ emp.person_id }})</span>{% endif %}</td>
       <td>{{ "SF" if emp.works_at == "sf" else "utpost (fast)" }}</td>
       <td>
         {% for comp in competencies.get(emp.employee_id, []) %}

@@ -8,6 +8,7 @@ flow with plausible plans. It does respect:
 - the eligibility formula (competency + preferences + restrictions + works_at),
 - roster presence per block (shift codes cut at each category's rotation time),
 - U-coded roster days (excluded from SF planning, D55),
+- roster days held out by a title rule (D87) and F3-shortened shifts (D92),
 - full-day absences,
 - DK/DKK priority for DK/ansvarsvakt (D41),
 - locked assignments: regeneration plans around them and never touches them (D22).
@@ -52,9 +53,10 @@ def load_demand(conn: sqlite3.Connection, day_type: str):
     return required, zone_total
 
 
-def day_roster(conn: sqlite3.Connection, date: dt.date) -> dict[str, str]:
-    """employee_id -> shift_code for SF planning that day: U-coded days (D55)
-    and employees with a full-day absence are excluded."""
+def day_shifts(conn: sqlite3.Connection, date: dt.date) -> dict[str, dict]:
+    """employee_id -> {code, start, end, category} for everyone SF can plan
+    that day. Left out: U-coded days (D55), full-day absences, and roster days
+    held out by a job-title rule (D87). `end` honours an F3 short day (D92)."""
     date_str = date.isoformat()
     absent = {
         row["employee_id"]
@@ -63,16 +65,25 @@ def day_roster(conn: sqlite3.Connection, date: dt.date) -> dict[str, str]:
             (date_str,),
         )
     }
-    roster = {}
+    shifts = {}
     for row in conn.execute(
-        """SELECT r.employee_id, r.shift_code, s.utpost_code FROM roster r
+        """SELECT r.employee_id, r.shift_code, r.hold, r.end_override,
+                  s.start, s.end, s.category, s.utpost_code FROM roster r
            JOIN shift_codes s ON s.code = r.shift_code WHERE r.date = ?""",
         (date_str,),
     ):
-        if row["utpost_code"] == "yes" or row["employee_id"] in absent:
+        if row["utpost_code"] == "yes" or row["employee_id"] in absent or row["hold"]:
             continue
-        roster[row["employee_id"]] = row["shift_code"]
-    return roster
+        shifts[row["employee_id"]] = {
+            "code": row["shift_code"], "start": row["start"],
+            "end": row["end_override"] or row["end"], "category": row["category"],
+        }
+    return shifts
+
+
+def day_roster(conn: sqlite3.Connection, date: dt.date) -> dict[str, str]:
+    """employee_id -> shift_code for everyone SF can plan that day."""
+    return {employee_id: shift["code"] for employee_id, shift in day_shifts(conn, date).items()}
 
 
 def suggest_day(conn: sqlite3.Connection, date: dt.date, source: str = "forslag") -> int:
@@ -81,18 +92,17 @@ def suggest_day(conn: sqlite3.Connection, date: dt.date, source: str = "forslag"
     Returns the number of assignments written (locked ones excluded)."""
     date_str = date.isoformat()
     day_type = domain.day_kind(date)
-    roster = day_roster(conn, date)
+    shifts = day_shifts(conn, date)
+    roster = {employee_id: shift["code"] for employee_id, shift in shifts.items()}
     required, zone_total = load_demand(conn, day_type)
     eligibility = service.eligible_functions(conn, date)
     rotations = service.rotation_times(conn)
-    shift_rows = {row["code"]: row for row in conn.execute("SELECT * FROM shift_codes")}
     uren_functions = [row["function_id"] for row in conn.execute(
         "SELECT function_id FROM functions WHERE zone_id = 'uren'")]
     dk_coded = {e for e, code in roster.items() if code in ("DK", "DKK")}
 
     groups: dict[domain.Segment, list[str]] = defaultdict(list)
-    for employee_id, code in roster.items():
-        shift = shift_rows[code]
+    for employee_id, shift in shifts.items():
         for segment in domain.shift_segments(
             date, domain.parse_time(shift["start"]), domain.parse_time(shift["end"]),
             rotations[shift["category"]],

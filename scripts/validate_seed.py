@@ -209,6 +209,12 @@ def main() -> int:
                     f"employee_restrictions.csv: {row['employee_id']}: bad {col} {row[col]!r}"
                 )
 
+    positions = load("positions.csv")
+    check_unique(positions, "title", "positions.csv")
+    for row in positions:
+        if row["rule"] not in ("vanlig", "aldri", "begrenset", "uavklart"):
+            errors.append(f"positions.csv: {row['title']!r}: unknown rule {row['rule']!r}")
+
     if errors:
         print(f"FAILED – {len(errors)} problem(s):")
         for error in errors:

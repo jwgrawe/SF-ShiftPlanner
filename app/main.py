@@ -4,13 +4,16 @@ Run:  python run.py   (or python -m uvicorn app.main:app --reload)
 
 Views (D2/D3/D23): /display (wall screen, portrait, published plans only),
 /plan (manager: overview -> week -> day -> edit, generate/publish),
-/admin (master data browser). PINs and absence registration come next;
+/import (the data the roster rests on: files, coverage, findings),
+/admin (settings, job titles, learned codes, master data browser). PINs and absence registration come next;
 until then the editing endpoints are open on the trusted machine (D25/D31).
 Preview any moment with ?date=YYYY-MM-DD&time=HH:MM on /display.
 """
 from __future__ import annotations
 
 import datetime as dt
+import os
+import time as time_module
 from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -20,7 +23,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from app import absences as absences_mod
-from app import checks, db, domain, planner, service
+from app import checks, db, domain, hr_import, planner, service
 
 try:
     TZ = ZoneInfo("Europe/Oslo")
@@ -36,6 +39,8 @@ TEMPLATES = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 # new URL, so the browser fetches it.
 _CSS = Path(__file__).parent / "static" / "app.css"
 TEMPLATES.env.globals["static_version"] = int(_CSS.stat().st_mtime) if _CSS.exists() else 0
+TEMPLATES.env.globals["is_demo"] = db.is_demo
+TEMPLATES.env.globals["kind_label"] = hr_import.kind_label
 
 app = FastAPI(title="SF-Planlegger", docs_url=None, redoc_url=None)
 app.mount(
@@ -43,9 +48,13 @@ app.mount(
 )
 
 
-def get_conn():
+def get_conn(refresh: bool = False):
+    """A connection; with refresh=True, new files in data/import/ are picked
+    up first (at most every 30 s, D91) — so pages stay current by themselves."""
     conn = db.get_conn()
     db.init_schema(conn)
+    if refresh:
+        hr_import.refresh(conn)
     return conn
 
 
@@ -68,7 +77,7 @@ def today_page(request: Request):
     """The manager's morning page: today's state, what needs attention, and
     the way into the coming weeks."""
     now = local_now()
-    conn = get_conn()
+    conn = get_conn(refresh=True)
     try:
         today = domain.operational_day(now)
         horizon = []
@@ -84,6 +93,7 @@ def today_page(request: Request):
             "weeks": service.build_overview_model(conn, today, n_weeks=3)["weeks"],
             "display": service.build_display_model(conn, now),
             "absences": absences_mod.day_absences(conn, today),
+            "import_findings": [] if db.is_demo() else service.import_findings(conn),
         }
     finally:
         conn.close()
@@ -96,7 +106,7 @@ def display(request: Request, date: str | None = None, time: str | None = None,
     """The wall board. The palette comes from the admin setting; `tema=lys`
     or `tema=mork` overrides it for a one-off preview (D69)."""
     now = resolve_now(date, time)
-    conn = get_conn()
+    conn = get_conn(refresh=True)
     try:
         model = service.build_display_model(conn, now)
         stored = service.get_setting(conn, "display_theme", "mork")
@@ -112,7 +122,7 @@ def display(request: Request, date: str | None = None, time: str | None = None,
 
 @app.get("/plan", response_class=HTMLResponse)
 def plan_overview(request: Request):
-    conn = get_conn()
+    conn = get_conn(refresh=True)
     try:
         model = service.build_overview_model(conn, local_now().date())
     finally:
@@ -140,7 +150,6 @@ def plan_day(request: Request, date: str, visning: str | None = None,
         model = service.build_day_model(conn, plan_date)
         model["checks"] = checks.day_checks(conn, plan_date)
         model["absences"] = absences_mod.day_absences(conn, plan_date)
-        model["absence_types"] = absences_mod.ABSENCE_TYPES
         model["employee_options"] = service.employee_options(conn, plan_date)
     finally:
         conn.close()
@@ -348,7 +357,7 @@ async def absence_add(request: Request):
             conn,
             employee_id=str(form["employee_id"]),
             date=plan_date,
-            absence_type=str(form.get("type", "Annet")),
+            absence_type="Fravær",  # no reasons are kept (D76)
             start=str(form.get("start", "")) or None,
             end=str(form.get("end", "")) or None,
             note=str(form.get("note", "")),
@@ -406,10 +415,16 @@ def admin(request: Request):
                LEFT JOIN functions f ON f.function_id = r.function_id
                ORDER BY r.employee_id"""))
         display_theme = service.get_setting(conn, "display_theme", "mork")
+        positions = service.positions_model(conn)
+        learned = list(conn.execute("SELECT * FROM learned_shift_codes ORDER BY code"))
+        all_functions = [f for f in functions if f["active"] == "yes"]
+        retention = hr_import.retention_days(conn)
     finally:
         conn.close()
     return TEMPLATES.TemplateResponse(request, "admin.html", {
-        "display_theme": display_theme,
+        "display_theme": display_theme, "positions": positions, "learned": learned,
+        "all_functions": all_functions, "retention": retention,
+        "categories": service.SHIFT_CATEGORY_ORDER,
         "functions": functions, "intensity": intensity, "shift_codes": shift_codes,
         "rotation_rules": rotation_rules, "settings": settings, "employees": employees,
         "competencies": competencies, "preferences": preferences,
@@ -419,12 +434,129 @@ def admin(request: Request):
 
 @app.post("/admin/innstillinger")
 async def admin_settings(request: Request):
-    """Admin-set app preferences. Currently just the wall board's palette."""
+    """Admin-set app preferences: the wall board's palette and how long past
+    data is kept (D94)."""
     form = await request.form()
     theme = str(form.get("display_theme", "mork"))
     conn = get_conn()
     try:
         service.set_setting(conn, "display_theme", theme if theme in ("lys", "mork") else "mork")
+        retention = str(form.get("retention_days", "")).strip()
+        if retention.isdigit() and 14 <= int(retention) <= 730:
+            service.set_setting(conn, "retention_days", retention)
     finally:
         conn.close()
     return RedirectResponse("/admin", status_code=303)
+
+
+@app.post("/admin/stillinger")
+async def admin_positions(request: Request):
+    """Classify job titles once (D87): planned normally, never, or not on
+    some functions. Rebuilds the roster so held days are released at once."""
+    form = await request.form()
+    conn = get_conn()
+    try:
+        with conn:
+            for key in [k for k in form.keys() if k.startswith("title_")]:
+                index = key.split("_", 1)[1]
+                title = str(form[key])
+                rule = str(form.get(f"rule_{index}", "uavklart"))
+                if rule not in ("vanlig", "aldri", "begrenset", "uavklart"):
+                    continue
+                current = conn.execute("SELECT rule FROM positions WHERE title = ?",
+                                       (title,)).fetchone()
+                if current is None:
+                    continue
+                if current["rule"] != rule:
+                    conn.execute("UPDATE positions SET rule = ?, classified_at = ? WHERE title = ?",
+                                 (rule, local_now().isoformat(timespec="seconds"), title))
+                    hr_import.log(conn, f"Stillingen «{title}» satt til «{rule}».")
+                conn.execute("DELETE FROM position_exclusions WHERE title = ?", (title,))
+                if rule == "begrenset":
+                    conn.executemany(
+                        "INSERT INTO position_exclusions (title, function_id) VALUES (?, ?)",
+                        [(title, str(f)) for f in form.getlist(f"excl_{index}")])
+        if not db.is_demo():
+            hr_import.rebuild(conn)
+    finally:
+        conn.close()
+    return RedirectResponse("/admin#stillinger", status_code=303)
+
+
+@app.post("/admin/vaktkoder")
+async def admin_learned_codes(request: Request):
+    """Confirm (or correct) the category of codes learned from a turnus."""
+    form = await request.form()
+    allowed = set(service.SHIFT_CATEGORY_ORDER)
+    conn = get_conn()
+    try:
+        with conn:
+            for key in [k for k in form.keys() if k.startswith("code_")]:
+                index = key.split("_", 1)[1]
+                code = str(form[key])
+                category = str(form.get(f"category_{index}", ""))
+                if category not in allowed:
+                    continue
+                conn.execute("UPDATE learned_shift_codes SET category = ?, confirmed = 1 "
+                             "WHERE code = ?", (category, code))
+                conn.execute("UPDATE shift_codes SET category = ? WHERE code = ? AND code IN "
+                             "(SELECT code FROM learned_shift_codes)", (category, code))
+        if not db.is_demo():
+            hr_import.rebuild(conn)
+    finally:
+        conn.close()
+    return RedirectResponse("/admin#vaktkoder", status_code=303)
+
+
+# ---------------------------------------------------------------------------
+# Data sources: imported turnus and ukeplan files (real mode)
+
+@app.get("/import", response_class=HTMLResponse)
+def import_page(request: Request, melding: str | None = None):
+    conn = get_conn(refresh=True)
+    try:
+        model = service.build_import_model(conn, domain.operational_day(local_now()))
+        model["retention"] = hr_import.retention_days(conn)
+    finally:
+        conn.close()
+    model["last_refresh"] = hr_import.last_refresh()
+    model["last_error"] = hr_import.last_error
+    model["inbox"] = hr_import.INBOX
+    model["melding"] = melding
+    return TEMPLATES.TemplateResponse(request, "import.html", model)
+
+
+@app.post("/import/sjekk")
+async def import_check(request: Request):
+    conn = get_conn()
+    try:
+        messages = hr_import.refresh(conn, force=True)
+    finally:
+        conn.close()
+    note = "ingen nye filer" if not messages else f"{len(messages)} fil(er) behandlet"
+    return RedirectResponse(f"/import?melding={note}", status_code=303)
+
+
+@app.post("/import/last-opp")
+async def import_upload(request: Request):
+    """Put uploaded files in data/import/ — exactly as if copied there — and
+    process them right away."""
+    form = await request.form()
+    saved = 0
+    if not db.is_demo():
+        hr_import.INBOX.mkdir(parents=True, exist_ok=True)
+        for upload in form.getlist("filer"):
+            name = Path(getattr(upload, "filename", "") or "").name
+            if not name or Path(name).suffix.lower() not in (".csv", ".xlsx"):
+                continue
+            target = hr_import.INBOX / name
+            target.write_bytes(await upload.read())
+            past = time_module.time() - 10   # so the inbox doesn't take it as still copying
+            os.utime(target, (past, past))
+            saved += 1
+    conn = get_conn()
+    try:
+        hr_import.refresh(conn, force=True)
+    finally:
+        conn.close()
+    return RedirectResponse(f"/import?melding={saved} fil(er) lastet opp", status_code=303)

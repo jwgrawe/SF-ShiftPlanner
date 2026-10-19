@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+{% block title %}Datagrunnlag – SF-Planlegger{% endblock %}
+{% block content %}
+<h1>Datagrunnlag</h1>
+
+{% if is_demo() %}
+  <p class="note">Demo-modus: vaktlisten er generert, og import av turnus og ukeplan er slått av.
+  Start appen med <code>python run.py</code> (uten <code>--demo</code>) for å bruke ekte data.</p>
+{% else %}
+
+<p>Turnusen (<strong>Plan</strong>) og ukeplanene (<strong>Ajourhold</strong>) leses fra mappen
+<code>{{ inbox }}</code>. Legg eksportfilene der – eller last dem opp her – så leses de inn
+automatisk. Den nyeste filen som dekker en dato gjelder; ukeplanen går foran turnusen for de som
+står i den.</p>
+
+{% if melding %}<p class="note">{{ melding|capitalize }}.</p>{% endif %}
+
+<form method="post" action="/import/last-opp" enctype="multipart/form-data" class="card">
+  <div class="uploadrow">
+    <label for="filer"><strong>Last opp filer</strong></label>
+    <input id="filer" type="file" name="filer" accept=".csv,.xlsx" multiple>
+    <button class="btn" type="submit">Last opp og les inn</button>
+    <span class="muted small">Turnus (Utskrift_fleksiplan_….csv), ukeplan (Ukeplan_….csv) eller kompetansefil (.xlsx).</span>
+  </div>
+</form>
+<div class="actions">
+  <form method="post" action="/import/sjekk">
+    <button class="btn secondary" type="submit">Se etter nye filer nå</button>
+  </form>
+  <span class="muted small">
+    {% if last_refresh %}Sist sjekket {{ last_refresh.strftime("%H:%M:%S") }}.{% endif %}
+    Appen sjekker selv hvert halve minutt mens den er i bruk.
+    {% if built_at %}Vaktlisten bygget {{ built_at.replace("T", " kl. ")[:-3] }}.{% endif %}
+  </span>
+</div>
+
+{% if last_error %}
+  <p class="note"><strong>Siste oppdatering feilet</strong> – vaktlisten fra forrige vellykkede
+  oppdatering gjelder fortsatt. Feil: <code>{{ last_error }}</code></p>
+{% endif %}
+
+<h2>Trenger oppmerksomhet</h2>
+{% if findings %}
+  <ul class="warn-list">
+    {% for finding in findings %}<li class="{{ finding.level }}">{{ finding.text }}</li>{% endfor %}
+  </ul>
+{% else %}
+  <p class="muted">Ingen avvik i datagrunnlaget.</p>
+{% endif %}
+
+<h2>Dekning per uke</h2>
+<div class="tablewrap"><table class="srcgrid">
+  <tr><th>Uke</th><th>Datoer</th><th>Turnus (Plan)</th><th>Ukeplan (Ajourhold)</th><th>På vakt</th></tr>
+  {% for week in weeks %}
+    <tr class="{% if week.current %}current{% elif week.past %}past{% endif %}">
+      <td><a href="/plan/uke?start={{ week.monday }}">Uke {{ week.iso_week }}</a>{% if week.current %} <span class="muted small">(denne)</span>{% endif %}</td>
+      <td>{{ week.monday.strftime("%d.%m") }}–{{ week.sunday.strftime("%d.%m") }}</td>
+      <td>
+        {% if week.plan and week.plan_full %}<span class="src-ok">✓</span> {{ week.plan.filename }}
+        {% elif week.plan %}<span class="src-part">delvis</span> {{ week.plan.filename }}
+        {% else %}<span class="src-miss">mangler</span>{% endif %}
+      </td>
+      <td>
+        {% if week.ukeplan %}<span class="src-ok">✓</span> eksportert {{ week.ukeplan_at.strftime("%d.%m kl. %H:%M") }}
+        {% elif week.past %}<span class="muted">–</span>
+        {% else %}<span class="src-miss">ingen</span> <span class="muted small">(turnusen brukes)</span>{% endif %}
+      </td>
+      <td>{{ week.on_duty or "–" }}</td>
+    </tr>
+  {% endfor %}
+</table></div>
+
+{% if pending %}
+  <h2>Vakter som ikke kan planlegges ennå</h2>
+  <p class="muted small">Disse holdes utenfor planen til årsaken er ryddet opp – appen gjetter aldri.</p>
+  <div class="tablewrap"><table>
+    <tr><th>Dato</th><th>Ansatt</th><th>Kode i filen</th><th>Årsak</th></tr>
+    {% for row in pending %}
+      <tr><td>{{ row.date.strftime("%d.%m.%Y") }}</td><td>{{ row.display_name }}</td>
+          <td><code>{{ row.raw }}</code></td><td>{{ row.reason }}</td></tr>
+    {% endfor %}
+  </table></div>
+{% endif %}
+
+<h2>Filer</h2>
+<div class="tablewrap"><table>
+  <tr><th>Fil</th><th>Type</th><th>Gjelder</th><th>Eksportert</th><th>Lest inn</th><th>Status</th></tr>
+  {% for file in files %}
+    <tr>
+      <td>{{ file.filename }}
+        {% if file.reasons and file.status == "rejected" %}
+          <ul class="reasons">{% for reason in file.reasons %}<li>{{ reason }}</li>{% endfor %}</ul>
+        {% endif %}</td>
+      <td>{{ kind_label(file.kind) }}</td>
+      <td>{% if file.first %}{{ file.first.strftime("%d.%m.%Y") }}–{{ file.last.strftime("%d.%m.%Y") }}{% if file.person_count %} · {{ file.person_count }} rader{% endif %}
+          {% elif file.person_count %}{{ file.person_count }} personer{% else %}–{% endif %}</td>
+      <td>{{ file.exported.strftime("%d.%m.%Y %H:%M") if file.exported else "–" }}</td>
+      <td>{{ file.imported.strftime("%d.%m.%Y %H:%M") }}</td>
+      <td>
+        {% if file.status == "active" %}<span class="badge published">i bruk</span>
+        {% elif file.status == "superseded" %}<span class="badge soft">erstattet</span>
+        {% else %}<span class="badge alert">avvist</span>{% endif %}
+      </td>
+    </tr>
+  {% else %}
+    <tr><td colspan="6" class="muted">Ingen filer er lest inn ennå.</td></tr>
+  {% endfor %}
+</table></div>
+<p class="muted small">Leste filer flyttes til <code>arkiv/</code>, avviste til <code>avvist/</code>
+(med en .txt som forklarer hvorfor – varselet står til filen er fjernet derfra). Rådata for erstattede filer slettes straks; alt eldre enn
+{{ retention }} dager slettes automatisk (endres under Administrasjon).</p>
+
+{% if log %}
+  <h2>Logg</h2>
+  <div class="tablewrap"><table>
+    {% for entry in log %}
+      <tr><td style="width:10rem" class="muted">{{ entry.at.strftime("%d.%m %H:%M") }}</td><td>{{ entry.text }}</td></tr>
+    {% endfor %}
+  </table></div>
+{% endif %}
+{% endif %}
+{% endblock %}

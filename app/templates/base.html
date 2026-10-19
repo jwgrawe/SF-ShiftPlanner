@@ -16,9 +16,12 @@
       <a href="/">I dag</a>
       <a href="/display">Tavle</a>
       <a href="/plan">Planlegging</a>
+      <a href="/import">Datagrunnlag</a>
       <a href="/admin">Administrasjon</a>
     </nav>
-    <span class="muted small" style="margin-left:auto">Prototype (M2)</span>
+    <span class="muted small" style="margin-left:auto">
+      {% if is_demo() %}<span class="badge demo" title="Fiktive ansatte og generert vaktliste – egen database">DEMO</span>{% endif %}
+      Prototype (M2)</span>
   </header>
   {% endblock %}
   <main>{% block content %}{% endblock %}</main>

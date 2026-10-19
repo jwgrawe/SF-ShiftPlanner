@@ -171,6 +171,37 @@ def day_checks(conn: sqlite3.Connection, plan_date: dt.date) -> list[dict]:
                          "text": f"{row['display_name']} er meldt fraværende, men står "
                                  "fortsatt i planen."})
 
+    # Placed but not (or no longer) on duty, or outside their shift's hours —
+    # e.g. a newer ukeplan changed the shift after the plan was made (D93).
+    shifts = planner.day_shifts(conn, plan_date)
+    off_duty, moved = set(), set()
+    for row in conn.execute(
+        """SELECT a.employee_id, a.start, a.end, e.display_name FROM assignments a
+           JOIN employees e ON e.employee_id = a.employee_id WHERE a.plan_date = ?""",
+        (date_str,),
+    ):
+        shift = shifts.get(row["employee_id"])
+        if shift is None:
+            off_duty.add(row["display_name"])
+            continue
+        s_start = dt.datetime.combine(plan_date, domain.parse_time(shift["start"]))
+        s_end = dt.datetime.combine(plan_date, domain.parse_time(shift["end"]))
+        if s_end <= s_start:
+            s_end += dt.timedelta(days=1)
+        a_start = dt.datetime.combine(plan_date, domain.parse_time(row["start"]))
+        a_end = dt.datetime.combine(plan_date, domain.parse_time(row["end"]))
+        if a_end <= a_start:
+            a_end += dt.timedelta(days=1)
+        if a_start < s_start or a_end > s_end:
+            moved.add(row["display_name"])
+    if off_duty:
+        findings.append({"level": "alert", "kind": "off_duty", "date": plan_date,
+                         "text": f"I planen, men ikke på vakt (lenger): {', '.join(sorted(off_duty))}."})
+    if moved:
+        findings.append({"level": "warn", "kind": "shift_changed", "date": plan_date,
+                         "text": f"Vakttiden er endret etter at planen ble laget for "
+                                 f"{', '.join(sorted(moved))} – lag forslag på nytt."})
+
     # Rostered but unplanned (weekdays; weekends are ad hoc by design, D21).
     if day_type == "weekday":
         assigned = {row["employee_id"] for row in conn.execute(

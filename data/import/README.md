@@ -1,35 +1,30 @@
-# The import folder (spec — not yet implemented)
+# data/import — the inbox for real data
 
 > **Real data lives here — and never reaches git.** Everything in this folder
 > except this README is git-ignored, because the repository is public (D78).
-> Put the Plan (turnus) and Ajourhold (ukeplan) CSV exports here. To share
-> their *structure* with a developer, run `python scripts/anonymise_export.py`
-> — see [data/private/README.md](../private/README.md).
 
-At runtime the app reads its master data from a folder like this one, per
-decision D29. Managers and admins maintain a small number of Excel files and
-press "Importer på nytt" in the admin view (or run a CLI command). See
-[docs/assessment.md](../../docs/assessment.md) §4 for the full design.
+Drop the exports from the HR system here (or upload them under
+«Datagrunnlag» in the app). While the app is open it looks for new files every
+30 seconds (D91):
 
-Planned contents:
-
-| File | Owner | Sheets |
+| File | From | How often |
 |---|---|---|
-| `grunndata.xlsx` | admin | Funksjoner · Funksjonskompetanser · Bemanningsbehov · Intensitet · Vaktkoder · Rulleringsregler · Planleggingsinnstillinger · Åpningstider · Ukedagsregler |
-| `personal.xlsx` | managers | Ansatte · Kompetanse · Preferanser · Fritak · Fravær (importable and definable in-app, D60) |
-| Plan export (turnus, CSV) | roster system, yearly | dropped in as-is; parsed by a dedicated adapter once the layout is known from the anonymised copy (Q1, D73) |
-| Ajourhold export (ukeplan, CSV) | a manager, weekly | dropped in as-is; wins over Plan for the week it covers (D73). On refresh, published plans are re-validated and conflicts flagged |
+| `Utskrift_fleksiplan_<ÅÅÅÅMMDDttmmss>.csv` | Plan («Utskrift fleksiplan», the turnus) | whenever a turnus is made or revised |
+| `Ukeplan_<ÅÅÅÅMMDDttmmss>.csv` | Ajourhold (the week plan) | one file per week — re-exports are fine, the newest wins |
+| `*.xlsx` | the competency matrix, names written exactly as in the turnus | when it changes |
 
-Note on sensitivity: the Preferanser sheet (and Fritak) carries information
-that is only ever surfaced in the admin view (D32/D11) — the import folder
-should live with the app in its access-controlled location.
+What happens to a file:
 
-Import rules: validate first, show a diff summary, refuse to delete master
-data referenced by published plans, then upsert. Idempotent — re-importing an
-unchanged file changes nothing. **Structure-drift detection** (D54): before
-importing, the file's sheets and columns are compared against what the app
-expects, and any mismatch (merged, missing, renamed or new columns) is
-reported to the admin/manager as a warning instead of a silent misread.
+- **read** → moved to `arkiv/`; its data goes into the database. Raw files are
+  deleted once a newer file replaces them, and everything older than the
+  retention period (92 days by default, D94).
+- **refused** → moved to `avvist/` together with a `.txt` explaining exactly
+  what was expected and what was found (D85/D90). It stays on the app's
+  attention list until you remove it from `avvist/`. Fix the export and drop
+  the new file here.
+- **the same file again** → recognised and ignored.
 
-The two workbooks will be generated from `data/seed/` when milestone M1
-starts, so the department edits familiar, pre-filled files from day one.
+The formats are specified in [docs/source-data-findings.md §5](../../docs/source-data-findings.md).
+How the roster is built from them: D73, D82, D86–D95 in
+[docs/decisions.md](../../docs/decisions.md). To share a file's *structure*
+with a developer, anonymise it first: [data/private/README.md](../private/README.md).

@@ -151,10 +151,10 @@
 <h2>Fravær</h2>
 {% if absences %}
   <div class="tablewrap"><table>
-    <tr><th style="width:14rem">Ansatt</th><th style="width:10rem">Type</th><th style="width:10rem">Tid</th><th>Merknad</th><th style="width:6rem"></th></tr>
+    <tr><th style="width:14rem">Ansatt</th><th style="width:10rem">Tid</th><th>Merknad</th><th style="width:6rem"></th></tr>
     {% for absence in absences %}
       <tr>
-        <td>{{ absence.display_name }}</td><td>{{ absence.type }}</td>
+        <td>{{ absence.display_name }}</td>
         <td>{% if absence.start %}{{ absence.start }}–{{ absence.end }}{% else %}hele dagen{% endif %}</td>
         <td class="muted">{{ absence.note }}</td>
         <td>
@@ -185,11 +185,6 @@
           {% endfor %}
         </select>
       </label>
-      <label>Type:
-        <select name="type">
-          {% for type in absence_types %}<option>{{ type }}</option>{% endfor %}
-        </select>
-      </label>
       <label class="muted small">Deler av dagen (valgfritt):
         <input type="time" name="start"> – <input type="time" name="end">
       </label>
@@ -200,12 +195,23 @@
 
 <h2>Vaktliste denne dagen</h2>
 <div class="tablewrap"><table>
-  <tr><th>Ansatt</th><th>Vaktkode</th><th>Kategori</th><th>Tid</th></tr>
+  <tr><th>Ansatt</th><th>Vaktkode</th><th>Kategori</th><th>Tid</th><th>Merknad</th></tr>
   {% for row in roster %}
     <tr><td>{{ row.display_name }}</td><td>{{ row.shift_code }}</td>
-        <td>{{ row.category }}</td><td>{{ row.start }}–{{ row.end }}</td></tr>
+        <td>{{ row.category }}</td>
+        <td>{% if row.start %}{{ row.start }}–{{ row.end }}{% else %}–{% endif %}</td>
+        <td class="small">
+          {% if row.pending %}<span class="badge alert">kan ikke planlegges</span> {{ row.pending }}
+          {% elif row.hold == "aldri" %}<span class="badge soft">holdes utenfor</span> stilling «{{ row.title }}» planlegges ikke
+          {% elif row.hold == "uavklart" %}<span class="badge alert">holdes utenfor</span> ny stilling «{{ row.title }}» – <a href="/admin#stillinger">klassifiser</a>
+          {% elif row.hold == "tvetydig" %}<span class="badge alert">holdes utenfor</span> uklart hvilken stilling vakten gjelder
+          {% elif row.utpost_code == "yes" %}<span class="muted">utpost</span>
+          {% endif %}
+          {% if row.end_override %}<span class="muted">slutter kl. {{ row.end_override }} (helligdagsaften)</span>{% endif %}
+          {% if row.source == "ajourhold" %}<span class="muted">· fra ukeplan</span>{% endif %}
+        </td></tr>
   {% else %}
-    <tr><td colspan="4" class="muted">Ingen vaktliste importert for denne dagen.</td></tr>
+    <tr><td colspan="5" class="muted">Ingen på vakt denne dagen{% if not is_demo() %} ifølge turnus og ukeplan (<a href="/import">datagrunnlag</a>){% endif %}.</td></tr>
   {% endfor %}
 </table></div>
 {% endblock %}

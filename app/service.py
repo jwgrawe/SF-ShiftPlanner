@@ -1,9 +1,10 @@
 """Read-side services: eligibility resolution and view models for the pages.
 
-Eligibility (assessment §2.1, D17/D32/D40/D44/D56): an employee may hold a
-function iff they have a qualifying competency for it, are not restricted
+Eligibility (assessment §2.1, D17/D32/D40/D44/D56/D87): an employee may hold
+a function iff they have a qualifying competency for it, are not restricted
 from it (per-function or heavy-work fritak), the function is on their
-preference allowlist when one exists, and they work in SF.
+preference allowlist when one exists, they work in SF, and the job title they
+work under that day doesn't exclude it.
 """
 from __future__ import annotations
 
@@ -75,6 +76,18 @@ def eligible_functions(conn: sqlite3.Connection, on_date: dt.date) -> dict[str, 
         for row in conn.execute("SELECT employee_id FROM employees WHERE works_at = 'sf'")
     ]
 
+    # Title rules (D87): «aldri»/«uavklart» exclude every function (those days
+    # are also held out of the roster), «begrenset» excludes the listed ones.
+    rules = {row["title"]: row["rule"] for row in conn.execute("SELECT title, rule FROM positions")}
+    excluded: dict[str, set[str]] = defaultdict(set)
+    for row in conn.execute("SELECT title, function_id FROM position_exclusions"):
+        excluded[row["title"]].add(row["function_id"])
+    titles = {
+        row["employee_id"]: row["title"]
+        for row in conn.execute(
+            "SELECT employee_id, title FROM roster WHERE date = ? AND title IS NOT NULL", (date_str,))
+    }
+
     result: dict[str, set[str]] = {}
     for employee_id in sf_employees:
         functions = {
@@ -85,6 +98,12 @@ def eligible_functions(conn: sqlite3.Connection, on_date: dt.date) -> dict[str, 
         functions -= blocked.get(employee_id, set())
         if preferences.get(employee_id):
             functions &= preferences[employee_id]
+        title = titles.get(employee_id)
+        rule = rules.get(title) if title else None
+        if rule in ("aldri", "uavklart"):
+            functions = set()
+        elif rule == "begrenset":
+            functions -= excluded[title]
         result[employee_id] = functions
     return result
 
@@ -246,10 +265,12 @@ def build_display_model(conn: sqlite3.Connection, now: dt.datetime) -> dict:
     adhoc_crew = []
     if kind == "weekend_holiday":
         for row in conn.execute(
-            """SELECT r.employee_id, e.display_name, r.shift_code, s.start, s.end
+            """SELECT r.employee_id, e.display_name, r.shift_code, s.start,
+                      COALESCE(r.end_override, s.end) AS end
                FROM roster r JOIN employees e ON e.employee_id = r.employee_id
                JOIN shift_codes s ON s.code = r.shift_code
-               WHERE r.date = ? ORDER BY e.display_name""",
+               WHERE r.date = ? AND r.hold IS NULL AND s.utpost_code <> 'yes'
+               ORDER BY e.display_name""",
             (plan_date.isoformat(),),
         ):
             if row["employee_id"] not in active_ids:
@@ -280,7 +301,7 @@ def _day_status(conn: sqlite3.Connection, date: dt.date) -> dict:
     date_str = date.isoformat()
     plan = plan_day_row(conn, date)
     roster_count = conn.execute(
-        "SELECT COUNT(*) FROM roster WHERE date = ?", (date_str,)
+        "SELECT COUNT(*) FROM roster WHERE date = ? AND hold IS NULL", (date_str,)
     ).fetchone()[0]
     assignment_count = conn.execute(
         "SELECT COUNT(*) FROM assignments WHERE plan_date = ?", (date_str,)
@@ -310,6 +331,7 @@ def build_overview_model(conn: sqlite3.Connection, from_date: dt.date, n_weeks: 
         weeks.append({
             "monday": monday,
             "iso_week": monday.isocalendar().week,
+            "sources": week_sources(conn, monday),
             "days": days,
             "has_roster": any(day["roster_count"] for day in days),
             "planned_days": sum(1 for day in days if day["status"]),
@@ -341,7 +363,8 @@ def build_week_model(conn: sqlite3.Connection, monday: dt.date) -> dict:
         for row in conn.execute(
             """SELECT r.employee_id, e.display_name, s.category FROM roster r
                JOIN employees e ON e.employee_id = r.employee_id
-               JOIN shift_codes s ON s.code = r.shift_code WHERE r.date = ?""",
+               JOIN shift_codes s ON s.code = r.shift_code
+               WHERE r.date = ? AND r.hold IS NULL""",
             (date_str,),
         ):
             names.setdefault(row["employee_id"], row["display_name"])
@@ -543,11 +566,19 @@ def build_day_model(conn: sqlite3.Connection, plan_date: dt.date) -> dict:
         })
 
     roster_rows = list(conn.execute(
-        """SELECT e.display_name, r.shift_code, s.category, s.start, s.end
+        """SELECT e.display_name, r.shift_code, s.category, s.start,
+                  COALESCE(r.end_override, s.end) AS end, r.end_override, r.hold, r.title,
+                  r.raw, r.source, s.utpost_code, NULL AS pending
            FROM roster r JOIN employees e ON e.employee_id = r.employee_id
            JOIN shift_codes s ON s.code = r.shift_code
-           WHERE r.date = ? ORDER BY s.start, e.display_name""",
-        (plan_date.isoformat(),),
+           WHERE r.date = ?
+           UNION ALL
+           SELECT e.display_name, p.raw, '', '', '', NULL, NULL, NULL, p.raw, p.source, 'no',
+                  p.reason
+           FROM roster_pending p JOIN employees e ON e.employee_id = p.employee_id
+           WHERE p.date = ?
+           ORDER BY 4, 1""",
+        (plan_date.isoformat(), plan_date.isoformat()),
     ))
     status = _day_status(conn, plan_date)
     plan = plan_day_row(conn, plan_date)
@@ -610,7 +641,7 @@ def employee_options(conn: sqlite3.Connection, plan_date: dt.date) -> list[sqlit
     return list(conn.execute(
         """SELECT r.employee_id, e.display_name, r.shift_code
            FROM roster r JOIN employees e ON e.employee_id = r.employee_id
-           WHERE r.date = ? ORDER BY e.display_name""",
+           WHERE r.date = ? AND r.hold IS NULL ORDER BY e.display_name""",
         (plan_date.isoformat(),),
     ))
 
@@ -681,3 +712,79 @@ def build_person_model(
         "first": first,
         "last": last,
     }
+
+
+# --------------------------------------------------------------------------
+# Data sources (real mode): which turnus/ukeplan each week rests on (D75)
+
+def week_sources(conn: sqlite3.Connection, monday: dt.date) -> dict:
+    """The newest turnus and ukeplan behind one week."""
+    first, last = monday.isoformat(), (monday + dt.timedelta(days=6)).isoformat()
+    plan = conn.execute(
+        """SELECT * FROM import_files WHERE kind = 'plan' AND status = 'active'
+           AND first_date <= ? AND last_date >= ? ORDER BY exported_at DESC LIMIT 1""",
+        (last, first)).fetchone()
+    full_plan = plan is not None and plan["first_date"] <= first and plan["last_date"] >= last
+    ukeplan = conn.execute(
+        """SELECT * FROM import_files WHERE kind = 'ajourhold' AND status = 'active'
+           AND first_date = ? ORDER BY exported_at DESC LIMIT 1""", (first,)).fetchone()
+    return {
+        "plan": plan, "plan_full": full_plan, "ukeplan": ukeplan,
+        "ukeplan_at": dt.datetime.fromisoformat(ukeplan["exported_at"]) if ukeplan else None,
+    }
+
+
+def import_findings(conn: sqlite3.Connection) -> list[sqlite3.Row]:
+    return list(conn.execute("SELECT * FROM import_findings ORDER BY finding_id"))
+
+
+def build_import_model(conn: sqlite3.Connection, today: dt.date) -> dict:
+    monday = monday_of(today)
+    weeks = []
+    for offset in range(-1, 9):
+        start = monday + dt.timedelta(days=7 * offset)
+        sources = week_sources(conn, start)
+        on_duty = conn.execute(
+            "SELECT COUNT(DISTINCT employee_id) FROM roster WHERE date BETWEEN ? AND ? "
+            "AND hold IS NULL",
+            (start.isoformat(), (start + dt.timedelta(days=6)).isoformat())).fetchone()[0]
+        weeks.append({"monday": start, "sunday": start + dt.timedelta(days=6),
+                      "iso_week": start.isocalendar().week,
+                      "current": offset == 0, "past": offset < 0, "on_duty": on_duty,
+                      **sources})
+    files = []
+    for row in conn.execute("SELECT * FROM import_files ORDER BY imported_at DESC, file_id DESC"):
+        files.append({
+            **dict(row),
+            "exported": dt.datetime.fromisoformat(row["exported_at"]) if row["exported_at"] else None,
+            "imported": dt.datetime.fromisoformat(row["imported_at"]),
+            "first": dt.date.fromisoformat(row["first_date"]) if row["first_date"] else None,
+            "last": dt.date.fromisoformat(row["last_date"]) if row["last_date"] else None,
+            "reasons": (row["reason"] or "").splitlines(),
+        })
+    log = [{"at": dt.datetime.fromisoformat(r["at"]), "text": r["text"]} for r in conn.execute(
+        "SELECT at, text FROM import_log ORDER BY log_id DESC LIMIT 30")]
+    pending = [
+        {**dict(r), "date": dt.date.fromisoformat(r["date"])}
+        for r in conn.execute(
+            """SELECT p.date, p.raw, p.reason, e.display_name FROM roster_pending p
+               JOIN employees e ON e.employee_id = p.employee_id
+               WHERE p.date >= ? ORDER BY p.date, e.display_name""", (today.isoformat(),))
+    ]
+    return {"weeks": weeks, "files": files, "log": log, "pending": pending,
+            "findings": import_findings(conn),
+            "built_at": get_setting(conn, "roster_built_at", "")}
+
+
+def positions_model(conn: sqlite3.Connection) -> list[dict]:
+    exclusions: dict[str, set[str]] = defaultdict(set)
+    for row in conn.execute("SELECT title, function_id FROM position_exclusions"):
+        exclusions[row["title"]].add(row["function_id"])
+    counts = {row["title"]: row["n"] for row in conn.execute(
+        "SELECT title, COUNT(DISTINCT employee_id) AS n FROM roster WHERE title IS NOT NULL "
+        "GROUP BY title")}
+    return [
+        {**dict(row), "excluded": exclusions[row["title"]], "people": counts.get(row["title"], 0)}
+        for row in conn.execute(
+            "SELECT * FROM positions ORDER BY rule = 'uavklart' DESC, title")
+    ]

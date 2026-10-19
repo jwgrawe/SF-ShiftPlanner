@@ -90,6 +90,7 @@ tr:last-child td { border-bottom: none; }
 .badge.edited    { background: var(--info-bg);  color: var(--info-ink);  border: 1px solid var(--info-line); }
 .badge.alert     { background: var(--alert-bg); color: var(--alert-ink); border: 1px solid var(--alert-line); }
 .badge.soft      { background: var(--surface-2); color: var(--ink-soft); border: 1px solid var(--line); }
+.badge.demo      { background: #6b4f9e; color: #fff; letter-spacing: 0.08em; }
 
 /* ------------------------------------------------------- buttons & notes */
 .btn {
@@ -224,6 +225,19 @@ th.dayhead .sub { display: block; font-weight: 400; text-transform: none; letter
 .warn-list li.warn  { border-left-color: #c79a3a; background: var(--warn-bg);  color: var(--warn-ink); }
 .warn-list li.info  { border-left-color: var(--ink-faint); }
 .warn-list .where { font-weight: 600; }
+
+/* ------------------------------------------------------- data sources */
+.srcgrid td { white-space: nowrap; }
+.src-ok   { color: var(--ok-ink); font-weight: 600; }
+.src-miss { color: var(--alert-ink); font-weight: 600; }
+.src-part { color: var(--warn-ink); font-weight: 600; }
+tr.current td { background: var(--accent-soft); }
+tr.past td { color: var(--ink-faint); }
+.weeklabel .src { display: block; font-size: 0.74rem; line-height: 1.3; }
+.reasons { margin: 0.2rem 0 0; padding-left: 1.1rem; font-size: 0.88rem; }
+.uploadrow { display: flex; gap: 0.6rem; flex-wrap: wrap; align-items: center; }
+.excl { display: flex; flex-wrap: wrap; gap: 0.2rem 0.9rem; font-size: 0.86rem; margin-top: 0.3rem; }
+.excl label { white-space: nowrap; }
 
 /* ================================================================ DISPLAY */
 /* Wall screen: portrait, published plans only. Sizes are in `em` on a

@@ -9,10 +9,27 @@
   {% if now_day.manually_edited %}<span class="badge edited">manuelt endret</span>{% endif %}
 </h1>
 
+{% set source_issues = import_findings|selectattr("level", "in", ["alert", "warn"])|list %}
+{% if source_issues %}
+  <div class="card">
+    <strong>Datagrunnlaget</strong>
+    <span class="muted small">– turnus og ukeplaner (<a href="/import">se alt</a>)</span>
+    <ul class="warn-list" style="margin-top:0.5rem">
+      {% for finding in source_issues[:6] %}<li class="{{ finding.level }}">{{ finding.text }}</li>{% endfor %}
+    </ul>
+    {% if source_issues|length > 6 %}<a href="/import">… og {{ source_issues|length - 6 }} til</a>{% endif %}
+  </div>
+{% endif %}
+
 <div class="card">
   {% if not now_day.roster_count %}
-    Ingen vaktliste for i dag. Demo-dataene dekker fire uker fra mandag denne uken –
-    kjør <code>python scripts/make_demo_data.py</code> for å bygge dem på nytt.
+    {% if is_demo() %}
+      Ingen vaktliste for i dag. Demo-dataene dekker fire uker fra mandag denne uken –
+      kjør <code>python scripts/make_demo_data.py</code> for å bygge dem på nytt.
+    {% else %}
+      Ingen på vakt i dag ifølge turnus og ukeplan. Mangler det data, legg eksportfilene i
+      <code>data/import/</code> eller last dem opp under <a href="/import">Datagrunnlag</a>.
+    {% endif %}
   {% else %}
   <strong>{{ now_day.roster_count }}</strong> på vakt i dag ·
   {% if display.next_change %}neste rullering kl. <strong>{{ display.next_change.strftime("%H:%M") }}</strong>
@@ -56,6 +73,10 @@
     <div class="weeklabel">
       <a class="stretch" href="/plan/uke?start={{ week.monday }}">Uke {{ week.iso_week }}</a><br>
       <span class="muted small">{% if week.has_roster %}{{ week.published_days }}/7 publisert{% else %}ingen vaktliste{% endif %}</span>
+      {% if not is_demo() %}
+        {% if week.sources.ukeplan %}<span class="src src-ok">ukeplan ✓</span>
+        {% else %}<span class="src src-miss">ingen ukeplan</span>{% endif %}
+      {% endif %}
     </div>
     {% for day in week.days %}
       <div class="daycell">
@@ -74,10 +95,10 @@
 {% if absences %}
   <h2>Fravær i dag</h2>
   <div class="tablewrap"><table>
-    <tr><th>Ansatt</th><th>Type</th><th>Tid</th><th>Merknad</th><th></th></tr>
+    <tr><th>Ansatt</th><th>Tid</th><th>Merknad</th><th></th></tr>
     {% for absence in absences %}
       <tr>
-        <td>{{ absence.display_name }}</td><td>{{ absence.type }}</td>
+        <td>{{ absence.display_name }}</td>
         <td>{% if absence.start %}{{ absence.start }}–{{ absence.end }}{% else %}hele dagen{% endif %}</td>
         <td class="muted">{{ absence.note }}</td>
         <td>
