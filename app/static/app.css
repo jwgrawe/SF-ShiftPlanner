@@ -239,6 +239,121 @@ tr.past td { color: var(--ink-faint); }
 .excl { display: flex; flex-wrap: wrap; gap: 0.2rem 0.9rem; font-size: 0.86rem; margin-top: 0.3rem; }
 .excl label { white-space: nowrap; }
 
+/* -------------------------------------------------------------- tabs */
+.tabs { display: flex; gap: 0.2rem; border-bottom: 1px solid var(--line); margin: 0.2rem 0 1rem; flex-wrap: wrap; }
+.tabs a {
+  padding: 0.5rem 0.95rem; text-decoration: none; color: var(--ink-soft); font-weight: 600;
+  border-bottom: 3px solid transparent; margin-bottom: -1px; border-radius: 6px 6px 0 0;
+}
+.tabs a:hover { color: var(--accent); background: var(--accent-soft); }
+.tabs a.active { color: var(--accent); border-bottom-color: var(--accent); }
+.tabbadge {
+  display: inline-block; min-width: 1.25rem; padding: 0 0.35rem; margin-left: 0.25rem;
+  border-radius: 999px; background: var(--alert-ink); color: #fff; font-size: 0.74rem;
+  text-align: center; line-height: 1.25rem;
+}
+.intro { max-width: 70rem; }
+kbd {
+  font: inherit; font-size: 0.8em; padding: 0 0.35em; border: 1px solid var(--line);
+  border-bottom-width: 2px; border-radius: 4px; background: var(--surface);
+}
+.actions-card { display: flex; gap: 0.8rem 1.2rem; flex-wrap: wrap; align-items: center; }
+
+/* ------------------------------------------------------ competency grid */
+/* Toolbar, headings and the name column all live inside one scroll box, so
+   «Lagre» and the headings stay in view wherever you are in the matrix. */
+.mx-scroll { --tb: 3.4rem; }
+.mx-toolbar {
+  position: sticky; top: 0; left: 0; z-index: 6; height: var(--tb); box-sizing: border-box;
+  display: flex; gap: 0.5rem; align-items: center; flex-wrap: nowrap; overflow-x: auto;
+  padding: 0 0.8rem; background: var(--surface); border-bottom: 1px solid var(--line);
+  box-shadow: 0 2px 6px rgba(20, 40, 50, 0.06);
+}
+.mx-toolbar > * { flex-shrink: 0; }
+.mx-toolbar input[type="search"] { width: 14rem; }
+.mx-spacer { flex: 1; }
+.mx-dirty { color: var(--warn-ink); font-weight: 600; font-size: 0.9rem; }
+.mx-legend { display: inline-flex; gap: 0.25rem; }
+.mx-scroll {
+  overflow: auto; max-height: calc(100vh - 1.5rem); border: 1px solid var(--line);
+  border-radius: var(--radius); background: var(--surface);
+  /* keep the focused cell clear of the pinned headings and name column */
+  scroll-padding: calc(var(--tb) + 13.9rem) 0 0.5rem 19.5rem;
+}
+table.matrix { border-collapse: separate; border-spacing: 0; width: max-content; min-width: 100%; }
+table.matrix th, table.matrix td { border-bottom: 1px solid var(--line); padding: 0.15rem 0.25rem; }
+table.matrix thead th { position: sticky; z-index: 3; background: var(--surface-2); }
+.mx-zones th { top: var(--tb); height: 1.7rem; color: #fff; font-size: 0.72rem; text-align: center; letter-spacing: 0.02em; white-space: nowrap; }
+.mx-zones th.zone-uren { background: var(--z-uren); }
+.mx-zones th.zone-ren { background: var(--z-ren); }
+.mx-zones th.zone-steril { background: var(--z-steril); }
+.mx-zones th.zone-utpost { background: var(--z-utpost); }
+.mx-zones th.mx-corner { background: var(--surface-2); left: 0; z-index: 4; }
+.mx-heads th { top: calc(var(--tb) + 1.7rem); }
+th.mx-col { vertical-align: bottom; height: 12rem; width: 2.7rem; text-transform: none; letter-spacing: 0; }
+th.mx-col span {
+  writing-mode: vertical-rl; transform: rotate(180deg); white-space: nowrap; font-size: 0.8rem;
+  color: var(--ink); font-weight: 600; display: inline-block; max-height: 11.5rem; overflow: hidden;
+  text-overflow: ellipsis;
+}
+th.mx-col.hot { background: var(--accent-soft); }
+th.mx-col.hot span { color: var(--accent); }
+table.matrix tbody th, table.matrix tfoot th {
+  text-transform: none; letter-spacing: 0; font-size: 0.92rem; color: var(--ink);
+}
+table.matrix .mx-name {
+  position: sticky; left: 0; z-index: 2; background: var(--surface); text-align: left;
+  min-width: 15rem; max-width: 19rem; font-weight: 500; border-right: 1px solid var(--line);
+}
+table.matrix thead .mx-name { z-index: 4; background: var(--surface-2); }
+.mx-name .pn { display: block; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mx-name .small { display: block; font-weight: 400; }
+td.mx-title { font-size: 0.84rem; color: var(--ink-soft); white-space: nowrap; max-width: 13rem; overflow: hidden; text-overflow: ellipsis; }
+table.matrix tbody tr:hover > *, table.matrix tbody tr:focus-within > * { background: var(--accent-soft); }
+button.cell, .cell-chip {
+  width: 2.4rem; height: 1.75rem; border-radius: 5px; border: 1px solid var(--line);
+  background: var(--surface); font: inherit; font-size: 0.78rem; font-weight: 700; color: var(--ink-faint);
+  cursor: pointer; padding: 0; display: inline-flex; align-items: center; justify-content: center;
+}
+.cell-chip { cursor: default; width: auto; padding: 0 0.45rem; }
+button.cell:hover { border-color: var(--accent); }
+button.cell:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+button.cell.q, .cell-chip.q { background: var(--ok-bg); color: var(--ok-ink); border-color: var(--ok-line); }
+button.cell.u, .cell-chip.u { background: var(--warn-bg); color: var(--warn-ink); border-color: var(--warn-line); }
+button.cell.std { color: var(--ink-faint); font-weight: 400; font-style: italic; font-size: 0.7rem; }
+button.cell.changed { box-shadow: 0 0 0 2px var(--info-ink); }
+/* The standard row: last, set apart, visibly important (D97). */
+tr.mx-standard > * {
+  background: var(--info-bg) !important; border-top: 3px solid var(--info-ink);
+  border-bottom: none; padding-top: 0.5rem !important; padding-bottom: 0.5rem !important;
+}
+tr.mx-standard .mx-name { z-index: 3; color: var(--info-ink); font-weight: 700; }
+tr.mx-standard .mx-name .small { color: var(--info-ink); font-weight: 400; }
+
+/* ------------------------------------------------- review, dialogs, logs */
+.link-tools { display: flex; gap: 1rem; align-items: center; margin: 0.4rem 0; flex-wrap: wrap; }
+td.changes { line-height: 2; }
+.chg {
+  display: inline-block; font-size: 0.84rem; padding: 0.05rem 0.5rem; border-radius: 5px;
+  margin: 0 0.25rem 0.15rem 0; border: 1px solid var(--line); background: var(--surface-2);
+}
+.chg.ny { background: var(--ok-bg); border-color: var(--ok-line); color: var(--ok-ink); }
+.chg.overskriver { background: var(--warn-bg); border-color: var(--warn-line); color: var(--warn-ink); }
+.chg.konflikt { background: var(--alert-bg); border-color: var(--alert-line); color: var(--alert-ink); }
+dialog.modal {
+  border: none; border-radius: 10px; padding: 1.3rem 1.5rem; max-width: 30rem;
+  box-shadow: 0 12px 40px rgba(10, 30, 40, 0.3); color: var(--ink); background: var(--surface);
+}
+dialog.modal::backdrop { background: rgba(15, 30, 40, 0.45); }
+dialog.modal h2 { margin-top: 0; }
+details.logpanel {
+  margin: 2rem 0 0.5rem; border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--surface); padding: 0.2rem 0.9rem;
+}
+details.logpanel > summary { cursor: pointer; padding: 0.5rem 0; font-weight: 600; color: var(--ink-soft); }
+details.logpanel[open] > summary { color: var(--ink); }
+.timeform { display: flex; gap: 0.3rem; align-items: center; flex-wrap: wrap; margin: 0; }
+
 /* ================================================================ DISPLAY */
 /* Wall screen: portrait, published plans only. Sizes are in `em` on a
    viewport-scaled root, so one layout serves a laptop preview and a

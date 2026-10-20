@@ -12,18 +12,21 @@ Preview any moment with ?date=YYYY-MM-DD&time=HH:MM on /display.
 from __future__ import annotations
 
 import datetime as dt
+import json
 import os
 import time as time_module
+from urllib.parse import quote
 from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from app import absences as absences_mod
-from app import checks, db, domain, hr_import, planner, service
+from app import applog, checks, competency, db, domain, hr_import, planner, service
+from app.hr_export import Rejected
 
 try:
     TZ = ZoneInfo("Europe/Oslo")
@@ -179,10 +182,15 @@ async def plan_generate(request: Request):
     days = int(str(form.get("days", "7")))
     conn = get_conn()
     try:
+        made = []
         for offset in range(days):
             date = start + dt.timedelta(days=offset)
             if planner.day_roster(conn, date):
                 planner.suggest_day(conn, date)
+                made.append(date)
+        if made:
+            applog.write(conn, "plan", f"Forslag laget for {made[0]:%d.%m.%Y}"
+                                       f"{f'–{made[-1]:%d.%m.%Y}' if len(made) > 1 else ''}.")
     finally:
         conn.close()
     target = str(form.get("back", f"/plan/uke?start={service.monday_of(start)}"))
@@ -202,6 +210,8 @@ async def plan_publish(request: Request):
                     "UPDATE plan_days SET status = 'published' WHERE plan_date = ?",
                     ((start + dt.timedelta(days=offset)).isoformat(),),
                 )
+            applog.log(conn, "plan", f"Publisert: {start:%d.%m.%Y}"
+                                     f"{f' + {days - 1} dager' if days > 1 else ''}.")
     finally:
         conn.close()
     target = str(form.get("back", f"/plan/dag?date={start}"))
@@ -220,6 +230,7 @@ async def plan_unpublish(request: Request):
                 "UPDATE plan_days SET status = 'draft' WHERE plan_date = ? AND status = 'published'",
                 (plan_date.isoformat(),),
             )
+            applog.log(conn, "plan", f"Avpublisert: {plan_date:%d.%m.%Y}.")
     finally:
         conn.close()
     return RedirectResponse(str(form.get("back", f"/plan/dag?date={plan_date}")), status_code=303)
@@ -242,6 +253,7 @@ async def plan_delete(request: Request):
         with conn:
             conn.execute("DELETE FROM assignments WHERE plan_date = ?", (plan_date.isoformat(),))
             conn.execute("DELETE FROM plan_days WHERE plan_date = ?", (plan_date.isoformat(),))
+            applog.log(conn, "plan", f"Utkast slettet: {plan_date:%d.%m.%Y}.")
     finally:
         conn.close()
     return RedirectResponse(f"/plan/dag?date={plan_date}", status_code=303)
@@ -289,6 +301,7 @@ async def plan_save(request: Request):
                     "UPDATE plan_days SET manually_edited = 1 WHERE plan_date = ?",
                     (plan_date.isoformat(),),
                 )
+                applog.log(conn, "plan", f"Plan {plan_date:%d.%m.%Y} endret manuelt.")
     finally:
         conn.close()
     return RedirectResponse(f"/plan/dag?date={plan_date}", status_code=303)
@@ -301,6 +314,7 @@ async def plan_day_info(request: Request):
     conn = get_conn()
     try:
         service.set_day_info(conn, plan_date, str(form.get("info", "")))
+        applog.write(conn, "plan", f"«Diverse info» for {plan_date:%d.%m.%Y} oppdatert.")
     finally:
         conn.close()
     return RedirectResponse(f"/plan/dag?date={plan_date}", status_code=303)
@@ -317,6 +331,7 @@ async def plan_unlock(request: Request):
                 "UPDATE assignments SET locked = 0 WHERE plan_date = ?",
                 (plan_date.isoformat(),),
             )
+            applog.log(conn, "plan", f"Alle rader låst opp: {plan_date:%d.%m.%Y}.")
     finally:
         conn.close()
     return RedirectResponse(f"/plan/dag?date={plan_date}", status_code=303)
@@ -362,6 +377,10 @@ async def absence_add(request: Request):
             end=str(form.get("end", "")) or None,
             note=str(form.get("note", "")),
         )
+        who = conn.execute("SELECT display_name FROM employees WHERE employee_id = ?",
+                           (str(form["employee_id"]),)).fetchone()
+        applog.write(conn, "fravaer", f"Fravær registrert: {who[0] if who else form['employee_id']} "
+                                      f"{plan_date:%d.%m.%Y}.")
     finally:
         conn.close()
     return RedirectResponse(str(form.get("back", f"/plan/dag?date={plan_date}")), status_code=303)
@@ -373,6 +392,7 @@ async def absence_delete(request: Request):
     conn = get_conn()
     try:
         absences_mod.remove(conn, int(str(form["absence_id"])))
+        applog.write(conn, "fravaer", f"Fravær fjernet (nr. {form['absence_id']}).")
     finally:
         conn.close()
     return RedirectResponse(str(form.get("back", "/")), status_code=303)
@@ -381,55 +401,231 @@ async def absence_delete(request: Request):
 # ---------------------------------------------------------------------------
 # Admin
 
+def admin_page(request: Request, conn, tab: str, template: str, model: dict):
+    """Shared frame for the Administrasjon tabs (D96)."""
+    model.update({
+        "tab": tab,
+        "melding": request.query_params.get("melding"),
+        "badge_positions": conn.execute(
+            "SELECT COUNT(*) FROM positions WHERE rule = 'uavklart'").fetchone()[0],
+        "badge_competency": len(competency.pending_imports(conn)),
+    })
+    return TEMPLATES.TemplateResponse(request, template, model)
+
+
+def back(url: str, message: str | None = None) -> RedirectResponse:
+    if message:
+        anchor = ""
+        if "#" in url:
+            url, anchor = url.split("#", 1)
+            anchor = "#" + anchor
+        url = f"{url}{'&' if '?' in url else '?'}melding={quote(message)}{anchor}"
+    return RedirectResponse(url, status_code=303)
+
+
 @app.get("/admin", response_class=HTMLResponse)
 def admin(request: Request):
     conn = get_conn()
     try:
-        functions = list(conn.execute(
-            """SELECT f.*, z.name AS zone_name FROM functions f
-               JOIN zones z ON z.zone_id = f.zone_id ORDER BY f.sort_order"""))
-        intensity = list(conn.execute(
-            """SELECT i.*, f.name AS function_name FROM function_intensity i
-               JOIN functions f ON f.function_id = i.function_id ORDER BY f.sort_order"""))
-        shift_codes = list(conn.execute("SELECT * FROM shift_codes ORDER BY code"))
-        rotation_rules = list(conn.execute("SELECT * FROM rotation_rules"))
-        settings = list(conn.execute("SELECT * FROM planner_settings ORDER BY key"))
-        employees = list(conn.execute("SELECT * FROM employees ORDER BY employee_id"))
-        competencies: dict[str, list[dict]] = {}
-        for row in conn.execute(
-            """SELECT ec.employee_id, ct.name, ec.status FROM employee_competencies ec
-               JOIN competency_types ct ON ct.competency_id = ec.competency_id
-               ORDER BY ct.name"""):
-            competencies.setdefault(row["employee_id"], []).append(
-                {"name": row["name"], "status": row["status"]})
-        preferences = list(conn.execute(
-            """SELECT p.employee_id, e.display_name, f.name AS function_name, p.note
-               FROM employee_preferences p
-               JOIN employees e ON e.employee_id = p.employee_id
-               JOIN functions f ON f.function_id = p.function_id
-               ORDER BY p.employee_id"""))
-        restrictions = list(conn.execute(
-            """SELECT r.*, e.display_name, f.name AS function_name
-               FROM employee_restrictions r
-               JOIN employees e ON e.employee_id = r.employee_id
-               LEFT JOIN functions f ON f.function_id = r.function_id
-               ORDER BY r.employee_id"""))
-        display_theme = service.get_setting(conn, "display_theme", "mork")
-        positions = service.positions_model(conn)
-        learned = list(conn.execute("SELECT * FROM learned_shift_codes ORDER BY code"))
-        all_functions = [f for f in functions if f["active"] == "yes"]
-        retention = hr_import.retention_days(conn)
+        return admin_page(request, conn, "innstillinger", "admin_settings.html", {
+            "display_theme": service.get_setting(conn, "display_theme", "mork"),
+            "retention": hr_import.retention_days(conn),
+            "log": applog.entries(conn, limit=300),
+        })
     finally:
         conn.close()
-    return TEMPLATES.TemplateResponse(request, "admin.html", {
-        "display_theme": display_theme, "positions": positions, "learned": learned,
-        "all_functions": all_functions, "retention": retention,
-        "categories": service.SHIFT_CATEGORY_ORDER,
-        "functions": functions, "intensity": intensity, "shift_codes": shift_codes,
-        "rotation_rules": rotation_rules, "settings": settings, "employees": employees,
-        "competencies": competencies, "preferences": preferences,
-        "restrictions": restrictions,
-    })
+
+
+@app.get("/admin/stillinger", response_class=HTMLResponse)
+def admin_positions_page(request: Request):
+    conn = get_conn(refresh=True)
+    try:
+        functions = list(conn.execute(
+            "SELECT * FROM functions WHERE active = 'yes' ORDER BY sort_order"))
+        return admin_page(request, conn, "stillinger", "admin_positions.html", {
+            "positions": service.positions_model(conn), "all_functions": functions,
+            "log": applog.entries(conn, "stilling"),
+        })
+    finally:
+        conn.close()
+
+
+@app.get("/admin/kompetanse", response_class=HTMLResponse)
+def admin_competency(request: Request):
+    conn = get_conn(refresh=True)
+    try:
+        model = competency.matrix(conn)
+        model["pending_imports"] = competency.pending_imports(conn)
+        model["log"] = applog.entries(conn, "kompetanse")
+        return admin_page(request, conn, "kompetanse", "admin_competency.html", model)
+    finally:
+        conn.close()
+
+
+@app.post("/admin/kompetanse/lagre")
+async def admin_competency_save(request: Request):
+    form = await request.form()
+    try:
+        changes = json.loads(str(form.get("changes", "[]")))
+    except json.JSONDecodeError:
+        changes = []
+    conn = get_conn()
+    try:
+        applied, conflicts = competency.apply_changes(conn, changes if isinstance(changes, list) else [])
+        if applied and not db.is_demo():
+            hr_import.rebuild(conn)
+    finally:
+        conn.close()
+    message = f"{applied} endring{'er' if applied != 1 else ''} lagret."
+    if conflicts:
+        message += " " + " ".join(conflicts[:3]) + (" …" if len(conflicts) > 3 else "")
+    return back("/admin/kompetanse", message)
+
+
+@app.post("/admin/kompetanse/fjern")
+async def admin_competency_remove(request: Request):
+    form = await request.form()
+    conn = get_conn()
+    try:
+        competency.remove_person(conn, str(form["key"]))
+        if not db.is_demo():
+            hr_import.rebuild(conn)
+    finally:
+        conn.close()
+    return back("/admin/kompetanse", "Kompetansen er fjernet.")
+
+
+@app.post("/admin/kompetanse/last-opp")
+async def admin_competency_upload(request: Request):
+    form = await request.form()
+    upload = form.get("fil")
+    name = Path(getattr(upload, "filename", "") or "").name
+    if not name.lower().endswith(".xlsx"):
+        return back("/admin/kompetanse", "Velg en Excel-fil (.xlsx).")
+    raw = await upload.read()
+    conn = get_conn()
+    try:
+        with conn:
+            import_id = competency.stage(conn, name, raw)
+    except Rejected as exc:
+        return back("/admin/kompetanse", "Filen kan ikke leses: " + " ".join(exc.reasons))
+    finally:
+        conn.close()
+    return RedirectResponse(f"/admin/kompetanse/import/{import_id}", status_code=303)
+
+
+@app.get("/admin/kompetanse/import/{import_id}", response_class=HTMLResponse)
+def admin_competency_review(request: Request, import_id: int):
+    conn = get_conn()
+    try:
+        try:
+            model = competency.review(conn, import_id)
+        except KeyError:
+            return back("/admin/kompetanse", "Fant ikke importen.")
+        model["words"] = competency.WORDS
+        model["feil"] = request.query_params.getlist("feil")
+        return admin_page(request, conn, "kompetanse", "competency_review.html", model)
+    finally:
+        conn.close()
+
+
+@app.post("/admin/kompetanse/import/{import_id}/koble")
+async def admin_competency_link(request: Request, import_id: int):
+    form = await request.form()
+    choices = {}
+    for key in [k for k in form.keys() if k.startswith("alias_")]:
+        index = key.split("_", 1)[1]
+        choices[str(form[key])] = str(form.get(f"target_{index}", ""))
+    conn = get_conn()
+    try:
+        problems = competency.save_links(conn, choices)
+    finally:
+        conn.close()
+    url = f"/admin/kompetanse/import/{import_id}"
+    if problems:
+        url += "?" + "&".join(f"feil={quote(p)}" for p in problems)
+    return RedirectResponse(url, status_code=303)
+
+
+@app.post("/admin/kompetanse/import/{import_id}/bruk")
+async def admin_competency_apply(request: Request, import_id: int):
+    form = await request.form()
+    conn = get_conn()
+    try:
+        written = competency.apply_import(conn, import_id, bool(form.get("overskriv_konflikter")))
+        if not db.is_demo():
+            hr_import.rebuild(conn)
+    finally:
+        conn.close()
+    return back("/admin/kompetanse", f"Importen er tatt i bruk – {written} celler oppdatert.")
+
+
+@app.post("/admin/kompetanse/import/{import_id}/forkast")
+async def admin_competency_discard(request: Request, import_id: int):
+    conn = get_conn()
+    try:
+        competency.discard_import(conn, import_id)
+        if not db.is_demo():
+            hr_import.rebuild(conn)
+    finally:
+        conn.close()
+    return back("/admin/kompetanse", "Filen er forkastet – ingenting ble endret.")
+
+
+@app.get("/admin/kompetanse/skjema.xlsx")
+def admin_competency_form():
+    conn = get_conn()
+    try:
+        data = competency.build_form(conn)
+    finally:
+        conn.close()
+    stamp = local_now().strftime("%Y%m%d")
+    return Response(
+        data, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="Kompetanse_utfylling_{stamp}.xlsx"'})
+
+
+@app.get("/admin/vaktkoder", response_class=HTMLResponse)
+def admin_codes(request: Request):
+    conn = get_conn(refresh=True)
+    try:
+        return admin_page(request, conn, "vaktkoder", "admin_codes.html", {
+            "learned": list(conn.execute("SELECT * FROM learned_shift_codes ORDER BY code")),
+            "shift_codes": list(conn.execute("SELECT * FROM shift_codes WHERE code <> 'MAN' ORDER BY code")),
+            "rotation_rules": list(conn.execute("SELECT * FROM rotation_rules")),
+            "categories": service.SHIFT_CATEGORY_ORDER,
+            "log": applog.entries(conn, "vaktkode"),
+        })
+    finally:
+        conn.close()
+
+
+@app.get("/admin/grunndata", response_class=HTMLResponse)
+def admin_master(request: Request):
+    conn = get_conn()
+    try:
+        return admin_page(request, conn, "grunndata", "admin_master.html", {
+            "functions": list(conn.execute(
+                """SELECT f.*, z.name AS zone_name FROM functions f
+                   JOIN zones z ON z.zone_id = f.zone_id ORDER BY f.sort_order""")),
+            "intensity": list(conn.execute(
+                """SELECT i.*, f.name AS function_name FROM function_intensity i
+                   JOIN functions f ON f.function_id = i.function_id ORDER BY f.sort_order""")),
+            "settings": list(conn.execute("SELECT * FROM planner_settings ORDER BY key")),
+            "preferences": list(conn.execute(
+                """SELECT p.employee_id, e.display_name, f.name AS function_name, p.note
+                   FROM employee_preferences p
+                   JOIN employees e ON e.employee_id = p.employee_id
+                   JOIN functions f ON f.function_id = p.function_id ORDER BY p.employee_id""")),
+            "restrictions": list(conn.execute(
+                """SELECT r.*, e.display_name, f.name AS function_name
+                   FROM employee_restrictions r
+                   JOIN employees e ON e.employee_id = r.employee_id
+                   LEFT JOIN functions f ON f.function_id = r.function_id
+                   ORDER BY r.employee_id""")),
+        })
+    finally:
+        conn.close()
 
 
 @app.post("/admin/innstillinger")
@@ -440,13 +636,18 @@ async def admin_settings(request: Request):
     theme = str(form.get("display_theme", "mork"))
     conn = get_conn()
     try:
-        service.set_setting(conn, "display_theme", theme if theme in ("lys", "mork") else "mork")
+        theme = theme if theme in ("lys", "mork") else "mork"
+        if theme != service.get_setting(conn, "display_theme", "mork"):
+            service.set_setting(conn, "display_theme", theme)
+            applog.write(conn, "innstilling", f"Tavlens fargevisning satt til «{theme}».")
         retention = str(form.get("retention_days", "")).strip()
-        if retention.isdigit() and 14 <= int(retention) <= 730:
+        if (retention.isdigit() and 14 <= int(retention) <= 730
+                and int(retention) != hr_import.retention_days(conn)):
             service.set_setting(conn, "retention_days", retention)
+            applog.write(conn, "innstilling", f"Data beholdes i {retention} dager.")
     finally:
         conn.close()
-    return RedirectResponse("/admin", status_code=303)
+    return back("/admin", "Innstillingene er lagret.")
 
 
 @app.post("/admin/stillinger")
@@ -470,7 +671,7 @@ async def admin_positions(request: Request):
                 if current["rule"] != rule:
                     conn.execute("UPDATE positions SET rule = ?, classified_at = ? WHERE title = ?",
                                  (rule, local_now().isoformat(timespec="seconds"), title))
-                    hr_import.log(conn, f"Stillingen «{title}» satt til «{rule}».")
+                    hr_import.log(conn, f"Stillingen «{title}» satt til «{rule}».", "stilling")
                 conn.execute("DELETE FROM position_exclusions WHERE title = ?", (title,))
                 if rule == "begrenset":
                     conn.executemany(
@@ -480,7 +681,7 @@ async def admin_positions(request: Request):
             hr_import.rebuild(conn)
     finally:
         conn.close()
-    return RedirectResponse("/admin#stillinger", status_code=303)
+    return back("/admin/stillinger", "Stillingene er lagret.")
 
 
 @app.post("/admin/vaktkoder")
@@ -499,13 +700,14 @@ async def admin_learned_codes(request: Request):
                     continue
                 conn.execute("UPDATE learned_shift_codes SET category = ?, confirmed = 1 "
                              "WHERE code = ?", (category, code))
+                applog.log(conn, "vaktkode", f"Vaktkoden {code} bekreftet som {category}.")
                 conn.execute("UPDATE shift_codes SET category = ? WHERE code = ? AND code IN "
                              "(SELECT code FROM learned_shift_codes)", (category, code))
         if not db.is_demo():
             hr_import.rebuild(conn)
     finally:
         conn.close()
-    return RedirectResponse("/admin#vaktkoder", status_code=303)
+    return back("/admin/vaktkoder", "Kategoriene er bekreftet.")
 
 
 # ---------------------------------------------------------------------------
@@ -524,6 +726,52 @@ def import_page(request: Request, melding: str | None = None):
     model["inbox"] = hr_import.INBOX
     model["melding"] = melding
     return TEMPLATES.TemplateResponse(request, "import.html", model)
+
+
+@app.post("/import/manuell-tid")
+async def import_manual_time(request: Request):
+    """A manager gives a held day (unknown code such as DX) its times."""
+    form = await request.form()
+    start, end = str(form.get("start", "")), str(form.get("end", ""))
+    ok = True
+    try:
+        domain.parse_time(start)
+        domain.parse_time(end)
+    except ValueError:
+        ok = False
+    if not ok or start == end:
+        return back("/import#ventende", "Oppgi gyldig start- og sluttid.")
+    conn = get_conn()
+    try:
+        with conn:
+            conn.execute(
+                """INSERT OR REPLACE INTO manual_shift_times
+                   (employee_id, export_date, raw, start, end, entered_at) VALUES (?, ?, ?, ?, ?, ?)""",
+                (str(form["employee_id"]), str(form["date"]), str(form["raw"]), start, end,
+                 local_now().isoformat(timespec="seconds")))
+            name = conn.execute("SELECT display_name FROM employees WHERE employee_id = ?",
+                                (str(form["employee_id"]),)).fetchone()
+            applog.log(conn, "import", f"Tid angitt for {name[0] if name else form['employee_id']} "
+                                       f"{form['date']} («{form['raw']}»): {start}–{end}.")
+        hr_import.rebuild(conn)
+    finally:
+        conn.close()
+    return back("/import#ventende", "Tiden er lagret – vakten tas med i planleggingen.")
+
+
+@app.post("/import/manuell-tid/slett")
+async def import_manual_time_delete(request: Request):
+    form = await request.form()
+    conn = get_conn()
+    try:
+        with conn:
+            conn.execute("DELETE FROM manual_shift_times WHERE employee_id = ? AND export_date = ?",
+                         (str(form["employee_id"]), str(form["date"])))
+            applog.log(conn, "import", f"Angitt tid fjernet ({form['employee_id']} {form['date']}).")
+        hr_import.rebuild(conn)
+    finally:
+        conn.close()
+    return back("/import#ventende", "Den angitte tiden er fjernet.")
 
 
 @app.post("/import/sjekk")

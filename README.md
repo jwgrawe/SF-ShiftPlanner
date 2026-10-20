@@ -24,9 +24,12 @@ display.
 - **`/import`** «Datagrunnlag» — the real roster's sources: which turnus
   (Plan) and ukeplan (Ajourhold) each week rests on, what needs attention,
   files read or refused, upload, and a log.
-- **`/admin`** — settings (board palette, retention), job-title rules,
-  shift codes learned from the turnus, and the master-data browser, incl.
-  preferences and fritak (only here).
+- **`/admin`** — in tabs: *Innstillinger* (board palette, retention, the
+  full log), *Stillinger* (job-title rules), *Kompetanse* (the competency
+  matrix: edit in place, import from Excel with review and name linking,
+  download a fill-in form, the temps' standard set), *Vaktkoder* (codes
+  learned from the turnus), *Grunndata* (master data, preferences and
+  fritak — only here).
 
 Two modes (D89): **`python run.py`** is the real planner — the roster comes
 from the HR exports in `data/import/`; **`python run.py --demo`** is the
@@ -62,8 +65,10 @@ week). Preview any moment with e.g. `/display?date=ÅÅÅÅ-MM-DD&time=10:30`.
    - **ukeplan** (Ajourhold): `Ukeplan_….csv`, one file per week, e.g. every
      Monday morning (re-exporting a week later in the week is fine — the
      newest wins);
-   - **kompetansefil**: `.xlsx` in today's layout, names written exactly as
-     in the turnus.
+   - **kompetansefil** (`.xlsx`, today's layout): it waits for review under
+     Administrasjon → Kompetanse, where names are linked and every change is
+     shown before anything is applied. Day-to-day, edit competencies right in
+     that tab instead.
 2. That's it. The app picks files up within 30 seconds while it's open,
    moves them to `arkiv/` (or `avvist/` with a .txt saying why), rebuilds the
    roster, and shows on «I dag» and «Datagrunnlag» if anything is missing or
@@ -102,7 +107,7 @@ Tips for the hospital PC:
 |---|---|
 | [docs/assessment.md](docs/assessment.md) | Proposed architecture, eligibility model, rotation framework, planning engine, roadmap |
 | [docs/decisions.md](docs/decisions.md) | **Decision log** — everything settled, as referenceable D-numbers (superseded ones struck through) |
-| [docs/open-questions.md](docs/open-questions.md) | **Open questions** — stable Q-numbers; currently Q18–Q20, Q27, Q40, Q42–Q44 |
+| [docs/open-questions.md](docs/open-questions.md) | **Open questions** — stable Q-numbers; currently Q18–Q20, Q27, Q40 |
 | [docs/source-data-findings.md](docs/source-data-findings.md) | What the source workbooks contain, how they were restructured, and how each flag got resolved |
 
 ## Repository layout
@@ -111,7 +116,8 @@ Tips for the hospital PC:
 app/           FastAPI web app: db.py (schema, modes), importer.py (seed ->
                SQLite), hr_export.py (reads the turnus/ukeplan exports by
                structure), hr_import.py (inbox, roster building, findings,
-               retention), domain.py (operational day, blocks, holidays),
+               retention), competency.py (matrix, Excel in/out, name linking),
+               applog.py (the app-wide log), domain.py (operational day, blocks, holidays),
                service.py (eligibility + view models), planner.py (suggestion
                filler), checks.py (plan findings + intensity ledger),
                absences.py, demo.py (demo roster), main.py + templates/

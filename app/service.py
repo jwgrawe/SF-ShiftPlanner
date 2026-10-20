@@ -119,7 +119,7 @@ def day_assignments(
                    f.zone_id, f.staffing_mode,
                    z.name AS zone_name, z.sort_order AS zone_order,
                    f.sort_order AS function_order,
-                   r.shift_code, COALESCE(sc.category, '') AS shift_category
+                   r.shift_code, COALESCE(r.category_override, sc.category, '') AS shift_category
             FROM assignments a
             JOIN plan_days p ON p.plan_date = a.plan_date
             JOIN employees e ON e.employee_id = a.employee_id
@@ -265,7 +265,8 @@ def build_display_model(conn: sqlite3.Connection, now: dt.datetime) -> dict:
     adhoc_crew = []
     if kind == "weekend_holiday":
         for row in conn.execute(
-            """SELECT r.employee_id, e.display_name, r.shift_code, s.start,
+            """SELECT r.employee_id, e.display_name, r.shift_code,
+                      COALESCE(r.start_override, s.start) AS start,
                       COALESCE(r.end_override, s.end) AS end
                FROM roster r JOIN employees e ON e.employee_id = r.employee_id
                JOIN shift_codes s ON s.code = r.shift_code
@@ -361,7 +362,8 @@ def build_week_model(conn: sqlite3.Connection, monday: dt.date) -> dict:
                 cell["locked"] = True
         # People rostered but without assignments (e.g. ad hoc weekends).
         for row in conn.execute(
-            """SELECT r.employee_id, e.display_name, s.category FROM roster r
+            """SELECT r.employee_id, e.display_name,
+                      COALESCE(r.category_override, s.category) AS category FROM roster r
                JOIN employees e ON e.employee_id = r.employee_id
                JOIN shift_codes s ON s.code = r.shift_code
                WHERE r.date = ? AND r.hold IS NULL""",
@@ -566,7 +568,9 @@ def build_day_model(conn: sqlite3.Connection, plan_date: dt.date) -> dict:
         })
 
     roster_rows = list(conn.execute(
-        """SELECT e.display_name, r.shift_code, s.category, s.start,
+        """SELECT e.display_name, r.shift_code,
+                  COALESCE(r.category_override, s.category) AS category,
+                  COALESCE(r.start_override, s.start) AS start,
                   COALESCE(r.end_override, s.end) AS end, r.end_override, r.hold, r.title,
                   r.raw, r.source, s.utpost_code, NULL AS pending
            FROM roster r JOIN employees e ON e.employee_id = r.employee_id
@@ -763,15 +767,23 @@ def build_import_model(conn: sqlite3.Connection, today: dt.date) -> dict:
             "reasons": (row["reason"] or "").splitlines(),
         })
     log = [{"at": dt.datetime.fromisoformat(r["at"]), "text": r["text"]} for r in conn.execute(
-        "SELECT at, text FROM import_log ORDER BY log_id DESC LIMIT 30")]
+        "SELECT at, text FROM import_log WHERE area = 'import' ORDER BY log_id DESC LIMIT 100")]
     pending = [
         {**dict(r), "date": dt.date.fromisoformat(r["date"])}
         for r in conn.execute(
-            """SELECT p.date, p.raw, p.reason, e.display_name FROM roster_pending p
-               JOIN employees e ON e.employee_id = p.employee_id
+            """SELECT p.date, p.raw, p.reason, p.fixable, p.employee_id, e.display_name
+               FROM roster_pending p JOIN employees e ON e.employee_id = p.employee_id
                WHERE p.date >= ? ORDER BY p.date, e.display_name""", (today.isoformat(),))
     ]
-    return {"weeks": weeks, "files": files, "log": log, "pending": pending,
+    manual = [
+        {**dict(r), "date": dt.date.fromisoformat(r["export_date"])}
+        for r in conn.execute(
+            """SELECT m.*, e.display_name FROM manual_shift_times m
+               JOIN employees e ON e.employee_id = m.employee_id
+               WHERE m.export_date >= ? ORDER BY m.export_date, e.display_name""",
+            (today.isoformat(),))
+    ]
+    return {"weeks": weeks, "files": files, "log": log, "pending": pending, "manual": manual,
             "findings": import_findings(conn),
             "built_at": get_setting(conn, "roster_built_at", "")}
 

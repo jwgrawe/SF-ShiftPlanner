@@ -1,6 +1,6 @@
 # Open questions
 
-Current list as of 2026-10-19 (round 6: sample semantics answered, import built). Q-numbers are stable across
+Current list as of 2026-10-20 (round 7: competency management, temps, manual times). Q-numbers are stable across
 rounds — resolved ones are recorded in [decisions.md](decisions.md) and
 listed at the bottom. Where an *interim rule* is stated, work proceeds on
 that assumption; the question is whether it's right.
@@ -14,24 +14,10 @@ Priority: 🔴 gates the planning engine · 🟡 needed soon · 🟢 can wait.
 D79–D86). Identity: full name (D82). What remains are the semantic questions
 below.
 
-**Q40 🟡 Competency file in export name form.** It must carry each employee's
-name exactly as the exports write it (surname first), later PersonID too (D82).
-The import reads it as soon as it lands in `data/import/` (.xlsx, same layout as
-today's workbook); until then nobody can be placed automatically.
-
-**Q42 🟡 Name order for board names.** The exports write names surname first.
-The board shows «Fornavn E.», taking the *first* word as the surname and the
-second as the first name (`Hansen Kari Marie` → «Kari H.»). Is that always the
-order — and how are double surnames written (`Berg Hansen Kari`)? Wrong
-guesses only affect the short display name, never matching.
-
-**Q43 🟡 Temps' unknown codes (`DX`).** See the assessment in the R6 notes:
-until decided, such days are held out with an alert (D95). Options: per-occurrence
-time entry by a manager, and/or defining a code once when it turns out stable.
-
-**Q44 🟢 Temps' competencies.** Temps in the ukeplan but not in the turnus are
-planned like regular staff (D93) — but can only be placed if they are in the
-competency file. Should they be added there, or handled by hand?
+**Q40 🟡 Competency data for the real staff.** The owner is preparing the existing,
+already-filled competency list (names abbreviated) — it no longer needs hand-editing to
+match the exports: the import's link step suggests the right person per name (D98).
+After that, the managers fill the gaps via the generated form or directly in the app.
 
 ## Resolved (all rounds)
 
@@ -50,5 +36,8 @@ Q34 (`M` = overtime), Q36 (`F3` = ends 12:00), Q37 (categories don't matter beyo
 rotation; `*` = paid lunch) → D92; Q35 (`DX`) → D95/Q43; Q38 (count rows not used);
 Q39 (export routines open-ended — the app handles any cadence → D91/D93);
 Q41 (titles: hold out until classified, once → D87).
+Round 7: Q42 (surname first; the first word is the full surname, hyphens included —
+as implemented), Q43 (`DX`: manual times per occurrence → D95), Q44 (temps get a
+manager-defined standard set; new staff are assessed → D97).
 The Q19 infeasibility itself is resolved by the two-tier scheme (D50/D51);
 what remains is the booked confirmation above.

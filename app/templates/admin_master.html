@@ -1,0 +1,62 @@
+{% extends "admin_base.html" %}
+{% from "_macros.html" import log_panel %}
+{% block admin_content %}
+<p class="note">Grunndata vises kun her; de endres i <code>data/seed/</code> (D29).
+<strong>Preferanser og fritak vises kun her</strong> – aldri på tavle eller plan (D32/D11).</p>
+<h2>Funksjoner</h2>
+<div class="tablewrap"><table>
+  <tr><th>Sone</th><th>Funksjon</th><th>Bemanningsmåte</th><th>Aktiv</th><th>Merknad</th></tr>
+  {% for fn in functions %}
+    <tr>
+      <td><span class="badge {{ fn.zone_id }}">{{ fn.zone_name }}</span></td>
+      <td>{{ fn.name }}</td>
+      <td>{{ {"remainder": "Resterende", "demand": "Påkrevd", "adhoc_zone": "Ad hoc"}[fn.staffing_mode] }}</td>
+      <td>{% if fn.active == "yes" %}ja{% else %}<span class="badge soft">parkert</span>{% endif %}</td>
+      <td class="muted">{{ fn.notes }}</td>
+    </tr>
+  {% endfor %}
+</table></div>
+
+<h2>Intensitet (tungt arbeid)</h2>
+<div class="tablewrap"><table>
+  <tr><th>Funksjon</th><th>Tidsrom</th><th>Intensitet</th><th>Merknad</th></tr>
+  {% for row in intensity %}
+    <tr><td>{{ row.function_name }}</td><td>{{ row.start }}–{{ row.end }}</td>
+        <td>{% if row.intensity >= 1 %}tungt{% elif row.intensity > 0 %}moderat{% else %}normalt{% endif %} ({{ row.intensity }})</td>
+        <td class="muted">{{ row.notes }}</td></tr>
+  {% endfor %}
+</table></div>
+
+<h2>Planleggingsinnstillinger</h2>
+<div class="tablewrap"><table>
+  <tr><th>Innstilling</th><th>Verdi</th><th>Forklaring</th></tr>
+  {% for row in settings %}
+    <tr><td>{{ row.key }}</td><td>{{ row.value }}</td><td class="muted">{{ row.notes }}</td></tr>
+  {% endfor %}
+</table></div>
+
+<h2>Preferanser (kun synlig her)</h2>
+<div class="tablewrap"><table>
+  <tr><th>Ansatt</th><th>Foretrukket funksjon</th><th>Merknad</th></tr>
+  {% for pref in preferences %}
+    <tr><td>{{ pref.display_name }} ({{ pref.employee_id }})</td>
+        <td>{{ pref.function_name }}</td><td class="muted">{{ pref.note }}</td></tr>
+  {% else %}
+    <tr><td colspan="3" class="muted">Ingen preferanser registrert.</td></tr>
+  {% endfor %}
+</table></div>
+
+<h2>Fritak, inkl. tilrettelegging (kun synlig her)</h2>
+<div class="tablewrap"><table>
+  <tr><th>Ansatt</th><th>Type</th><th>Gjelder</th><th>Fra</th><th>Til</th><th>Merknad</th></tr>
+  {% for restriction in restrictions %}
+    <tr><td>{{ restriction.display_name }} ({{ restriction.employee_id }})</td>
+        <td>{{ "tungt arbeid" if restriction.restriction_type == "heavy_work" else "funksjon" }}</td>
+        <td>{{ restriction.function_name or "alt tungt arbeid" }}</td>
+        <td>{{ restriction.valid_from or "–" }}</td><td>{{ restriction.valid_to or "–" }}</td>
+        <td class="muted">{{ restriction.note }}</td></tr>
+  {% else %}
+    <tr><td colspan="6" class="muted">Ingen fritak registrert.</td></tr>
+  {% endfor %}
+</table></div>
+{% endblock %}

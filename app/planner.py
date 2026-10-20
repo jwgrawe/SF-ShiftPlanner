@@ -68,7 +68,9 @@ def day_shifts(conn: sqlite3.Connection, date: dt.date) -> dict[str, dict]:
     shifts = {}
     for row in conn.execute(
         """SELECT r.employee_id, r.shift_code, r.hold, r.end_override,
-                  s.start, s.end, s.category, s.utpost_code FROM roster r
+                  COALESCE(r.start_override, s.start) AS start, s.end,
+                  COALESCE(r.category_override, s.category) AS category,
+                  s.utpost_code FROM roster r
            JOIN shift_codes s ON s.code = r.shift_code WHERE r.date = ?""",
         (date_str,),
     ):

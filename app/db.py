@@ -173,6 +173,22 @@ CREATE TABLE IF NOT EXISTS learned_shift_codes (
     code TEXT PRIMARY KEY, start TEXT NOT NULL, end TEXT NOT NULL,
     crosses_midnight TEXT NOT NULL, category TEXT NOT NULL, utpost_code TEXT NOT NULL,
     duration_hours REAL, confirmed INTEGER NOT NULL DEFAULT 0, learned_at TEXT);
+-- Competency data (D96–D99). The app's own copy is competency_rows (by the
+-- export name, D82); Excel files are staged for review before they touch it.
+CREATE TABLE IF NOT EXISTS standard_competencies (
+    competency_id TEXT PRIMARY KEY, status TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS competency_aliases (
+    alias TEXT PRIMARY KEY, full_name TEXT, created_at TEXT);
+CREATE TABLE IF NOT EXISTS competency_imports (
+    import_id INTEGER PRIMARY KEY, filename TEXT NOT NULL, sha256 TEXT NOT NULL,
+    uploaded_at TEXT NOT NULL, status TEXT NOT NULL, decided_at TEXT, payload TEXT NOT NULL);
+-- Times a manager entered for a shift whose code the app doesn't know
+-- (temps' codes such as DX, D95). Tied to the exact cell: person, export date
+-- and the raw text — a changed cell drops the entry.
+CREATE TABLE IF NOT EXISTS manual_shift_times (
+    employee_id TEXT NOT NULL, export_date TEXT NOT NULL, raw TEXT NOT NULL,
+    start TEXT NOT NULL, end TEXT NOT NULL, entered_at TEXT NOT NULL,
+    PRIMARY KEY (employee_id, export_date));
 -- Roster days that can't be planned yet: an unknown code, an ambiguous cell.
 CREATE TABLE IF NOT EXISTS roster_pending (
     date TEXT NOT NULL, employee_id TEXT NOT NULL, raw TEXT NOT NULL,
@@ -213,14 +229,28 @@ def init_schema(conn: sqlite3.Connection) -> None:
     # Real roster (D73/D87): who/what decided a day, a shortened end (F3), and
     # why a rostered person is held out of placement (title rules).
     for column, decl in (("hold", "TEXT"), ("end_override", "TEXT"), ("title", "TEXT"),
-                         ("source", "TEXT"), ("raw", "TEXT")):
+                         ("source", "TEXT"), ("raw", "TEXT"), ("start_override", "TEXT"),
+                         ("category_override", "TEXT")):
         _ensure_column(conn, "roster", column, decl)
-    for column, decl in (("full_name", "TEXT"), ("person_id", "TEXT"), ("origin", "TEXT")):
+    for column, decl in (("full_name", "TEXT"), ("person_id", "TEXT"), ("origin", "TEXT"),
+                         ("is_temp", "INTEGER NOT NULL DEFAULT 0")):
         _ensure_column(conn, "employees", column, decl)
+    # 'standard' marks competencies assumed for a temp (D97), not assessed.
+    _ensure_column(conn, "employee_competencies", "source", "TEXT")
+    # Every log line belongs to an area, so each page can show its own (D100).
+    _ensure_column(conn, "import_log", "area", "TEXT NOT NULL DEFAULT 'import'")
+    _ensure_column(conn, "roster_pending", "fixable", "INTEGER NOT NULL DEFAULT 0")
 
 
 def merge_learned_codes(conn: sqlite3.Connection) -> None:
-    """Shift codes learned from Plan legends join the seed codes (seed wins)."""
+    """Shift codes learned from Plan legends join the seed codes (seed wins).
+    Also the reserved code MAN: a shift whose times a manager entered by hand
+    (its real times live on the roster row, D95)."""
+    conn.execute(
+        """INSERT OR IGNORE INTO shift_codes
+           (code, start, end, crosses_midnight, category, utpost_code, duration_hours, comment)
+           VALUES ('MAN', '00:00', '00:00', 'no', 'tidligvakt', 'no', 0,
+                   'Reservert: vakt med manuelt angitt tid (D95)')""")
     conn.execute(
         """INSERT OR IGNORE INTO shift_codes
            (code, start, end, crosses_midnight, category, utpost_code, duration_hours, comment)

@@ -4,9 +4,10 @@
 Reads data/source/Kompetanse_Anonymisert.xlsx (requires openpyxl) and writes
 one row per (employee, competency) with a status:
 
-  x / X -> qualified
-  ?     -> uncertain   (a manager's reminder to assess this competency, D44;
-                        NOT eligible for planning)
+  Ja / x     -> qualified
+  Ukjent / ? -> uncertain   (a manager's reminder to assess this competency, D44;
+                             NOT eligible for planning)
+  blank / Nei -> no competency
   anything else -> ignored with a warning (treated as no competency, D44)
 
 Competency columns are mapped to the competency_id values in
@@ -33,7 +34,7 @@ SOURCE = REPO_ROOT / "data" / "source" / "Kompetanse_Anonymisert.xlsx"
 SEED_DIR = REPO_ROOT / "data" / "seed"
 OUT = SEED_DIR / "employee_competencies.csv"
 
-STATUS = {"x": "qualified", "?": "uncertain"}
+STATUS = {"x": "qualified", "ja": "qualified", "?": "uncertain", "ukjent": "uncertain"}
 
 
 def load_column_mapping() -> dict[str, list[str]]:
@@ -76,7 +77,7 @@ def main() -> int:
             if header is None:
                 continue
             mark = str(cell.value).strip().lower() if cell.value is not None else ""
-            if not mark:
+            if not mark or mark == "nei":
                 continue
             status = STATUS.get(mark)
             if status is None:

@@ -11,7 +11,7 @@ Drop the exports from the HR system here (or upload them under
 |---|---|---|
 | `Utskrift_fleksiplan_<ÅÅÅÅMMDDttmmss>.csv` | Plan («Utskrift fleksiplan», the turnus) | whenever a turnus is made or revised |
 | `Ukeplan_<ÅÅÅÅMMDDttmmss>.csv` | Ajourhold (the week plan) | one file per week — re-exports are fine, the newest wins |
-| `*.xlsx` | the competency matrix, names written exactly as in the turnus | when it changes |
+| `*.xlsx` | the competency matrix (staged for review under Administrasjon → Kompetanse — never applied directly) | when needed; day-to-day edits happen in the app |
 
 What happens to a file:
 

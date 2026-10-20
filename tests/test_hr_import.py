@@ -315,19 +315,29 @@ class PipelineTest(unittest.TestCase):
         self.assertTrue(any("Turnus mangler fra 25.01.2027" in f for f in texts))
         self.assertTrue(any("Ingen ukeplan for denne uken" in f for f in texts))
 
-    def test_competency_workbook_matched_by_name(self):
+    def test_competency_workbook_is_staged_then_applied_by_name(self):
         from openpyxl import Workbook
+
+        from app import competency
 
         wb = Workbook()
         ws = wb.active
         ws.append(["Kompetanse"])
         ws.append(["Navn", "Arbeidsbord/brikkelegging", "Kontrollsone", "Gangen", "Ansvarsvakt"])
-        ws.append(["Hansen Kari", "x", "?", "", "x"])
-        ws.append(["Ukjent Person", "x", "", "", ""])
+        ws.append(["Hansen Kari", "Ja", "Ukjent", "", "x"])
+        ws.append(["Ukjent Person", "Ja", "", "", ""])
         buffer = io.BytesIO()
         wb.save(buffer)
         self.drop("Kompetanse.xlsx", buffer.getvalue())
         self.load()
+        # Nothing applied before review (D98) — the file waits.
+        self.assertEqual(self.conn.execute("SELECT COUNT(*) FROM competency_rows").fetchone()[0], 0)
+        self.assertTrue(any("venter på gjennomgang" in f for f in self.findings()))
+        import_id = competency.pending_imports(self.conn)[0]["import_id"]
+        self.assertEqual(competency.review(self.conn, import_id)["step"], "link")
+        self.assertEqual(competency.save_links(self.conn, {"Ukjent Person": "__skip__"}), [])
+        competency.apply_import(self.conn, import_id, overwrite_conflicts=False)
+        hr_import.rebuild(self.conn, TODAY)
         comps = {r["competency_id"]: r["status"] for r in self.conn.execute(
             """SELECT ec.* FROM employee_competencies ec JOIN employees e USING (employee_id)
                WHERE e.full_name = 'Hansen Kari'""")}

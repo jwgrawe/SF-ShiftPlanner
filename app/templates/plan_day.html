@@ -203,7 +203,7 @@
         <td class="small">
           {% if row.pending %}<span class="badge alert">kan ikke planlegges</span> {{ row.pending }}
           {% elif row.hold == "aldri" %}<span class="badge soft">holdes utenfor</span> stilling «{{ row.title }}» planlegges ikke
-          {% elif row.hold == "uavklart" %}<span class="badge alert">holdes utenfor</span> ny stilling «{{ row.title }}» – <a href="/admin#stillinger">klassifiser</a>
+          {% elif row.hold == "uavklart" %}<span class="badge alert">holdes utenfor</span> ny stilling «{{ row.title }}» – <a href="/admin/stillinger">klassifiser</a>
           {% elif row.hold == "tvetydig" %}<span class="badge alert">holdes utenfor</span> uklart hvilken stilling vakten gjelder
           {% elif row.utpost_code == "yes" %}<span class="muted">utpost</span>
           {% endif %}

@@ -1,0 +1,277 @@
+{% extends "admin_base.html" %}
+{% from "_macros.html" import log_panel %}
+{% block admin_content %}
+<p class="small intro">Hvem kan stå på hvilke funksjoner. <strong>Ja</strong> = kan plasseres,
+<strong>Ukjent</strong> = må vurderes (plasseres ikke), tom = har ikke kompetansen.
+Klikk en celle for å bytte, eller bruk tastaturet: piltaster flytter, <kbd>J</kbd> / <kbd>U</kbd> /
+<kbd>N</kbd> setter verdi, <kbd>Mellomrom</kbd> bytter, <kbd>Ctrl</kbd>+<kbd>S</kbd> lagrer.</p>
+
+{% for pending in pending_imports %}
+  <div class="note">
+    <strong>{{ pending.filename }}</strong> venter på gjennomgang – ingenting er endret ennå.
+    <a class="btn small" href="/admin/kompetanse/import/{{ pending.import_id }}">Se gjennom</a>
+  </div>
+{% endfor %}
+
+<div class="card actions-card">
+  <form method="post" action="/admin/kompetanse/last-opp" enctype="multipart/form-data" class="uploadrow">
+    <label for="kfil"><strong>Importer fra Excel</strong></label>
+    <input id="kfil" type="file" name="fil" accept=".xlsx" required>
+    <button class="btn secondary" type="submit">Last opp og se gjennom</button>
+  </form>
+  <a class="btn secondary" href="/admin/kompetanse/skjema.xlsx">Last ned utfyllingsskjema (.xlsx)</a>
+  <span class="muted small">Skjemaet har alle ansatte i turnusen med navn skrevet nøyaktig som i
+    eksportene, dagens verdier forhåndsutfylt og nedtrekkslister. Bare det som endres i skjemaet,
+    tas i bruk ved import.</span>
+</div>
+
+{% if not rows %}
+  <p class="muted">Ingen ansatte å vise ennå{% if not is_demo() %} – de hentes fra turnus og ukeplan
+  (<a href="/import">Datagrunnlag</a>){% endif %}.</p>
+{% else %}
+<form method="post" action="/admin/kompetanse/lagre" id="matrix-form">
+  <input type="hidden" name="changes" id="changes">
+  <div class="mx-scroll">
+  <div class="mx-toolbar" role="toolbar" aria-label="Kompetanse">
+    <input type="search" id="mx-search" placeholder="Søk navn …" aria-label="Søk navn">
+    <select id="mx-filter" aria-label="Vis">
+      <option value="">Alle ansatte</option>
+      <option value="empty">Uten kompetanse</option>
+      <option value="unknown">Med «Ukjent»</option>
+      {% if temps %}<option value="temp">Vikarer</option>{% endif %}
+      <option value="changed">Ulagrede endringer</option>
+    </select>
+    {% if titles|length > 1 %}
+    <select id="mx-title" aria-label="Stilling">
+      <option value="">Alle stillinger</option>
+      {% for title in titles %}<option>{{ title }}</option>{% endfor %}
+    </select>
+    {% endif %}
+    <span class="mx-legend"><span class="cell-chip q">Ja</span><span class="cell-chip u">Ukj</span><span class="cell-chip">–</span></span>
+    <span class="mx-count muted small" id="mx-count"></span>
+    <span class="mx-spacer"></span>
+    <span class="mx-dirty" id="mx-dirty" hidden></span>
+    <button class="btn secondary" type="button" id="mx-reset" disabled>Angre</button>
+    <button class="btn" type="submit" id="mx-save" disabled>Lagre</button>
+  </div>
+
+  <table class="matrix" id="matrix">
+    <thead>
+      <tr class="mx-zones">
+        <th class="mx-corner" colspan="2"></th>
+        {% for zone in zones %}<th colspan="{{ zone.span }}" class="zone-{{ zone.zone_id }}">{{ zone.name }}</th>{% endfor %}
+      </tr>
+      <tr class="mx-heads">
+        <th class="mx-name">Ansatt</th><th class="mx-title">Stilling</th>
+        {% for col in columns %}<th class="mx-col" data-ci="{{ loop.index0 }}" title="{{ col.label }}"><span>{{ col.label }}</span></th>{% endfor %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in rows %}
+        <tr data-name="{{ (row.full_name ~ ' ' ~ row.display)|lower }}" data-title="{{ row.title }}"
+            data-empty="{{ 1 if row.empty else 0 }}" data-unknown="{{ row.unknown }}" data-temp="{{ 1 if row.temp else 0 }}">
+          <th class="mx-name" scope="row"><span class="pn">{{ row.full_name }}</span>
+            <span class="muted small">{{ row.display }}</span></th>
+          <td class="mx-title">{% if row.temp %}<span class="badge draft" title="I ukeplanen, ikke i turnusen – bruker standardkompetansen om raden er tom">vikar</span>{% endif %}
+            {{ row.title }}{% if row.empty and not row.temp %} <span class="badge alert">mangler</span>{% endif %}</td>
+          {% for col in columns %}
+            {% set v = row["values"].get(col.key, "") %}
+            <td><button type="button" class="cell {{ 'q' if v == 'qualified' else 'u' if v == 'uncertain' else '' }}"
+                  data-key="{{ row.key }}" data-col="{{ col.key }}" data-ci="{{ loop.index0 }}"
+                  data-old="{{ v }}" data-value="{{ v }}"
+                  {% if row.temp and not row["values"] %}data-std="1"{% endif %}
+                  aria-label="{{ row.full_name }}, {{ col.label }}"></button></td>
+          {% endfor %}
+        </tr>
+      {% endfor %}
+    </tbody>
+    <tfoot>
+      <tr class="mx-standard" data-name="standardkompetanse" data-empty="0" data-unknown="0" data-temp="0" data-title="">
+        <th class="mx-name" scope="row">Standardkompetanse for vikarer
+          <span class="small">Gjelder vikarer uten egen rad{% if temps %} – nå {{ temps }} stk.{% endif %}</span></th>
+        <td class="mx-title small">Endres sjelden</td>
+        {% for col in columns %}
+          {% set v = standard.get(col.key, "") %}
+          <td><button type="button" class="cell {{ 'q' if v == 'qualified' else 'u' if v == 'uncertain' else '' }}"
+                data-key="__standard__" data-col="{{ col.key }}" data-ci="{{ loop.index0 }}"
+                data-old="{{ v }}" data-value="{{ v }}" aria-label="Standardkompetanse, {{ col.label }}"></button></td>
+        {% endfor %}
+      </tr>
+    </tfoot>
+  </table>
+  </div>
+</form>
+{% endif %}
+
+{% if orphans %}
+<details class="logpanel">
+  <summary>I kompetansedataene, men ikke i turnus eller ukeplan <span class="muted small">({{ orphans|length }})</span></summary>
+  <p class="small">Sluttet, eller skrevet annerledes i filen? Er navnet skrevet annerledes, kobles det
+  ved neste import. Fjern ellers dataene her.</p>
+  <div class="tablewrap"><table>
+    {% for name in orphans %}
+      <tr><td>{{ name }}</td><td style="width:8rem">
+        <form method="post" action="/admin/kompetanse/fjern"
+              onsubmit="return confirm('Fjerne all kompetanse for {{ name|e }}?');">
+          <input type="hidden" name="key" value="{{ name }}">
+          <button class="btn secondary small" type="submit">Fjern</button>
+        </form></td></tr>
+    {% endfor %}
+  </table></div>
+</details>
+{% endif %}
+
+{{ log_panel(log, "Logg – kompetanse") }}
+
+<dialog class="modal" id="confirm-standard">
+  <h2>Endre standardkompetansen?</h2>
+  <p>Standardkompetansen brukes for <strong>alle vikarer</strong> uten egen rad – nå og senere.
+  Endringen påvirker hvem som kan plasseres hvor.</p>
+  <div class="actions">
+    <button class="btn" type="button" data-answer="yes">Ja, lagre</button>
+    <button class="btn secondary" type="button" data-answer="no">Avbryt</button>
+  </div>
+</dialog>
+
+<script>
+(function () {
+  var form = document.getElementById("matrix-form");
+  if (!form) return;
+  var cells = Array.prototype.slice.call(form.querySelectorAll("button.cell"));
+  var rows = Array.prototype.slice.call(form.querySelectorAll("tbody tr, tfoot tr"));
+  var cycle = {"": "qualified", "qualified": "uncertain", "uncertain": ""};
+  var text = {"qualified": "Ja", "uncertain": "Ukj", "": ""};
+  var words = {"qualified": "Ja", "uncertain": "Ukjent", "": "Nei"};
+  var save = document.getElementById("mx-save"), reset = document.getElementById("mx-reset");
+  var dirtyLabel = document.getElementById("mx-dirty");
+  var dirty = 0;
+
+  function paint(cell) {
+    var v = cell.dataset.value;
+    cell.className = "cell" + (v === "qualified" ? " q" : v === "uncertain" ? " u" : "")
+      + (v !== cell.dataset.old ? " changed" : "") + (cell.dataset.std && !v ? " std" : "");
+    cell.textContent = text[v] || (cell.dataset.std ? "std" : "");
+    cell.title = words[v] + (v !== cell.dataset.old ? " (var " + words[cell.dataset.old] + ")" : "");
+  }
+  function refresh() {
+    dirty = cells.filter(function (c) { return c.dataset.value !== c.dataset.old; }).length;
+    save.disabled = reset.disabled = !dirty;
+    dirtyLabel.hidden = !dirty;
+    dirtyLabel.textContent = dirty + (dirty === 1 ? " ulagret endring" : " ulagrede endringer");
+  }
+  function set(cell, value) { cell.dataset.value = value; paint(cell); refresh(); }
+  cells.forEach(paint);
+  refresh();
+
+  // While working in the matrix the whole box (toolbar, headings, Lagre)
+  // should be on screen: bring it fully into view if the page has scrolled.
+  var box = form.querySelector(".mx-scroll");
+  function fitBox() {
+    var r = box.getBoundingClientRect();
+    if (r.top < 0 || r.bottom > window.innerHeight + 1) {
+      window.scrollBy({top: r.top - 8, behavior: "instant"});
+    }
+  }
+  box.addEventListener("pointerdown", fitBox);
+
+  // Grid navigation: rows of buttons, arrow keys move like a spreadsheet.
+  var grid = rows.map(function (r) { return Array.prototype.slice.call(r.querySelectorAll("button.cell")); });
+  function visibleRows() { return grid.filter(function (r, i) { return !rows[i].hidden; }); }
+  function move(cell, dr, dc) {
+    var vis = visibleRows();
+    var r = vis.findIndex(function (row) { return row.indexOf(cell) !== -1; });
+    var c = vis[r].indexOf(cell);
+    var nr = Math.min(Math.max(r + dr, 0), vis.length - 1);
+    var nc = Math.min(Math.max(c + dc, 0), vis[nr].length - 1);
+    vis[nr][nc].focus();
+  }
+  cells.forEach(function (cell) {
+    cell.addEventListener("click", function () { set(cell, cycle[cell.dataset.value]); });
+    cell.addEventListener("keydown", function (e) {
+      var k = e.key;
+      if (k === "ArrowUp") { move(cell, -1, 0); e.preventDefault(); }
+      else if (k === "ArrowDown" || k === "Enter") { move(cell, 1, 0); e.preventDefault(); }
+      else if (k === "ArrowLeft") { move(cell, 0, -1); e.preventDefault(); }
+      else if (k === "ArrowRight") { move(cell, 0, 1); e.preventDefault(); }
+      else if (k === "j" || k === "J") { set(cell, "qualified"); e.preventDefault(); }
+      else if (k === "u" || k === "U" || k === "?") { set(cell, "uncertain"); e.preventDefault(); }
+      else if (k === "n" || k === "N" || k === "Delete" || k === "Backspace") { set(cell, ""); e.preventDefault(); }
+      else if (k === " ") { set(cell, cycle[cell.dataset.value]); e.preventDefault(); }
+    });
+    // Crosshair: highlight the column heading of the focused cell.
+    cell.addEventListener("focus", function () {
+      fitBox();
+      var th = form.querySelector('th.mx-col[data-ci="' + cell.dataset.ci + '"]');
+      if (th) th.classList.add("hot");
+    });
+    cell.addEventListener("blur", function () {
+      var th = form.querySelector('th.mx-col[data-ci="' + cell.dataset.ci + '"]');
+      if (th) th.classList.remove("hot");
+    });
+  });
+
+  reset.addEventListener("click", function () {
+    cells.forEach(function (c) { c.dataset.value = c.dataset.old; paint(c); });
+    refresh();
+  });
+
+  // Filters
+  var search = document.getElementById("mx-search"), filter = document.getElementById("mx-filter");
+  var title = document.getElementById("mx-title"), count = document.getElementById("mx-count");
+  function applyFilter() {
+    var q = search.value.trim().toLowerCase(), f = filter.value, t = title ? title.value : "";
+    var shown = 0, total = 0;
+    rows.forEach(function (r) {
+      if (r.classList.contains("mx-standard")) return;
+      total++;
+      var changed = Array.prototype.some.call(r.querySelectorAll("button.cell"),
+        function (c) { return c.dataset.value !== c.dataset.old; });
+      var ok = (!q || r.dataset.name.indexOf(q) !== -1)
+        && (!t || r.dataset.title === t)
+        && (!f || (f === "empty" && r.dataset.empty === "1") || (f === "unknown" && r.dataset.unknown !== "0")
+            || (f === "temp" && r.dataset.temp === "1") || (f === "changed" && changed));
+      r.hidden = !ok;
+      if (ok) shown++;
+    });
+    count.textContent = shown === total ? total + " ansatte" : "viser " + shown + " av " + total;
+  }
+  [search, filter, title].forEach(function (el) { if (el) el.addEventListener("input", applyFilter); });
+  applyFilter();
+
+  // Save: only the changed cells travel, each with the value it had when the
+  // page loaded, so the server can refuse cells someone else changed meanwhile.
+  var dialog = document.getElementById("confirm-standard");
+  var confirmed = false;
+  form.addEventListener("submit", function (e) {
+    var changes = cells.filter(function (c) { return c.dataset.value !== c.dataset.old; })
+      .map(function (c) { return {key: c.dataset.key, col: c.dataset.col, old: c.dataset.old, "new": c.dataset.value}; });
+    if (!changes.length) { e.preventDefault(); return; }
+    var touchesStandard = changes.some(function (c) { return c.key === "__standard__"; });
+    if (touchesStandard && !confirmed && dialog && dialog.showModal) {
+      e.preventDefault();
+      dialog.showModal();
+      return;
+    }
+    document.getElementById("changes").value = JSON.stringify(changes);
+    dirty = 0;  // leaving on purpose
+  });
+  if (dialog) {
+    dialog.addEventListener("click", function (e) {
+      var answer = e.target.dataset && e.target.dataset.answer;
+      if (!answer) return;
+      dialog.close();
+      if (answer === "yes") { confirmed = true; form.requestSubmit(); }
+    });
+  }
+  document.addEventListener("keydown", function (e) {
+    if ((e.ctrlKey || e.metaKey) && (e.key === "s" || e.key === "S")) {
+      e.preventDefault();
+      if (dirty) form.requestSubmit();
+    }
+  });
+  window.addEventListener("beforeunload", function (e) {
+    if (dirty) { e.preventDefault(); e.returnValue = ""; }
+  });
+})();
+</script>
+{% endblock %}

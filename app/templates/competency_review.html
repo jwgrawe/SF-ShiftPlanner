@@ -1,0 +1,146 @@
+{% extends "admin_base.html" %}
+{% block admin_content %}
+<p><a href="/admin/kompetanse">&larr; Tilbake til kompetanse</a></p>
+<h2>Gjennomgang: {{ filename }}</h2>
+<p class="muted small">{{ names_in_file }} navn i filen
+  {% if has_base %} · utfyllingsskjema fra appen{% if generated %} ({{ generated|replace("Generert ", "laget ")|replace(" av SF-Planlegger", "") }}){% endif %}
+  – bare celler som er endret i skjemaet, tas i bruk{% endif %}.
+  {% if status != "venter" %}<span class="badge soft">{{ "tatt i bruk" if status == "brukt" else "forkastet" }}</span>{% endif %}</p>
+
+{% if notes %}
+  <ul class="warn-list">{% for note in notes %}<li class="warn">{{ note }}</li>{% endfor %}</ul>
+{% endif %}
+{% if feil %}
+  <ul class="warn-list">{% for problem in feil %}<li class="alert">{{ problem }}</li>{% endfor %}</ul>
+{% endif %}
+
+{% if status != "venter" %}
+  <p class="muted">Denne filen er allerede behandlet.</p>
+
+{% elif step == "link" %}
+  <h3>1. Koble navn</h3>
+  <p class="small">{{ unresolved|length }} navn i filen er ikke skrevet som i turnus/ukeplan. Velg hvem
+  de er – appen har foreslått den som passer best, også for forkortede navn. Valgene huskes, så samme
+  navn kobles av seg selv neste gang. Ingenting endres i kompetansedataene før du har sett endringene.</p>
+  <form method="post" action="/admin/kompetanse/import/{{ import.import_id }}/koble">
+    <div class="link-tools small">
+      <label><input type="checkbox" id="only-unsure"> Vis bare usikre</label>
+      <span class="muted">· <span class="badge published">sikker</span> godt treff ·
+        <span class="badge draft">usikker</span> sjekk · <span class="badge alert">ingen</span> velg selv</span>
+    </div>
+    <div class="tablewrap"><table class="linktable">
+      <tr><th style="width:30%">Navn i filen</th><th>Er denne personen</th><th style="width:7rem">Treff</th></tr>
+      {% for alias in unresolved %}
+        {% set s = suggestions[alias] %}
+        <tr data-confidence="{{ s.confidence }}">
+          <td><strong>{{ alias }}</strong><input type="hidden" name="alias_{{ loop.index }}" value="{{ alias }}"></td>
+          <td><select name="target_{{ loop.index }}" class="link-select" style="width:100%">
+            <option value="" {% if not s.choice %}selected{% endif %}>– velg –</option>
+            {% if s.options %}<optgroup label="Forslag">
+              {% for option in s.options %}<option value="{{ option }}" {% if option == s.choice %}selected{% endif %}>{{ option }}</option>{% endfor %}
+            </optgroup>{% endif %}
+            <optgroup label="Ikke i turnus/ukeplan">
+              <option value="__keep__">Behold navnet som det er</option>
+              <option value="__skip__">Hopp over (ikke importer)</option>
+            </optgroup>
+            <optgroup label="Alle">
+              {% for name in candidates %}<option value="{{ name }}">{{ name }}</option>{% endfor %}
+            </optgroup>
+          </select></td>
+          <td><span class="badge {{ 'published' if s.confidence == 'sikker' else 'draft' if s.confidence == 'usikker' else 'alert' }}">{{ s.confidence }}</span></td>
+        </tr>
+      {% endfor %}
+    </table></div>
+    <div class="actions">
+      <button class="btn" type="submit">Lagre koblingene og vis endringene</button>
+      <span class="muted small">Samme person kan ikke velges for to navn.</span>
+    </div>
+  </form>
+  <form method="post" action="/admin/kompetanse/import/{{ import.import_id }}/forkast"
+        onsubmit="return confirm('Forkaste filen uten å endre noe?');">
+    <button class="btn secondary small" type="submit">Forkast filen</button>
+  </form>
+  <script>
+    document.getElementById("only-unsure").addEventListener("change", function () {
+      var only = this.checked;
+      document.querySelectorAll(".linktable tr[data-confidence]").forEach(function (row) {
+        row.hidden = only && row.dataset.confidence === "sikker";
+      });
+    });
+  </script>
+
+{% else %}
+  <h3>{% if linked %}2. {% endif %}Dette blir endret</h3>
+  {% set n_new = counts.get("ny", 0) %}{% set n_over = counts.get("overskriver", 0) %}{% set n_conf = counts.get("konflikt", 0) %}
+  <p>
+    <span class="badge published">{{ n_new }} nye</span>
+    <span class="badge draft">{{ n_over }} overskriver utfylte celler</span>
+    {% if has_base %}<span class="badge alert">{{ n_conf }} konflikter</span>{% endif %}
+    {% if counts.get("hoppet over") %}<span class="badge soft">{{ counts["hoppet over"] }} navn hoppet over</span>{% endif %}
+  </p>
+  {% if not people %}
+    <p class="muted">Filen gir ingen endringer – alt stemmer allerede med kompetansedataene.</p>
+  {% else %}
+  <div class="tablewrap"><table>
+    <tr><th style="width:30%">Ansatt</th><th>Endringer</th></tr>
+    {% for person in people %}
+      <tr><td><strong>{{ person.target }}</strong>
+            {% if person.linked %}<br><span class="muted small">i filen: «{{ person.name }}»</span>{% endif %}</td>
+          <td class="changes">
+            {% for c in person.changes %}
+              <span class="chg {{ c.kind }}" title="{{ c.kind }}">{{ c.col }}:
+                {% if c.kind == "konflikt" %}appen «{{ words[c.old] }}», skjemaet «{{ words[c.new] }}» (var «{{ words[c.base] }}»)
+                {% elif c.kind == "ny" %}{{ words[c.new] }}
+                {% else %}{{ words[c.old] }} → {{ words[c.new] }}{% endif %}</span>
+            {% endfor %}
+          </td></tr>
+    {% endfor %}
+  </table></div>
+  {% endif %}
+
+  <form method="post" action="/admin/kompetanse/import/{{ import.import_id }}/bruk" id="apply-form">
+    {% if n_conf %}
+      <label class="small"><input type="checkbox" name="overskriv_konflikter" value="1">
+        Bruk skjemaets verdi også i konfliktene (ellers beholdes det som står i appen)</label>
+    {% endif %}
+    <div class="actions">
+      <button class="btn" type="submit" {% if not people %}disabled{% endif %}>Bruk endringene</button>
+    </div>
+  </form>
+  <form method="post" action="/admin/kompetanse/import/{{ import.import_id }}/forkast"
+        onsubmit="return confirm('Forkaste filen uten å endre noe?');">
+    <button class="btn secondary small" type="submit">{% if people %}Forkast filen{% else %}Marker som ferdig{% endif %}</button>
+  </form>
+
+  <dialog class="modal" id="confirm-overwrite">
+    <h2>Overskrive utfylte celler?</h2>
+    <p><strong id="ow-count"></strong> celler som allerede er fylt ut i appen, får en annen verdi
+    fra filen. Alle endringer logges.</p>
+    <div class="actions">
+      <button class="btn" type="button" data-answer="yes">Ja, bruk endringene</button>
+      <button class="btn secondary" type="button" data-answer="no">Avbryt</button>
+    </div>
+  </dialog>
+  <script>
+    (function () {
+      var form = document.getElementById("apply-form"), dialog = document.getElementById("confirm-overwrite");
+      var overwrites = {{ n_over }}, conflicts = {{ n_conf }}, confirmed = false;
+      form.addEventListener("submit", function (e) {
+        var box = form.querySelector('input[name="overskriv_konflikter"]');
+        var total = overwrites + (box && box.checked ? conflicts : 0);
+        if (total && !confirmed && dialog.showModal) {
+          e.preventDefault();
+          document.getElementById("ow-count").textContent = total;
+          dialog.showModal();
+        }
+      });
+      dialog.addEventListener("click", function (e) {
+        var answer = e.target.dataset && e.target.dataset.answer;
+        if (!answer) return;
+        dialog.close();
+        if (answer === "yes") { confirmed = true; form.requestSubmit(); }
+      });
+    })();
+  </script>
+{% endif %}
+{% endblock %}

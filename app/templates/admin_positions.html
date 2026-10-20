@@ -1,0 +1,45 @@
+{% extends "admin_base.html" %}
+{% from "_macros.html" import log_panel %}
+{% block admin_content %}
+<p class="small">Hver stillingsbetegnelse i turnusen klassifiseres én gang. En ny betegnelse
+holdes utenfor planen til den er klassifisert her (D87).</p>
+<form method="post" action="/admin/stillinger">
+<div class="tablewrap"><table>
+  <tr><th style="width:16rem">Stilling</th><th style="width:15rem">Planlegges</th><th>Ikke på disse funksjonene (ved «begrenset»)</th><th style="width:6rem">Ansatte</th></tr>
+  {% for position in positions %}
+    <tr>
+      <td><input type="hidden" name="title_{{ loop.index }}" value="{{ position.title }}">
+        <strong>{{ position.title }}</strong>
+        {% if position.rule == "uavklart" %}<br><span class="badge alert">må klassifiseres</span>{% endif %}</td>
+      <td>
+        <select name="rule_{{ loop.index }}" data-excl="excl-{{ loop.index }}" class="rule-select">
+          {% for value, label in [("vanlig", "Som vanlig"), ("begrenset", "Begrenset"), ("aldri", "Aldri på funksjonene"), ("uavklart", "Uavklart (holdes utenfor)")] %}
+            <option value="{{ value }}" {% if position.rule == value %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </td>
+      <td>{% set row_index = loop.index %}<div class="excl" id="excl-{{ row_index }}" {% if position.rule != "begrenset" %}hidden{% endif %}>
+        {% for fn in all_functions %}
+          <label><input type="checkbox" name="excl_{{ row_index }}" value="{{ fn.function_id }}"
+            {% if fn.function_id in position.excluded %}checked{% endif %}> {{ fn.name }}</label>
+        {% endfor %}
+      </div></td>
+      <td>{{ position.people }}</td>
+    </tr>
+  {% else %}
+    <tr><td colspan="4" class="muted">Ingen stillinger registrert.</td></tr>
+  {% endfor %}
+</table></div>
+<button class="btn" type="submit">Lagre stillinger</button>
+</form>
+<script>
+  // The function list only matters for «Begrenset».
+  document.querySelectorAll(".rule-select").forEach(function (select) {
+    select.addEventListener("change", function () {
+      document.getElementById(select.dataset.excl).hidden = select.value !== "begrenset";
+    });
+  });
+</script>
+
+{{ log_panel(log, "Logg – stillinger") }}
+{% endblock %}

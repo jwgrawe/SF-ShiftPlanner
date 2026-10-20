@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_macros.html" import log_panel %}
 {% block title %}Datagrunnlag – SF-Planlegger{% endblock %}
 {% block content %}
 <h1>Datagrunnlag</h1>
@@ -13,7 +14,7 @@
 automatisk. Den nyeste filen som dekker en dato gjelder; ukeplanen går foran turnusen for de som
 står i den.</p>
 
-{% if melding %}<p class="note">{{ melding|capitalize }}.</p>{% endif %}
+{% if melding %}<p class="note">{{ melding[:1]|upper }}{{ melding[1:] }}{% if not melding.endswith(".") %}.{% endif %}</p>{% endif %}
 
 <form method="post" action="/import/last-opp" enctype="multipart/form-data" class="card">
   <div class="uploadrow">
@@ -70,16 +71,45 @@ står i den.</p>
   {% endfor %}
 </table></div>
 
-{% if pending %}
-  <h2>Vakter som ikke kan planlegges ennå</h2>
-  <p class="muted small">Disse holdes utenfor planen til årsaken er ryddet opp – appen gjetter aldri.</p>
+{% if pending or manual %}
+  <h2 id="ventende">Vakter som ikke kan planlegges ennå</h2>
+  <p class="small">Holdes utenfor planen til årsaken er ryddet – appen gjetter aldri. For koder appen
+  ikke kjenner (f.eks. vikarers <code>DX</code>) kan du angi tiden for akkurat denne vakten. Går vakten
+  over midnatt, regnes den – som i turnussystemet – som natten som <em>slutter</em> denne datoen.
+  Endres cellen i en nyere ukeplan, faller den angitte tiden bort og du blir spurt på nytt.</p>
+  {% if pending %}
   <div class="tablewrap"><table>
-    <tr><th>Dato</th><th>Ansatt</th><th>Kode i filen</th><th>Årsak</th></tr>
+    <tr><th style="width:8rem">Dato</th><th style="width:12rem">Ansatt</th><th style="width:7rem">I filen</th><th>Årsak</th><th style="width:20rem">Angi tid</th></tr>
     {% for row in pending %}
       <tr><td>{{ row.date.strftime("%d.%m.%Y") }}</td><td>{{ row.display_name }}</td>
-          <td><code>{{ row.raw }}</code></td><td>{{ row.reason }}</td></tr>
+          <td><code>{{ row.raw }}</code></td><td>{{ row.reason }}</td>
+          <td>{% if row.fixable %}
+            <form method="post" action="/import/manuell-tid" class="timeform">
+              <input type="hidden" name="employee_id" value="{{ row.employee_id }}">
+              <input type="hidden" name="date" value="{{ row.date }}">
+              <input type="hidden" name="raw" value="{{ row.raw }}">
+              <input type="time" name="start" required aria-label="Start"> –
+              <input type="time" name="end" required aria-label="Slutt">
+              <button class="btn small" type="submit">Lagre</button>
+            </form>
+          {% else %}<span class="muted small">må rettes i turnussystemet</span>{% endif %}</td></tr>
     {% endfor %}
   </table></div>
+  {% endif %}
+  {% if manual %}
+    <h3>Angitte tider</h3>
+    <div class="tablewrap"><table>
+      <tr><th style="width:8rem">Dato</th><th style="width:12rem">Ansatt</th><th style="width:7rem">I filen</th><th>Tid</th><th style="width:8rem"></th></tr>
+      {% for row in manual %}
+        <tr><td>{{ row.date.strftime("%d.%m.%Y") }}</td><td>{{ row.display_name }}</td>
+            <td><code>{{ row.raw }}</code></td><td>{{ row.start }}–{{ row.end }}</td>
+            <td><form method="post" action="/import/manuell-tid/slett">
+              <input type="hidden" name="employee_id" value="{{ row.employee_id }}">
+              <input type="hidden" name="date" value="{{ row.date }}">
+              <button class="btn secondary small" type="submit">Fjern</button></form></td></tr>
+      {% endfor %}
+    </table></div>
+  {% endif %}
 {% endif %}
 
 <h2>Filer</h2>
@@ -110,13 +140,6 @@ står i den.</p>
 (med en .txt som forklarer hvorfor – varselet står til filen er fjernet derfra). Rådata for erstattede filer slettes straks; alt eldre enn
 {{ retention }} dager slettes automatisk (endres under Administrasjon).</p>
 
-{% if log %}
-  <h2>Logg</h2>
-  <div class="tablewrap"><table>
-    {% for entry in log %}
-      <tr><td style="width:10rem" class="muted">{{ entry.at.strftime("%d.%m %H:%M") }}</td><td>{{ entry.text }}</td></tr>
-    {% endfor %}
-  </table></div>
-{% endif %}
+{{ log_panel(log, "Logg – import") }}
 {% endif %}
 {% endblock %}

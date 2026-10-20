@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}Administrasjon – SF-Planlegger{% endblock %}
+{% block content %}
+<h1>Administrasjon</h1>
+<nav class="tabs" aria-label="Administrasjon">
+  {% for key, label, href in [("innstillinger", "Innstillinger", "/admin"),
+                              ("stillinger", "Stillinger", "/admin/stillinger"),
+                              ("kompetanse", "Kompetanse", "/admin/kompetanse"),
+                              ("vaktkoder", "Vaktkoder", "/admin/vaktkoder"),
+                              ("grunndata", "Grunndata", "/admin/grunndata")] %}
+    <a href="{{ href }}" {% if tab == key %}class="active" aria-current="page"{% endif %}>{{ label }}
+      {% if key == "stillinger" and badge_positions %}<span class="tabbadge">{{ badge_positions }}</span>{% endif %}
+      {% if key == "kompetanse" and badge_competency %}<span class="tabbadge">{{ badge_competency }}</span>{% endif %}
+    </a>
+  {% endfor %}
+</nav>
+{% if melding %}<p class="note">{{ melding }}</p>{% endif %}
+{% block admin_content %}{% endblock %}
+{% endblock %}

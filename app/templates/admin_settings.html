@@ -1,0 +1,30 @@
+{% extends "admin_base.html" %}
+{% from "_macros.html" import log_panel %}
+{% block admin_content %}
+<form method="post" action="/admin/innstillinger" class="card">
+  <div class="actions" style="margin:0">
+    <label for="display_theme"><strong>Fargevisning på tavlen</strong></label>
+    <select id="display_theme" name="display_theme">
+      <option value="mork" {% if display_theme != "lys" %}selected{% endif %}>Mørk (standard)</option>
+      <option value="lys" {% if display_theme == "lys" %}selected{% endif %}>Lys</option>
+    </select>
+    <label for="retention_days"><strong>Behold data i</strong></label>
+    <input id="retention_days" name="retention_days" type="number" min="14" max="730"
+           value="{{ retention }}" style="width:5.5rem"> dager
+    <button class="btn" type="submit">Lagre</button>
+    <a class="btn secondary" href="/display" target="_blank" rel="noopener">Åpne tavlen</a>
+  </div>
+  <p class="muted small" style="margin:0.5rem 0 0">
+    Fargevisningen gjelder tavlen på storskjerm – velg lys i lyse lokaler (overstyr midlertidig
+    med <code>?tema=lys</code> / <code>?tema=mork</code>). Vaktlister, planer og fravær eldre enn
+    antall dager over slettes automatisk, sammen med importfilene (D94).
+  </p>
+</form>
+
+<div class="card">
+  <strong>Datagrunnlag</strong> – turnus, ukeplaner og filer finner du under
+  <a href="/import">Datagrunnlag</a>.
+</div>
+
+{{ log_panel(log, "Logg – alle hendelser", show_area=true) }}
+{% endblock %}

@@ -1,0 +1,47 @@
+{% extends "admin_base.html" %}
+{% from "_macros.html" import log_panel %}
+{% block admin_content %}
+{% if learned %}
+<h2>Vaktkoder lært fra turnusen</h2>
+<p class="small">Koder som står i turnusens forklaring, men ikke i appens vaktkodeliste.
+Tidene er hentet fra turnusen; kategorien (som styrer rulleringstidspunktet) er foreslått
+automatisk – bekreft eller endre.</p>
+<form method="post" action="/admin/vaktkoder">
+<div class="tablewrap"><table>
+  <tr><th>Kode</th><th>Tid</th><th>Utpost</th><th>Kategori</th><th>Status</th></tr>
+  {% for code in learned %}
+    <tr>
+      <td><input type="hidden" name="code_{{ loop.index }}" value="{{ code.code }}"><strong>{{ code.code }}</strong></td>
+      <td>{{ code.start }}–{{ code.end }}</td>
+      <td>{% if code.utpost_code == "yes" %}ja{% endif %}</td>
+      <td><select name="category_{{ loop.index }}">
+        {% for category in categories %}<option {% if code.category == category %}selected{% endif %}>{{ category }}</option>{% endfor %}
+      </select></td>
+      <td>{% if code.confirmed %}<span class="badge published">bekreftet</span>{% else %}<span class="badge draft">foreslått</span>{% endif %}</td>
+    </tr>
+  {% endfor %}
+</table></div>
+<button class="btn" type="submit">Bekreft kategoriene</button>
+</form>
+{% endif %}
+
+<h2>Vaktkoder og rullering</h2>
+<div class="tablewrap"><table>
+  <tr><th>Kode</th><th>Tid</th><th>Kategori</th><th>Utpost</th><th>Merknad</th></tr>
+  {% for code in shift_codes %}
+    <tr><td>{{ code.code }}</td><td>{{ code.start }}–{{ code.end }}</td>
+        <td>{{ code.category }}</td>
+        <td>{% if code.utpost_code == "yes" %}ja{% endif %}</td>
+        <td class="muted">{{ code.comment }}</td></tr>
+  {% endfor %}
+</table></div>
+<div class="tablewrap"><table>
+  <tr><th>Vaktkategori</th><th>Rulleringstidspunkt</th><th>Merknad</th></tr>
+  {% for rule in rotation_rules %}
+    <tr><td>{{ rule.category }}</td><td>{{ rule.rotation_time or "ingen" }}</td>
+        <td class="muted">{{ rule.notes }}</td></tr>
+  {% endfor %}
+</table></div>
+
+{{ log_panel(log, "Logg – vaktkoder") }}
+{% endblock %}

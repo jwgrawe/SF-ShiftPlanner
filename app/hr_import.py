@@ -30,7 +30,7 @@ picked up without anyone running anything (D91).
 from __future__ import annotations
 
 import datetime as dt
-import io
+import json
 import shutil
 import sqlite3
 import threading
@@ -38,7 +38,7 @@ import time
 from collections import defaultdict
 from pathlib import Path
 
-from app import db, domain, hr_export, planner
+from app import applog, competency, db, domain, hr_export, planner
 from app.hr_export import Rejected, norm
 
 INBOX = db.DATA_DIR / "import"
@@ -71,8 +71,8 @@ def retention_days(conn: sqlite3.Connection) -> int:
         return DEFAULT_RETENTION_DAYS
 
 
-def log(conn: sqlite3.Connection, text: str) -> None:
-    conn.execute("INSERT INTO import_log (at, text) VALUES (?, ?)", (_now(), text))
+def log(conn: sqlite3.Connection, text: str, area: str = "import") -> None:
+    applog.log(conn, area, text)
 
 
 def _move(path: Path, folder: Path) -> Path:
@@ -125,52 +125,6 @@ def store_export(conn: sqlite3.Connection, export: hr_export.Export, filename: s
     return file_id
 
 
-def parse_competency_workbook(conn: sqlite3.Connection, raw: bytes
-                              ) -> tuple[list[tuple[str, str, str]], list[str]]:
-    """The competency matrix (same layout as data/source/Kompetanse_*.xlsx),
-    with each person named exactly as in the exports (Q40/D82)."""
-    from openpyxl import load_workbook
-
-    try:
-        ws = load_workbook(io.BytesIO(raw), data_only=True, read_only=True).worksheets[0]
-    except Exception as exc:  # noqa: BLE001 - any unreadable workbook
-        raise Rejected([f"Regnearket kan ikke åpnes ({exc.__class__.__name__})."]) from None
-    mapping: dict[str, list[str]] = defaultdict(list)
-    for row in conn.execute("SELECT competency_id, source_column FROM competency_types"):
-        if row["source_column"]:
-            mapping[norm(row["source_column"]).lower()].append(row["competency_id"])
-    rows = [[("" if c is None else str(c)) for c in r] for r in ws.iter_rows(values_only=True)]
-    header_index = next(
-        (i for i, r in enumerate(rows[:15])
-         if sum(1 for c in r[1:] if norm(c).lower() in mapping) >= 3), None)
-    if header_index is None:
-        raise Rejected(["Fant ingen overskriftsrad med kompetansene som kolonner – er dette "
-                        "kompetansefilen?"])
-    header = [norm(c) for c in rows[header_index]]
-    unknown = [h for h in header[1:] if h and h.lower() not in mapping]
-    if unknown:
-        raise Rejected([f"Ukjente kompetansekolonner: {unknown}. Legg dem til i "
-                        "competency_types.csv (source_column) først."])
-    result, notes = [], []
-    for r in rows[header_index + 1:]:
-        name = norm(r[0]) if r else ""
-        if not name:
-            continue
-        for value, label in zip(r[1:], header[1:]):
-            mark = value.strip().lower()
-            if not label or not mark:
-                continue
-            status = {"x": "qualified", "?": "uncertain"}.get(mark)
-            if status is None:
-                notes.append(f"{name} / {label}: merket «{mark}» ignoreres")
-                continue
-            for competency_id in mapping[label.lower()]:
-                result.append((name, competency_id, status))
-    if not result:
-        raise Rejected(["Kompetansefilen har ingen avkryssede kompetanser."])
-    return result, notes
-
-
 def process_file(conn: sqlite3.Connection, path: Path, unit: str) -> str:
     """Import one file from the inbox and move it out of the inbox."""
     raw = path.read_bytes()
@@ -191,19 +145,19 @@ def process_file(conn: sqlite3.Connection, path: Path, unit: str) -> str:
 
     try:
         if path.suffix.lower() == ".xlsx":
-            competencies, notes = parse_competency_workbook(conn, raw)
+            # Never applied directly: staged for review under Administrasjon
+            # → Kompetanse, where every change is shown first (D98).
+            import_id = competency.stage(conn, path.name, raw)
             stored = _move(path, inbox / ARCHIVE_DIRNAME)
-            conn.execute("UPDATE import_files SET status = 'superseded' "
-                         "WHERE kind = 'kompetanse' AND status = 'active'")
-            conn.execute("DELETE FROM competency_rows")
-            conn.executemany("INSERT OR REPLACE INTO competency_rows VALUES (?, ?, ?)",
-                             competencies)
-            people = len({name for name, _, _ in competencies})
+            people = len(json.loads(conn.execute(
+                "SELECT payload FROM competency_imports WHERE import_id = ?",
+                (import_id,)).fetchone()[0])["rows"])
             conn.execute(
                 """INSERT INTO import_files (kind, filename, sha256, imported_at, status, reason,
                        person_count, stored_path) VALUES ('kompetanse', ?, ?, ?, 'active', ?, ?, ?)""",
-                (path.name, digest, _now(), "\n".join(notes[:20]) or None, people, str(stored)))
-            message = f"{path.name}: kompetansefil importert ({people} personer)."
+                (path.name, digest, _now(), None, people, str(stored)))
+            message = (f"{path.name}: kompetansefil med {people} navn venter på gjennomgang under "
+                       "Administrasjon → Kompetanse.")
         else:
             try:
                 export = hr_export.read(raw, path.name, unit)
@@ -404,6 +358,15 @@ class Rebuild:
                           f"Navnet «{name}» har flere PersonID-er ({', '.join(sorted(pids))}). "
                           "Turnusrader med dette navnet kan ikke knyttes sikkert og holdes "
                           "utenfor planen.")
+        # Temps: in an ukeplan but in no active turnus — the turnus holds every
+        # regular employee (D97). Without any turnus nobody is called a temp.
+        kinds = {f["file_id"]: f["kind"] for f in files}
+        in_plan = {e for (fid, _), e in mapping.items() if e and kinds[fid] == "plan"}
+        in_week = {e for (fid, _), e in mapping.items() if e and kinds[fid] == "ajourhold"}
+        self.temps = (in_week - in_plan) if in_plan else set()
+        conn.execute("UPDATE employees SET is_temp = 0 WHERE origin = 'import'")
+        conn.executemany("UPDATE employees SET is_temp = 1 WHERE employee_id = ?",
+                         [(e,) for e in self.temps])
         return mapping
 
     # -- learned codes and legend drift ----------------------------------
@@ -436,7 +399,8 @@ class Rebuild:
                         (code, row["start"], row["end"], crosses,
                          suggest_category(row["start"], row["end"]),
                          "yes" if code.upper().startswith("U") else "no", hours, _now()))
-                    log(conn, f"Ny vaktkode {code} ({row['start']}–{row['end']}) lært fra turnusen.")
+                    log(conn, f"Ny vaktkode {code} ({row['start']}–{row['end']}) lært fra turnusen.",
+                        "vaktkode")
         db.merge_learned_codes(conn)
         for row in conn.execute("SELECT * FROM learned_shift_codes WHERE confirmed = 0"):
             self.find("info", "vaktkode",
@@ -471,7 +435,7 @@ class Rebuild:
                 conn.execute("INSERT OR IGNORE INTO positions (title, rule, first_seen) "
                              "VALUES (?, 'uavklart', ?)", (r["title"], self.today.isoformat()))
                 rules[r["title"]] = "uavklart"
-                log(conn, f"Ny stillingsbetegnelse «{r['title']}» – må klassifiseres.")
+                log(conn, f"Ny stillingsbetegnelse «{r['title']}» – må klassifiseres.", "stilling")
 
         # Precedence, in export-date space (before nights are moved).
         effective: dict[tuple[str, str], tuple[str, str, tuple[int, int]]] = {}
@@ -550,26 +514,37 @@ class Rebuild:
 
         conn.execute("DELETE FROM roster")
         conn.execute("DELETE FROM roster_pending")
+        manual = {(r["employee_id"], r["export_date"]): r for r in conn.execute(
+            "SELECT * FROM manual_shift_times")}
         placed: set[tuple[str, str]] = set()
         pending: list[tuple] = []
         not_in_plan: set[str] = set()
         for (eid, day), (raw, source, key) in sorted(effective.items()):
             if (eid, day) in conflicts:
-                pending.append((day, eid, raw, "to rader har vakt samme dag (D80)", source))
+                pending.append((day, eid, raw, "to rader har vakt samme dag (D80)", source, 0))
                 continue
             code, end_override, problem = interpret(raw)
+            fixable = bool(problem) and not problem.startswith("flere koder")
+            shift = codes.get(code) if not problem else None
+            if not problem and shift is None:
+                problem, fixable = f"ukjent vaktkode «{code}»", True
+            start_override = category_override = None
             if problem:
-                pending.append((day, eid, raw, problem, source))
-                continue
-            shift = codes.get(code)
-            if shift is None:
-                pending.append((day, eid, raw, f"ukjent vaktkode «{code}»", source))
-                continue
-            if end_override and shift["start"] >= end_override:
-                pending.append((day, eid, raw, "F3 på en vakt som starter etter kl. 12", source))
+                entry = manual.get((eid, day))
+                if not (fixable and entry and entry["raw"] == raw):
+                    pending.append((day, eid, raw, problem, source, int(fixable)))
+                    continue
+                # A manager gave this exact cell its times (D95).
+                code, shift = "MAN", codes["MAN"]
+                start_override, end_override = entry["start"], entry["end"]
+                category_override = suggest_category(entry["start"], entry["end"])
+            elif end_override and shift["start"] >= end_override:
+                pending.append((day, eid, raw, "F3 på en vakt som starter etter kl. 12", source, 0))
                 continue
             date = dt.date.fromisoformat(day)
-            if shift["crosses_midnight"] == "yes":
+            crosses = ((end_override or "") <= (start_override or "") if start_override
+                       else shift["crosses_midnight"] == "yes")
+            if crosses:
                 date -= dt.timedelta(days=1)   # exported on the morning it ends (Q33)
             title, ambiguous = title_for(eid, day, source, key)
             hold = None
@@ -581,26 +556,30 @@ class Rebuild:
             elif source == "ajourhold":
                 not_in_plan.add(eid)
             if (eid, date.isoformat()) in placed:
-                pending.append((date.isoformat(), eid, raw, "to vakter samme dag", source))
+                pending.append((date.isoformat(), eid, raw, "to vakter samme dag", source, 0))
                 continue
             placed.add((eid, date.isoformat()))
             conn.execute(
                 """INSERT INTO roster (date, employee_id, shift_code, hold, end_override, title,
-                       source, raw) VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-                (date.isoformat(), eid, code, hold, end_override, title, source, raw))
+                       source, raw, start_override, category_override)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (date.isoformat(), eid, code, hold, end_override, title, source, raw,
+                 start_override, category_override))
         conn.executemany(
-            "INSERT OR REPLACE INTO roster_pending (date, employee_id, raw, reason, source) "
-            "VALUES (?, ?, ?, ?, ?)", pending)
+            "INSERT OR REPLACE INTO roster_pending (date, employee_id, raw, reason, source, fixable) "
+            "VALUES (?, ?, ?, ?, ?, ?)", pending)
 
         horizon = (self.today + dt.timedelta(days=LOOKAHEAD_DAYS)).isoformat()
-        grouped: dict[str, list[str]] = defaultdict(list)
-        for day, eid, raw, reason, _ in pending:
+        grouped: dict[tuple[str, int], list[str]] = defaultdict(list)
+        for day, eid, raw, reason, _, fixable in pending:
             if self.today.isoformat() <= day <= horizon:
-                grouped[reason].append(f"{names.get(eid, eid)} {dt.date.fromisoformat(day):%d.%m}")
-        for reason, who in sorted(grouped.items()):
+                grouped[(reason, fixable)].append(
+                    f"{names.get(eid, eid)} {dt.date.fromisoformat(day):%d.%m}")
+        for (reason, fixable), who in sorted(grouped.items()):
+            hint = " Angi tidene under Datagrunnlag." if fixable else ""
             self.find("alert", "vakt",
                       f"Kan ikke planlegges – {reason}: {', '.join(who[:12])}"
-                      f"{' …' if len(who) > 12 else ''}.")
+                      f"{' …' if len(who) > 12 else ''}.{hint}")
         held = defaultdict(int)
         for r in conn.execute("SELECT title, COUNT(*) AS n FROM roster WHERE hold = 'uavklart' "
                               "AND date BETWEEN ? AND ? GROUP BY title",
@@ -613,39 +592,55 @@ class Rebuild:
                       "planen til da.")
         if not_in_plan:
             self.find("info", "ukeplan",
-                      f"I ukeplanen, men ikke i turnusen (f.eks. innleid vikar): "
+                      f"Vikarer (i ukeplanen, ikke i turnusen): "
                       f"{', '.join(sorted(names.get(e, e) for e in not_in_plan))}. "
-                      "Planlegges som vanlig stilling.")
+                      "Planlegges med standardkompetansen for vikarer, om de ikke har egen.")
 
     # -- competencies ----------------------------------------------------
     def competencies(self) -> None:
+        """employee_competencies = each person's own rows (by export name);
+        a temp without own rows gets the standard set, marked 'standard' (D97)."""
         conn = self.conn
         conn.execute("DELETE FROM employee_competencies")
         conn.execute(
             """INSERT INTO employee_competencies (employee_id, competency_id, status)
                SELECT e.employee_id, c.competency_id, c.status FROM employees e
                JOIN competency_rows c ON c.full_name = e.full_name WHERE e.origin = 'import'""")
+        own = {r[0] for r in conn.execute("SELECT DISTINCT employee_id FROM employee_competencies")}
+        standard = list(conn.execute("SELECT competency_id, status FROM standard_competencies"))
+        for eid in sorted(getattr(self, "temps", set()) - own):
+            conn.executemany(
+                "INSERT INTO employee_competencies (employee_id, competency_id, status, source) "
+                "VALUES (?, ?, ?, 'standard')", [(eid, r[0], r[1]) for r in standard])
+        for row in conn.execute("SELECT filename FROM competency_imports WHERE status = 'venter'"):
+            self.find("warn", "kompetanse",
+                      f"Kompetansefilen {row['filename']} venter på gjennomgang under "
+                      "Administrasjon → Kompetanse – ingenting er endret ennå.")
         horizon = (self.today + dt.timedelta(days=14)).isoformat()
-        on_duty = {r["employee_id"]: r["display_name"] for r in conn.execute(
-            """SELECT DISTINCT r.employee_id, e.display_name FROM roster r
+        on_duty = {r["employee_id"]: (r["display_name"], r["is_temp"]) for r in conn.execute(
+            """SELECT DISTINCT r.employee_id, e.display_name, e.is_temp FROM roster r
                JOIN employees e ON e.employee_id = r.employee_id
                WHERE r.hold IS NULL AND r.date BETWEEN ? AND ?""",
             (self.today.isoformat(), horizon))}
         if not on_duty:
             return
+        if any(temp for _, temp in on_duty.values()) and not standard:
+            self.find("warn", "kompetanse",
+                      "Standardkompetansen for vikarer er ikke satt – vikarer kan ikke plasseres "
+                      "automatisk. Sett den nederst under Administrasjon → Kompetanse.")
         if not conn.execute("SELECT COUNT(*) FROM competency_rows").fetchone()[0]:
             self.find("warn", "kompetanse",
-                      "Ingen kompetansefil er importert ennå – ingen kan plasseres automatisk. "
-                      "Legg kompetansefilen (.xlsx, navn skrevet som i turnusen) i data/import/.")
+                      "Ingen kompetanse er registrert ennå – ingen kan plasseres automatisk. "
+                      "Importer kompetansefilen eller fyll ut under Administrasjon → Kompetanse.")
             return
-        with_comp = {r["employee_id"] for r in conn.execute(
+        with_comp = {r[0] for r in conn.execute(
             "SELECT DISTINCT employee_id FROM employee_competencies")}
-        lacking = sorted(name for eid, name in on_duty.items() if eid not in with_comp)
+        lacking = sorted(name for eid, (name, temp) in on_duty.items()
+                         if eid not in with_comp and not temp)
         if lacking:
             self.find("warn", "kompetanse",
-                      f"Ingen kompetanse registrert for {', '.join(lacking)} – navnet finnes ikke "
-                      "i kompetansefilen (skrevet likt som i turnusen?). Kan ikke plasseres "
-                      "automatisk.")
+                      f"Ingen kompetanse registrert for {', '.join(lacking)} – kan ikke plasseres "
+                      "automatisk. Fyll ut under Administrasjon → Kompetanse.")
 
     # -- plans that no longer match the roster ---------------------------
     def reconcile_plans(self) -> None:
@@ -664,7 +659,7 @@ class Rebuild:
             conn.executemany("DELETE FROM assignments WHERE plan_date = ? AND employee_id = ?",
                              [(row["plan_date"], eid) for eid in gone])
             log(conn, f"Plan {date:%d.%m.%Y}: {', '.join(names.get(e, e) for e in gone)} tatt ut – "
-                      "ikke lenger på vakt ifølge nyeste turnus/ukeplan.")
+                      "ikke lenger på vakt ifølge nyeste turnus/ukeplan.", "plan")
 
     # -- coverage and file-level findings --------------------------------
     def coverage(self, plans, weeks) -> None:
@@ -825,7 +820,10 @@ def purge(conn: sqlite3.Connection, today: dt.date | None = None) -> int:
                               ("assignments", "plan_date"), ("plan_days", "plan_date"),
                               ("absences", "date"), ("day_info", "plan_date")):
             conn.execute(f"DELETE FROM {table} WHERE {column} < ?", (cutoff,))
-        conn.execute("DELETE FROM import_log WHERE at < ?", (cutoff,))
+        conn.execute("DELETE FROM manual_shift_times WHERE export_date < ?", (cutoff,))
+        conn.execute("DELETE FROM competency_imports WHERE status <> 'venter' AND uploaded_at < ?",
+                     (cutoff,))
+        applog.purge(conn, today)
         if old:
             log(conn, f"Sletting etter {retention_days(conn)} dager: {len(old)} gamle filer fjernet.")
     return len(old)
