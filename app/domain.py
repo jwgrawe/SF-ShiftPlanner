@@ -18,6 +18,27 @@ def parse_time(value: str) -> dt.time:
     return dt.time(int(hours), int(minutes))
 
 
+def parse_clock(text: str) -> dt.time:
+    """A typed clock time, forgiving about format: 7, 07, 730, 0730, 7:30,
+    7.30 and 7,30 are all 07:30-style times; 24 and 2400 mean midnight.
+    Raises ValueError for anything else."""
+    value = (text or "").strip().replace(".", ":").replace(",", ":")
+    if ":" in value:
+        hours, _, minutes = value.partition(":")
+    elif value.isdigit() and len(value) <= 2:
+        hours, minutes = value, "0"
+    elif value.isdigit() and len(value) in (3, 4):
+        hours, minutes = value[:-2], value[-2:]
+    else:
+        raise ValueError(text)
+    if not (hours.isdigit() and minutes.isdigit()) or len(minutes) > 2:
+        raise ValueError(text)
+    h, m = int(hours), int(minutes)
+    if (h, m) == (24, 0):
+        h = 0
+    return dt.time(h, m)
+
+
 def easter_sunday(year: int) -> dt.date:
     # Anonymous Gregorian computus.
     a = year % 19

@@ -13,7 +13,7 @@ PEOPLE = [("Hansen", "Kari", "12345"), ("Johansen", "Dag Ole", "23456"),
           ("Berg", "Ingrid M.", "34567"), ("Nilsen", "Per", "45678")]
 DATES = ["05.01.2026", "06.01.2026", "07.01.2026"]
 SECRETS = ["Hansen", "Kari", "Johansen", "Nilsen", "Ingrid", "12345", "23456", "45678", "912 34 567",
-           "Anne", "Olsen", "Tor", "Lie", "Mai", "10234", "11902", "1153"]
+           "Anne", "Olsen", "Tor", "Lie", "Mai", "10234", "11902", "1153", "12007"]
 
 LAYOUTS = {
     # Plan/turnus today: one row per person, a column per date, names only.
@@ -44,6 +44,14 @@ LAYOUTS = {
                        ";Person navn;Stillingsbetegnelse;Sum uke",
                        "Hansen Kari;Sterilforsyningstekniker;37;", "Olsen Tor;IKT-konsulent;20;",
                        "Lie Mai;Kvalitetskoordinator;30;"],
+    # The turnus since November 2026: PersonID in front of the name, in the
+    # person block and in the summary (whose headers are shifted right).
+    "fleksiplan_id.csv": [";;;;", "PersonID;Person navn;Stillingsbetegnelse;Sum uke;Ma 05.01",
+                          "1153;Hansen Kari;Sterilforsyningstekniker;37;D", "11902;Olsen Tor;IKT-konsulent;20;",
+                          "12007;Lie Mai;Kvalitetskoordinator;30;A", ";;;;",
+                          ";PersonID;Person navn;Stillingsbetegnelse;Sum uke",
+                          "1153;Hansen Kari;Sterilforsyningstekniker;37;", "11902;Olsen Tor;IKT-konsulent;20;",
+                          "12007;Lie Mai;Kvalitetskoordinator;30;"],
     # Ajourhold's real headers.
     "ukeplan_ekte.csv": ["Ukeplan uke 2;;;", "PersonID;Navn;Dato;Vakt"]
     + ["10234;Kari Hansen;05.01.2026;D", "1153;Anne van der Berg;05.01.2026;N",
@@ -74,9 +82,20 @@ class AnonymiseTest(unittest.TestCase):
 
     def test_job_titles_are_not_names(self):
         out = self.run_on("--alle")
-        text = (out / "fleksiplan.csv").read_text(encoding="utf-8")
-        for title in ("Sterilforsyningstekniker", "IKT-konsulent", "Kvalitetskoordinator"):
-            self.assertEqual(text.count(title), 2, title)
+        for name in ("fleksiplan.csv", "fleksiplan_id.csv"):
+            text = (out / name).read_text(encoding="utf-8")
+            for title in ("Sterilforsyningstekniker", "IKT-konsulent", "Kvalitetskoordinator"):
+                self.assertEqual(text.count(title), 2, f"{title} in {name}")
+
+    def test_turnus_with_personid_keeps_layout_and_ids_match_summary(self):
+        out = self.run_on("--alle")
+        rows = [r.split(";") for r in (out / "fleksiplan_id.csv").read_text(encoding="utf-8").splitlines()]
+        self.assertEqual(rows[1][:3], ["PersonID", "Person navn", "Stillingsbetegnelse"])
+        self.assertEqual(rows[6][:4], ["", "PersonID", "Person navn", "Stillingsbetegnelse"])
+        people = [r[:2] for r in rows[2:5]]
+        summary = [r[:2] for r in rows[7:10]]
+        self.assertEqual(people, summary)                     # same invented id + name in both
+        self.assertNotIn("1153", [p[0] for p in people])
 
     def test_turnus_layout_with_shifted_summary_headers(self):
         out = self.run_on("--alle")

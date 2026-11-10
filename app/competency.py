@@ -17,6 +17,7 @@ merge): an old form can never undo newer edits.
 """
 from __future__ import annotations
 
+import csv
 import datetime as dt
 import io
 import json
@@ -32,7 +33,11 @@ STANDARD_KEY = "__standard__"
 BASE_SHEET = "Grunnlag"
 GUIDE_SHEET = "Slik fyller du ut"
 MAIN_SHEET = "Kompetanse"
-EXTRA_COLUMNS = {"stilling", "stillingsbetegnelse", "merknad", "kommentar"}
+EXTRA_COLUMNS = {"stilling", "stillingsbetegnelse", "merknad", "kommentar", "navn", "navn på ansatt"}
+# PersonID identifies the person whatever the name looks like (R9).
+PID_LABELS = {"personid", "person id", "ansattnr", "ansattnr.", "ansattnummer"}
+# Columns from older files: one column that sets several (Q20, before R9).
+LEGACY_COLUMNS = {"sterrad + poliklinikker/løspakk": ("Sterrad", "Poliklinikker/løspakk")}
 WORDS = {"qualified": "Ja", "uncertain": "Ukjent", "": "Nei"}
 ZONE_FILLS = {"uren": "B25F4D", "ren": "4877AB", "steril": "54876A", "utpost": "9C7A3D"}
 
@@ -114,7 +119,7 @@ def people(conn: sqlite3.Connection) -> list[dict]:
     if db.is_demo():
         return [
             {"key": r["employee_id"], "full_name": f"{r['last_name']} {r['first_name']}",
-             "display": r["display_name"], "title": "", "temp": False}
+             "display": r["display_name"], "title": "", "temp": False, "person_id": ""}
             for r in conn.execute(
                 "SELECT * FROM employees WHERE works_at = 'sf' ORDER BY last_name, first_name")
         ]
@@ -134,7 +139,7 @@ def people(conn: sqlite3.Connection) -> list[dict]:
         if r["full_name"] in present:
             found.append({"key": r["full_name"], "full_name": r["full_name"],
                           "display": r["display_name"], "title": titles.get(r["full_name"], ""),
-                          "temp": bool(r["is_temp"])})
+                          "temp": bool(r["is_temp"]), "person_id": r["person_id"] or ""})
     found.sort(key=lambda p: (p["temp"], p["full_name"].lower()))
     return found
 
@@ -241,79 +246,126 @@ def _sheet_rows(ws) -> list[list[str]]:
     return [["" if c is None else str(c) for c in r] for r in ws.iter_rows(values_only=True)]
 
 
-def read_workbook(conn: sqlite3.Connection, raw: bytes) -> dict:
-    """Parse a competency workbook (today's layout: names in column A,
-    competencies as columns under a heading row). Raises Rejected."""
-    from openpyxl import load_workbook
+def _csv_rows(raw: bytes) -> list[list[str]]:
+    """A competency list saved as CSV: ; , or tab separated, UTF-8 or
+    Windows-1252 (what Excel writes)."""
+    from app.hr_export import decode
 
-    try:
-        wb = load_workbook(io.BytesIO(raw), data_only=True)
-    except Exception as exc:  # noqa: BLE001 - any unreadable workbook
-        raise Rejected([f"Regnearket kan ikke åpnes ({exc.__class__.__name__})."]) from None
-    cols = columns(conn)
+    text = decode(raw)
+    sample = "\n".join(text.splitlines()[:20])
+    delimiter = max((";", ",", "\t"), key=sample.count)
+    return list(csv.reader(io.StringIO(text, newline=""), delimiter=delimiter))
+
+
+def _grid(rows: list[list[str]], cols: list[dict], strict: bool) -> dict | None:
+    """One sheet (or CSV) -> {rows, pids, notes, present}. Names in the first
+    column (or the second, after a PersonID column); competencies as columns
+    under a heading row."""
     known = {c["key"].lower(): c["key"] for c in cols}
-
-    def grid(ws, strict: bool) -> tuple[dict, list[str], list[str]]:
-        rows = _sheet_rows(ws)
-        header_index = _find_header(rows, set(known))
-        if header_index is None:
-            if strict:
-                raise Rejected(["Fant ingen overskriftsrad med kompetansene som kolonner – er dette "
-                                "kompetansefilen?"])
-            return {}, [], []
-        header = [norm(c) for c in rows[header_index]]
-        unknown = [h for h in header[1:] if h and h.lower() not in known
-                   and h.lower() not in EXTRA_COLUMNS]
-        if unknown and strict:
-            raise Rejected([f"Ukjente kolonner: {unknown}. Kompetansekolonnene må hete som i appen "
-                            f"({', '.join(c['key'] for c in cols)})."])
-        result: dict[str, dict[str, str]] = {}
-        notes: list[str] = []
-        duplicates = []
-        for r in rows[header_index + 1:]:
-            name = norm(r[0]) if r else ""
-            if not name:
+    legacy = {k: [known[t.lower()] for t in targets if t.lower() in known]
+              for k, targets in LEGACY_COLUMNS.items()}
+    header_index = _find_header(rows, set(known) | set(legacy))
+    if header_index is None:
+        if strict:
+            raise Rejected(["Fant ingen overskriftsrad med kompetansene som kolonner – er dette "
+                            "kompetansefilen?"])
+        return None
+    header = [norm(c) for c in rows[header_index]]
+    lowered = [h.lower() for h in header]
+    name_col = 1 if lowered and lowered[0] in PID_LABELS else 0
+    pid_col = next((i for i, h in enumerate(lowered) if h in PID_LABELS), None)
+    # A legacy column only counts where the file lacks the separate columns.
+    targets: dict[int, list[str]] = {}
+    for i, h in enumerate(lowered):
+        if i in (name_col, pid_col):
+            continue
+        if h in known:
+            targets[i] = [known[h]]
+        elif h in legacy:
+            targets[i] = [k for k in legacy[h] if k.lower() not in lowered]
+    unknown = [header[i] for i, h in enumerate(lowered) if h and i not in targets
+               and i not in (name_col, pid_col) and h not in EXTRA_COLUMNS]
+    if unknown and strict:
+        raise Rejected([f"Ukjente kolonner: {unknown}. Kompetansekolonnene må hete som i appen "
+                        f"({', '.join(c['key'] for c in cols)})."])
+    result: dict[str, dict[str, str]] = {}
+    pids: dict[str, str] = {}
+    notes: list[str] = []
+    duplicates = []
+    for r in rows[header_index + 1:]:
+        name = norm(r[name_col]) if len(r) > name_col else ""
+        if not name:
+            continue
+        if name in result:
+            duplicates.append(name)
+            continue
+        if pid_col is not None and len(r) > pid_col and norm(r[pid_col]):
+            pids[name] = norm(r[pid_col])
+        values = {}
+        for i, keys in targets.items():
+            value = r[i] if i < len(r) else ""
+            status, ok = parse_mark(value)
+            if not ok:
+                notes.append(f"{name} / {header[i]}: «{value}» forstås ikke – cellen endres ikke "
+                             "(bruk Ja, Ukjent eller tomt).")
                 continue
-            if name in result:
-                duplicates.append(name)
-                continue
-            values = {}
-            for value, label in zip(r[1:], header[1:]):
-                key = known.get(label.lower())
-                if not key:
-                    continue
-                status, ok = parse_mark(value)
-                if not ok:
-                    notes.append(f"{name} / {key}: «{value}» forstås ikke – cellen endres ikke "
-                                 "(bruk Ja, Ukjent eller tomt).")
-                    continue
+            for key in keys:
                 values[key] = status
-            result[name] = values
-        if duplicates and strict:
-            raise Rejected([f"Samme navn står flere ganger: {', '.join(sorted(set(duplicates)))}."])
-        present = [known[h.lower()] for h in header[1:] if h and h.lower() in known]
-        return result, notes, present
+        result[name] = values
+    if duplicates and strict:
+        raise Rejected([f"Samme navn står flere ganger: {', '.join(sorted(set(duplicates)))}."])
+    present = sorted({k for keys in targets.values() for k in keys})
+    if any(lowered[i] in legacy for i in targets):
+        notes.append("Filen har den gamle samlekolonnen «Sterrad + poliklinikker/løspakk» – "
+                     "verdien brukes for både Sterrad og Poliklinikker/løspakk.")
+    return {"rows": result, "pids": pids, "notes": notes, "present": present}
 
-    main = next((ws for ws in wb.worksheets
-                 if ws.title not in (BASE_SHEET, GUIDE_SHEET) and ws.sheet_state == "visible"
-                 and _find_header(_sheet_rows(ws), set(known)) is not None), None)
-    if main is None:
-        raise Rejected(["Fant ikke kompetansearket – ingen fane har en overskriftsrad med "
-                        "kompetansene som kolonner."])
-    rows, notes, present = grid(main, strict=True)
-    if not rows:
-        raise Rejected(["Kompetansearket har ingen navn."])
-    missing = [c["key"] for c in cols if c["key"] not in present]
+
+def read_workbook(conn: sqlite3.Connection, raw: bytes) -> dict:
+    """Parse a competency file – an Excel workbook or a CSV list with the
+    same layout. Raises Rejected."""
+    cols = columns(conn)
+    base = generated = None
+    if raw[:2] == b"PK":                                  # .xlsx is a zip
+        from openpyxl import load_workbook
+
+        try:
+            wb = load_workbook(io.BytesIO(raw), data_only=True)
+        except Exception as exc:  # noqa: BLE001 - any unreadable workbook
+            raise Rejected([f"Regnearket kan ikke åpnes ({exc.__class__.__name__})."]) from None
+        known = {c["key"].lower() for c in cols} | set(LEGACY_COLUMNS)
+        main = next((ws for ws in wb.worksheets
+                     if ws.title not in (BASE_SHEET, GUIDE_SHEET) and ws.sheet_state == "visible"
+                     and _find_header(_sheet_rows(ws), known) is not None), None)
+        if main is None:
+            raise Rejected(["Fant ikke kompetansearket – ingen fane har en overskriftsrad med "
+                            "kompetansene som kolonner."])
+        parsed = _grid(_sheet_rows(main), cols, strict=True)
+        if BASE_SHEET in wb.sheetnames:
+            base_grid = _grid(_sheet_rows(wb[BASE_SHEET]), cols, strict=False)
+            base = base_grid["rows"] if base_grid else {}
+            stamp = wb[BASE_SHEET]["A1"].value
+            generated = str(stamp) if stamp else None
+    else:
+        parsed = _grid(_csv_rows(raw), cols, strict=True)
+    if not parsed["rows"]:
+        raise Rejected(["Kompetanselisten har ingen navn."])
+    notes = parsed["notes"]
+    missing = [c["key"] for c in cols if c["key"] not in parsed["present"]]
     if missing:
         notes.insert(0, f"Kolonnene {', '.join(missing)} mangler i filen – de endres ikke.")
-    base = None
-    generated = None
-    if BASE_SHEET in wb.sheetnames:
-        base, _, _ = grid(wb[BASE_SHEET], strict=False)
-        stamp = wb[BASE_SHEET]["A1"].value
-        generated = str(stamp) if stamp else None
-    return {"rows": rows, "base": base, "notes": notes, "columns": present,
-            "generated": generated}
+    return {"rows": parsed["rows"], "pids": parsed["pids"], "base": base, "notes": notes,
+            "columns": parsed["present"], "generated": generated}
+
+
+def is_competency_file(conn: sqlite3.Connection, raw: bytes) -> bool:
+    """A CSV in the inbox: competency list (True) or HR export (False)?"""
+    try:
+        rows = _csv_rows(raw)
+    except Rejected:
+        return False
+    cols = columns(conn)
+    return _find_header(rows, {c["key"].lower() for c in cols} | set(LEGACY_COLUMNS)) is not None
 
 
 def stage(conn: sqlite3.Connection, filename: str, raw: bytes) -> int:
@@ -425,10 +477,15 @@ def review(conn: sqlite3.Connection, import_id: int) -> dict:
     row, data = _load(conn, import_id)
     known = set(candidates(conn))
     aliases = {r["alias"]: r["full_name"] for r in conn.execute("SELECT * FROM competency_aliases")}
+    by_pid = {} if db.is_demo() else {r["person_id"]: r["full_name"] for r in conn.execute(
+        "SELECT person_id, full_name FROM employees WHERE origin = 'import' AND person_id IS NOT NULL")}
+    pids = data.get("pids", {})
     targets: dict[str, str | None] = {}
     unresolved = []
     for name in data["rows"]:
-        if name in known:
+        if pids.get(name) in by_pid:
+            targets[name] = by_pid[pids[name]]     # PersonID wins over the name (R9)
+        elif name in known:
             targets[name] = name
         elif name in aliases:
             targets[name] = aliases[name]          # None = skip by choice
@@ -554,7 +611,7 @@ GUIDE = [
     "     Ja      – den ansatte har kompetansen (kan settes på funksjonen)",
     "     Ukjent  – usikkert; må vurderes (planlegges IKKE på funksjonen)",
     "     (tom)   – har ikke kompetansen",
-    "3. Navn, stilling og overskrifter er låst – de må stå nøyaktig som de er,",
+    "3. Navn, stilling, PersonID og overskrifter er låst – de må stå nøyaktig som de er,",
     "   ellers kan ikke appen koble svarene til riktig person.",
     "4. Lagre filen og gi den tilbake. Den leses inn under Administrasjon → Kompetanse,",
     "   og du får se alle endringer før noe tas i bruk.",
@@ -604,19 +661,21 @@ def build_form(conn: sqlite3.Connection) -> bytes:
         for j, c in enumerate(cols, start=2):
             ws.cell(row=2, column=j, value=c["label"])
         ws.cell(row=2, column=len(cols) + 2, value="Stilling")
+        ws.cell(row=2, column=len(cols) + 3, value="PersonID")
         for i, person in enumerate(rows, start=3):
             ws.cell(row=i, column=1, value=person["full_name"])
             for j, c in enumerate(cols, start=2):
                 status = person["values"].get(c["key"], "")
                 ws.cell(row=i, column=j, value=word(status) if status else None)
             ws.cell(row=i, column=len(cols) + 2, value=person["title"])
+            ws.cell(row=i, column=len(cols) + 3, value=person.get("person_id") or None)
 
     ws = wb.create_sheet(MAIN_SHEET)
     fill_grid(ws, with_style=True)
     last_row = len(rows) + 2
     last_col = get_column_letter(len(cols) + 1)
     bold = Font(bold=True)
-    for j in range(1, len(cols) + 3):
+    for j in range(1, len(cols) + 4):
         header = ws.cell(row=2, column=j)
         header.font = bold
         header.alignment = Alignment(textRotation=90 if 1 < j <= len(cols) + 1 else 0,
@@ -626,6 +685,7 @@ def build_form(conn: sqlite3.Connection) -> bytes:
     for j in range(2, len(cols) + 2):
         ws.column_dimensions[get_column_letter(j)].width = 8.5
     ws.column_dimensions[get_column_letter(len(cols) + 2)].width = 28
+    ws.column_dimensions[get_column_letter(len(cols) + 3)].width = 11
     if rows:
         area = f"B3:{last_col}{last_row}"
         dv = DataValidation(type="list", formula1='"Ja,Ukjent"', allow_blank=True,

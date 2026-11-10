@@ -10,6 +10,7 @@
                               ("grunndata", "Grunndata", "/admin/grunndata")] %}
     <a href="{{ href }}" {% if tab == key %}class="active" aria-current="page"{% endif %}>{{ label }}
       {% if key == "stillinger" and badge_positions %}<span class="tabbadge">{{ badge_positions }}</span>{% endif %}
+      {% if key == "vaktkoder" and badge_codes %}<span class="tabbadge">{{ badge_codes }}</span>{% endif %}
       {% if key == "kompetanse" and badge_competency %}<span class="tabbadge">{{ badge_competency }}</span>{% endif %}
     </a>
   {% endfor %}

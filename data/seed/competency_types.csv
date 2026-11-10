@@ -7,8 +7,8 @@ driftskoordinator,"Driftskoordinator","Driftskoordinator","Tom i kildefilen; DK 
 ansvarsvakt,"Ansvarsvakt","Ansvarsvakt",
 kontrollsone,"Kontrollsone","Kontrollsone",
 arbeidsbord,"Arbeidsbord/brikkelegging","Arbeidsbord/brikkelegging",
-sterrad,"Sterrad","Sterrad + poliklinikker/løspakk","Delt kompetanse (D43); kildekolonnen er fortsatt samlet og mappes til begge (Q20)"
-poliklinikker_lospakk,"Poliklinikker/løspakk","Sterrad + poliklinikker/løspakk","Delt kompetanse (D43); kildekolonnen er fortsatt samlet og mappes til begge (Q20)"
+sterrad,"Sterrad","Sterrad","Egen kolonne fra R9 (Q20); en eldre fil med samlekolonnen «Sterrad + poliklinikker/løspakk» setter begge"
+poliklinikker_lospakk,"Poliklinikker/løspakk","Poliklinikker/løspakk","Egen kolonne fra R9 (Q20); en eldre fil med samlekolonnen «Sterrad + poliklinikker/løspakk» setter begge"
 produksjon_steril,"Produksjon, steril sone","Produksjon, steril sone",
 gang_vognvask,"Gang/vognvaskere","Gang/vognvaskemaskiner","Tom i kildefilen – antatt dekket av produksjon_steril (Q24)"
 utpost_kir_pol,"Kir. Pol.","Kirurgisk poliklinikk",

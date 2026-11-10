@@ -139,11 +139,15 @@ def main() -> int:
                 errors.append(f"staffing_demand.csv: {label}: {col}={value!r} not a number")
 
     for row in shift_codes:
-        for col in ("start", "end"):
-            if not TIME_RE.match(row[col]):
-                errors.append(f"shift_codes.csv: {row['code']}: bad {col} {row[col]!r}")
-        if row["category"] not in SHIFT_CATEGORIES:
-            errors.append(f"shift_codes.csv: {row['code']}: bad category {row['category']!r}")
+        kind = row.get("kind", "vanlig")
+        if kind not in {"vanlig", "ignoreres", "egen_tid"}:
+            errors.append(f"shift_codes.csv: {row['code']}: bad kind {kind!r}")
+        if kind == "vanlig":  # only regular codes have fixed times and a category
+            for col in ("start", "end"):
+                if not TIME_RE.match(row[col]):
+                    errors.append(f"shift_codes.csv: {row['code']}: bad {col} {row[col]!r}")
+            if row["category"] not in SHIFT_CATEGORIES:
+                errors.append(f"shift_codes.csv: {row['code']}: bad category {row['category']!r}")
         if row["utpost_code"] not in {"yes", "no"}:
             errors.append(f"shift_codes.csv: {row['code']}: bad utpost_code {row['utpost_code']!r}")
 

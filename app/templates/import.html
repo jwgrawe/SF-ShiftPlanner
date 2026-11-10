@@ -75,16 +75,17 @@ står i den.</p>
 {% set other = pending|rejectattr("fixable")|list %}
 {% if fixable or manual %}
   <div class="card" id="ventende">
-    <strong>Ukjente vaktkoder</strong> –
+    <strong>Vakter uten fast tid</strong> –
     {% if fixable %}<span class="badge alert">{{ fixable|length }} mangler tid</span>{% endif %}
     {% if manual %}<span class="badge published">{{ manual|length }} har fått tid</span>{% endif %}
     <a class="btn small" href="/import/ukjente">Åpne</a>
-    <span class="muted small">Vakter med koder appen ikke kjenner (f.eks. vikarers DX/AX) – angi tiden for hver.</span>
+    <span class="muted small">Koder som DX/AX fra vikarenheten har ingen fast tid – angi tiden for hver vakt.</span>
   </div>
 {% endif %}
 {% if other %}
-  <h2>Vakter som må rettes i turnussystemet</h2>
-  <p class="small">Holdes utenfor planen til de er rettet i kilden – appen gjetter aldri.</p>
+  <h2>Vakter som holdes utenfor planen</h2>
+  <p class="small">Appen gjetter aldri. En ukjent kode defineres under
+  <a href="/admin/vaktkoder">Administrasjon → Vaktkoder</a>; resten må rettes i turnussystemet.</p>
   <div class="tablewrap"><table>
     <tr><th style="width:8rem">Dato</th><th style="width:12rem">Ansatt</th><th style="width:7rem">I filen</th><th>Årsak</th></tr>
     {% for row in other %}

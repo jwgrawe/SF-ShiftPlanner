@@ -15,14 +15,16 @@ Klikk en celle for å bytte, eller bruk tastaturet: piltaster flytter, <kbd>J</k
 
 <div class="card actions-card">
   <form method="post" action="/admin/kompetanse/last-opp" enctype="multipart/form-data" class="uploadrow">
-    <label for="kfil"><strong>Importer fra Excel</strong></label>
-    <input id="kfil" type="file" name="fil" accept=".xlsx" required>
+    <label for="kfil"><strong>Importer kompetanseliste</strong> <span class="muted small">(.xlsx eller .csv)</span></label>
+    <input id="kfil" type="file" name="fil" accept=".xlsx,.csv" required>
     <button class="btn secondary" type="submit">Last opp og se gjennom</button>
   </form>
   <a class="btn secondary" href="/admin/kompetanse/skjema.xlsx">Last ned utfyllingsskjema (.xlsx)</a>
   <span class="muted small">Skjemaet har alle ansatte i turnusen med navn skrevet nøyaktig som i
-    eksportene, dagens verdier forhåndsutfylt og nedtrekkslister. Bare det som endres i skjemaet,
-    tas i bruk ved import.</span>
+    eksportene, PersonID, dagens verdier forhåndsutfylt og nedtrekkslister. Bare det som endres i
+    skjemaet, tas i bruk ved import. En CSV-liste med samme kolonner (navn først, en kolonne per
+    kompetanse, gjerne PersonID) går også; med PersonID kobles radene til riktig person selv om
+    navnet er skrevet annerledes.</span>
 </div>
 
 {% if not rows %}
@@ -71,7 +73,7 @@ Klikk en celle for å bytte, eller bruk tastaturet: piltaster flytter, <kbd>J</k
         <tr data-name="{{ (row.full_name ~ ' ' ~ row.display)|lower }}" data-title="{{ row.title }}"
             data-empty="{{ 1 if row.empty else 0 }}" data-unknown="{{ row.unknown }}" data-temp="{{ 1 if row.temp else 0 }}">
           <th class="mx-name" scope="row"><span class="pn">{{ row.full_name }}</span>
-            <span class="muted small">{{ row.display }}</span></th>
+            <span class="muted small">{{ row.display }}{% if row.person_id %} · {{ row.person_id }}{% endif %}</span></th>
           <td class="mx-title">{% if row.temp %}<span class="badge draft" title="I ukeplanen, ikke i turnusen – bruker standardkompetansen om raden er tom">vikar</span>{% endif %}
             {{ row.title }}{% if row.empty and not row.temp %} <span class="badge alert">mangler</span>{% endif %}</td>
           {% for col in columns %}

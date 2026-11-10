@@ -304,7 +304,15 @@ def parse_plan(grid: list[list[str]], filename: str, unit: str = DEFAULT_UNIT) -
     if reasons:
         raise Rejected(reasons)
 
-    cols = meta_columns(header, first_day, PLAN_META, {"name", "title"})
+    # Since November 2026 the turnus is exported with PersonID (D102). A file
+    # without it is a wrong export, not an older format to make do with.
+    labels = [norm_label(c) for c in header[:first_day]]
+    if not any(label in PLAN_META["person_id"] for label in labels):
+        raise Rejected(["Turnusen mangler kolonnen «PersonID». Turnusen skal eksporteres med "
+                        "PersonID foran navnet (standard fra november 2026) – eksporter på nytt "
+                        "med den innstillingen.",
+                        f"Kolonnene foran dagene var: {[norm(c) for c in header[:first_day]]}."])
+    cols = meta_columns(header, first_day, PLAN_META, {"name", "title", "person_id"})
 
     # Person block: everything under the header down to the first blank row.
     rows: list[PersonRow] = []
@@ -314,8 +322,10 @@ def parse_plan(grid: list[list[str]], filename: str, unit: str = DEFAULT_UNIT) -
         name = norm(row[cols["name"]])
         if not name:
             reasons.append(f"Rad {i + 1} i personblokken mangler navn.")
-        person_id = norm(row[cols["person_id"]]) if "person_id" in cols else None
-        if person_id is not None and person_id and not PERSON_ID.match(person_id):
+        person_id = norm(row[cols["person_id"]])
+        if not person_id:
+            reasons.append(f"Rad {i + 1} ({name or 'uten navn'}) mangler PersonID.")
+        elif not PERSON_ID.match(person_id):
             reasons.append(f"Rad {i + 1}: PersonID «{person_id}» er ikke et tall.")
         cells = {dates[k]: norm(c) for k, c in enumerate(row[first_day:]) if c.strip()}
         rows.append(PersonRow(i + 1, name, person_id or None, norm(row[cols["title"]]) or None,

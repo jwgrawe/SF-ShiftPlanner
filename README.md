@@ -23,21 +23,22 @@ display.
   absences, set the day's «Diverse info», and open a person view.
 - **`/import`** «Datagrunnlag» — the real roster's sources: which turnus
   (Plan) and ukeplan (Ajourhold) each week rests on, what needs attention,
-  files read or refused, upload, and a log. Its sub-page «Ukjente vaktkoder»
-  is where managers give times to days with codes the app doesn't know
-  (temps' `DX`/`AX`), one card per person.
+  files read or refused, upload, and a log. Its sub-page «Vakter uten fast
+  tid» is where managers type the times of shifts whose code has none (the
+  staffing unit's `DX`/`AX`), one card per person.
 - **`/admin`** — in tabs: *Innstillinger* (board palette, retention, the
   full log), *Stillinger* (job-title rules), *Kompetanse* (the competency
-  matrix: edit in place, import from Excel with review and name linking,
-  download a fill-in form, the temps' standard set), *Vaktkoder* (codes
-  learned from the turnus), *Grunndata* (master data, preferences and
-  fritak — only here).
+  matrix: edit in place, import from Excel or CSV with review, name linking
+  and PersonID matching, download a fill-in form, the temps' standard set),
+  *Vaktkoder* (the app's shift-code list: add, change, ignore or remove
+  codes; unknown codes and deviations from the turnus are flagged),
+  *Grunndata* (master data, preferences and fritak — only here).
 
 Two modes (D89): **`python run.py`** is the real planner — the roster comes
 from the HR exports in `data/import/`; **`python run.py --demo`** is the
 presentation demo with fictional staff and a generated four-week roster, in
-its own database, marked DEMO. Remaining in M2: PINs, and the competency file
-in export name form (Q40).
+its own database, marked DEMO. Remaining in M2: PINs, and the real
+competency data (Q40).
 
 ## Running the prototype
 
@@ -63,11 +64,14 @@ week). Preview any moment with e.g. `/display?date=ÅÅÅÅ-MM-DD&time=10:30`.
 1. Export from the HR system and save the file in **`data\import\`** — or
    upload it under «Datagrunnlag»:
    - **turnus** (Plan → «Utskrift fleksiplan»): `Utskrift_fleksiplan_….csv`,
-     whenever a new or revised turnus exists;
+     whenever a new or revised turnus exists — **with PersonID** in front of
+     the name (the standard since November 2026; a turnus without it is
+     refused with instructions);
    - **ukeplan** (Ajourhold): `Ukeplan_….csv`, one file per week, e.g. every
      Monday morning (re-exporting a week later in the week is fine — the
      newest wins);
-   - **kompetansefil** (`.xlsx`, today's layout): it waits for review under
+   - **kompetansefil** (`.xlsx` or `.csv`, names first, one column per
+     competency, ideally a PersonID column): it waits for review under
      Administrasjon → Kompetanse, where names are linked and every change is
      shown before anything is applied. Day-to-day, edit competencies right in
      that tab instead.
@@ -157,7 +161,7 @@ run.py         Canonical launch: python run.py, from any folder
 | `planner_settings.csv` | Admin-adjustable planner parameters: occurrence threshold/target/cap, ledger window (D51) |
 | `staffing_demand.csv` | Required head-count per function/zone × hour (h00–h23), weekdays |
 | `rotation_rules.csv` | Rotation time per shift category (11:00 / 16:00 / 18:00 / none) — configuration, not code (D35) |
-| `shift_codes.csv` | 21 vaktkoder with confirmed categories (incl. mellomvakt and helgevakt) and the U-code flag that keeps utpost days out of SF planning (D55) |
+| `shift_codes.csv` | The starting shift-code list (26 codes): kind (`vanlig` / `egen_tid` for DX/AX / `ignoreres` for DMT/DMK), times, category and the U-code flag that keeps utpost days out of SF planning (D55). The app's own list (Administrasjon → Vaktkoder, D103) starts from it; a CSV downloaded there can replace it |
 | `opening_hours.csv` | Opening hours / period types per weekday |
 | `weekday_rules.csv` | Per-weekday deviations (utposter — currently parked), structured from free text |
 | `worktable_types.csv` | The 8 generic worktable types under Arbeidsbord/brikkelegging |

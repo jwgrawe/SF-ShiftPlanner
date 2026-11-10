@@ -395,13 +395,24 @@ details.logpanel[open] > summary { color: var(--ink); }
 .uk-wd.this { outline: 2px solid var(--accent); outline-offset: 1px; }
 .uk-inputs { display: flex; gap: 0.35rem; align-items: center; flex-wrap: wrap; }
 .uk-hint { margin-left: 0.4rem; }
-.uk-chips { display: flex; gap: 0.3rem; flex-wrap: wrap; margin-top: 0.35rem; }
-.uk-chip {
-  font: inherit; font-size: 0.78rem; font-weight: 700; border: 1px solid var(--line);
-  border-radius: 999px; background: var(--surface-2); color: var(--ink); padding: 0.1rem 0.6rem; cursor: pointer;
+.uk-inputs input.clock { width: 4.6rem; font: inherit; padding: 0.3rem 0.4rem; text-align: center; }
+.uk-ruler { position: relative; margin-top: 0.45rem; max-width: 30rem; user-select: none; touch-action: none; }
+.uk-track {
+  display: grid; grid-template-columns: repeat(48, 1fr); height: 1.3rem; cursor: crosshair;
+  border: 1px solid var(--line); border-radius: 4px; overflow: hidden; background: var(--surface);
 }
-.uk-chip span { font-weight: 400; color: var(--ink-soft); }
-.uk-chip:hover { border-color: var(--accent); background: var(--accent-soft); }
+.uk-track span { border-left: 1px solid transparent; }
+.uk-track span.hour { border-left-color: var(--line); }
+.uk-track span:nth-child(-n+12), .uk-track span:nth-child(n+45) { background: var(--surface-2); }
+.uk-track span.on { background: var(--accent); border-left-color: var(--accent); }
+.uk-ticks { position: relative; height: 0.95rem; font-size: 0.68rem; color: var(--ink-faint); }
+.uk-ticks span { position: absolute; transform: translateX(-50%); top: 0.05rem; }
+.uk-ticks span:first-child { transform: none; }
+.uk-ticks span:last-child { transform: translateX(-100%); }
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden;
+  clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+}
 .uk-state { display: flex; gap: 0.4rem; align-items: center; justify-content: flex-end; flex-wrap: wrap; }
 .uk-foot { display: flex; gap: 0.6rem; align-items: center; padding: 0.65rem 1rem; }
 .uk-spacer { flex: 1; }
@@ -538,3 +549,70 @@ body.display .muted { color: var(--d-ink-soft); }
   .badge, .tl-bar { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   .note, .card { border: 1px solid #999; }
 }
+
+/* ------------------------------------------------- shift code manager (D103) */
+form.inline { display: inline; margin: 0; }
+.btn.danger { color: var(--alert-ink); border-color: var(--alert-line); }
+.vk-attention { margin: 0 0 1.4rem; }
+.vk-attention h2 { display: flex; align-items: center; gap: 0.4rem; }
+.vk-item {
+  display: flex; justify-content: space-between; align-items: center; gap: 0.8rem; flex-wrap: wrap;
+  padding: 0.65rem 0.9rem; margin: 0 0 0.5rem; border-radius: var(--radius);
+  background: var(--surface); border: 1px solid var(--line); border-left-width: 4px;
+}
+.vk-item.alert { border-left-color: var(--alert-ink); }
+.vk-item.warn  { border-left-color: var(--warn-ink); }
+.vk-item.info  { border-left-color: var(--info-ink); }
+.vk-item-main { display: flex; gap: 0.8rem; align-items: flex-start; flex: 1 1 26rem; }
+.vk-item-actions { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+.vk-code {
+  font-size: 1.05rem; font-weight: 700; min-width: 3.4rem; text-align: center;
+  padding: 0.15rem 0.45rem; border-radius: 5px; background: var(--surface-2); border: 1px solid var(--line);
+}
+.vk-allgood { color: var(--ok-ink); margin: 0 0 1rem; }
+.vk-toolbar { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; margin: 0.4rem 0; }
+.vk-filters { display: flex; gap: 0.3rem; flex-wrap: wrap; }
+.vk-filter {
+  font: inherit; font-size: 0.88rem; padding: 0.22rem 0.7rem; border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--line); background: var(--surface); color: var(--ink);
+}
+.vk-filter span { color: var(--ink-faint); margin-left: 0.15rem; }
+.vk-filter.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+.vk-filter.active span { color: rgba(255, 255, 255, 0.8); }
+.vk-codecell { font-size: 1.02rem; }
+.vk-table td { vertical-align: middle; }
+.vk-actions { white-space: nowrap; text-align: right; }
+.vk-row.kind-ignoreres td {
+  background: repeating-linear-gradient(135deg, var(--surface-2) 0 6px, var(--surface) 6px 12px);
+  color: var(--ink-soft);
+}
+.vk-row.kind-ignoreres .vk-codecell { text-decoration: line-through; text-decoration-thickness: 2px; }
+.vk-row.deviation td:nth-child(3) { color: var(--warn-ink); font-weight: 600; }
+.vk-dev { color: var(--warn-ink); font-weight: 400; }
+.badge.vk-ignored { background: #4a5860; color: #fff; letter-spacing: 0.02em; }
+.badge.vk-pershift { background: var(--info-bg); color: var(--info-ink); border: 1px solid var(--info-line); }
+details.vk-deleted { margin: 0.8rem 0 1.2rem; }
+details.vk-deleted > summary { cursor: pointer; color: var(--ink-soft); font-weight: 600; }
+dialog.vk-dialog { max-width: 34rem; width: calc(100% - 2rem); }
+.vk-field { display: flex; flex-direction: column; gap: 0.2rem; margin: 0 0 0.8rem; font-size: 0.92rem; }
+.vk-field > span { font-weight: 600; }
+.vk-field input[type=text], .vk-field select { font: inherit; padding: 0.35rem 0.5rem; }
+.vk-codeinput { text-transform: uppercase; font-weight: 700; width: 8rem; }
+.vk-codeinput[readonly] { background: var(--surface-2); }
+.vk-kinds { border: none; padding: 0; margin: 0 0 0.8rem; }
+.vk-kinds legend { font-weight: 600; font-size: 0.92rem; margin-bottom: 0.3rem; }
+.vk-kind {
+  display: flex; gap: 0.55rem; align-items: flex-start; padding: 0.5rem 0.65rem; margin: 0 0 0.35rem;
+  border: 1px solid var(--line); border-radius: var(--radius); cursor: pointer;
+}
+.vk-kind:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
+.vk-kind input { margin-top: 0.2rem; }
+.vk-times { display: flex; gap: 0.5rem; align-items: flex-end; flex-wrap: wrap; }
+.vk-times .vk-field { margin-bottom: 0.3rem; }
+.vk-times input.clock { width: 6rem; }
+.vk-dash { padding-bottom: 0.85rem; }
+.vk-times #vk-length { padding-bottom: 0.85rem; }
+.vk-tip { margin: 0 0 0.8rem; }
+.vk-check { display: block; margin: 0 0 0.8rem; font-size: 0.92rem; }
+.vk-dialog-foot { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 0.4rem; }
+input.clock:invalid { border-color: var(--alert-ink); background: var(--alert-bg); }

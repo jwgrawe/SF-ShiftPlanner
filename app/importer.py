@@ -22,7 +22,7 @@ SEED_DIR = db.REPO_ROOT / "data" / "seed"
 
 
 def read_csv(name: str) -> list[dict]:
-    with open(SEED_DIR / name, newline="", encoding="utf-8") as fh:
+    with open(SEED_DIR / name, newline="", encoding="utf-8-sig") as fh:  # BOM tolerated
         return list(csv.DictReader(fh))
 
 
@@ -83,14 +83,7 @@ def import_seed(conn: sqlite3.Connection, people: bool = True) -> dict[str, int]
         demand_rows,
     )
 
-    counts["shift_codes"] = insert(
-        conn, "shift_codes",
-        ["code", "start", "end", "crosses_midnight", "category", "utpost_code",
-         "duration_hours", "comment"],
-        [(r["code"], r["start"], r["end"], r["crosses_midnight"], r["category"],
-          r["utpost_code"], float(r["duration_hours"]), r["comment"])
-         for r in read_csv("shift_codes.csv")],
-    )
+    counts["shift_codes"] = seed_shift_codes(conn)
     counts["rotation_rules"] = insert(
         conn, "rotation_rules", ["category", "rotation_time", "notes"],
         [(r["category"], r["rotation_time"] or None, r["notes"])
@@ -116,7 +109,7 @@ def import_seed(conn: sqlite3.Connection, people: bool = True) -> dict[str, int]
         [(r["function_id"], r["category"], r["weekday"], r["rule"], r["start"], r["end"],
           int(r["count"] or 0), r["source_text"]) for r in read_csv("weekday_rules.csv")],
     )
-    db.merge_learned_codes(conn)
+    db.sync_shift_codes(conn)
     seed_positions(conn)
     if not people:
         return counts
@@ -144,6 +137,29 @@ def import_seed(conn: sqlite3.Connection, people: bool = True) -> dict[str, int]
          for r in read_csv("employee_restrictions.csv")],
     )
     return counts
+
+
+def seed_shift_codes(conn: sqlite3.Connection) -> int:
+    """The shift-code master list (D103) starts from the seed. A code the app
+    already has keeps the admin's version; a standard code nobody has edited
+    is refreshed, so corrections shipped in the seed arrive with a pull."""
+    rows = read_csv("shift_codes.csv")
+    for r in rows:
+        values = (r.get("kind") or "vanlig", r["start"] or None, r["end"] or None,
+                  r["category"] or None, r["utpost_code"] or "no", r["comment"])
+        current = conn.execute("SELECT source, edited FROM shift_code_defs WHERE code = ?",
+                               (r["code"],)).fetchone()
+        if current is None:
+            conn.execute(
+                """INSERT INTO shift_code_defs (code, kind, start, end, category, utpost_code, comment,
+                       source, reviewed) VALUES (?, ?, ?, ?, ?, ?, ?, 'standard', 1)""",
+                (r["code"], *values))
+        elif current["source"] == "standard" and not current["edited"]:
+            conn.execute(
+                """UPDATE shift_code_defs SET kind = ?, start = ?, end = ?, category = ?,
+                       utpost_code = ?, comment = ? WHERE code = ? AND deleted_at IS NULL""",
+                (*values, r["code"]))
+    return len(rows)
 
 
 def seed_positions(conn: sqlite3.Connection) -> None:

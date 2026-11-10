@@ -15,7 +15,7 @@ PLAN_DAYS = ["Ma", "Ti", "On", "To", "Fr", "Lø", "Sø"]
 UKE_DAYS = ["Mandag", "Tirsdag", "Onsdag", "Torsdag", "Fredag", "Lørdag", "Søndag"]
 MONTHS = ["jan", "feb", "mar", "apr", "mai", "jun", "jul", "aug", "sep", "okt", "nov", "des"]
 STATS = ["37", "35,5", "0", "0", "1846", "1"]
-META = ["Person navn", "Stillingsbetegnelse", "Sum uke", "Snitt pr. uke", "Diff person snitt",
+META = ["PersonID", "Person navn", "Stillingsbetegnelse", "Sum uke", "Snitt pr. uke", "Diff person snitt",
         "Total person differanse", "Sum arb. timer", "Beregnet st.andel"]
 
 LEGEND = [
@@ -36,12 +36,23 @@ def _encode(rows: list[list[str]], width: int) -> bytes:
     return "\r\n".join(lines).encode("cp1252")
 
 
+def person_id(name: str) -> str:
+    """A stable invented PersonID per name (the same in turnus and ukeplan)."""
+    return KNOWN_IDS.get(name) or str(5000 + sum(ord(c) for c in name) % 4000)
+
+
+KNOWN_IDS = {"Hansen Kari": "1001", "Olsen Tor": "1002", "Berg Anne": "1003", "Dahl Per": "1004",
+             "Nilsen Ola": "1005", "Vik Siri": "1006"}
+
+
 def plan_csv(people, start: dt.date, weeks: int, exported: dt.datetime, unit: str = UNIT,
              legend=LEGEND, blank_inside: bool = False, week_shift: int = 0,
-             extra_column: bool = False) -> bytes:
-    """people: [(full name, title, {date: code})]."""
+             extra_column: bool = False, with_ids: bool = True, ids: dict | None = None,
+             missing_id_for: str | None = None) -> bytes:
+    """people: [(full name, title, {date: code}[, PersonID])]. Since November 2026 the
+    turnus carries PersonID in front of the name, here and in the summary."""
     days = [start + dt.timedelta(days=i) for i in range(weeks * 7)]
-    meta = META + (["Ekstra"] if extra_column else [])
+    meta = (META if with_ids else META[1:]) + (["Ekstra"] if extra_column else [])
     first = len(meta)
     width = first + len(days)
     rows = [
@@ -59,8 +70,11 @@ def plan_csv(people, start: dt.date, weeks: int, exported: dt.datetime, unit: st
     rows.append(week_row)
     rows.append(meta + [f"{PLAN_DAYS[d.weekday()]} {d:%d.%m}" for d in days])
     person_rows = []
-    for index, (name, title, cells) in enumerate(people):
-        row = [name, title] + STATS + (["x"] if extra_column else [])
+    for index, entry in enumerate(people):
+        name, title, cells = entry[:3]
+        pid = entry[3] if len(entry) > 3 else (ids or {}).get(name) or person_id(name)
+        row = ([("" if name == missing_id_for else pid)] if with_ids else []) + [name, title]
+        row += STATS + (["x"] if extra_column else [])
         row += [cells.get(d, "") for d in days]
         person_rows.append(row)
         if blank_inside and index == len(people) // 2:
@@ -68,7 +82,7 @@ def plan_csv(people, start: dt.date, weeks: int, exported: dt.datetime, unit: st
         rows.append(row)
     rows.append([])
     for label, codes in (("D", ("D", "D2", "DK", "D3")), ("A", ("A",)), ("N", ("N",))):
-        counts = [str(sum(1 for _, _, c in people if c.get(d) in codes)) for d in days]
+        counts = [str(sum(1 for p in people if p[2].get(d) in codes)) for d in days]
         rows.append([""] * (first - 1) + [label] + counts)
     rows.append([])
     rows.append(["Kode", "Fra", "Til", "Faktor", "Aktivitet"])

@@ -12,9 +12,9 @@ one row per (employee, competency) with a status:
 
 Competency columns are mapped to the competency_id values in
 data/seed/competency_types.csv (functions map to competencies separately, in
-function_competencies.csv). The combined source column
-"Sterrad + poliklinikker/løspakk" maps to BOTH split competencies until the
-source file gains separate columns (D43/Q20).
+function_competencies.csv). Sterrad and Poliklinikker/løspakk are separate
+columns since R9 (Q20); an older file with the combined column
+"Sterrad + poliklinikker/løspakk" still maps to BOTH.
 
 Anonymized rows "Employee N" map to employee_id E<NNN>, matching the
 source_label column produced by scripts/generate_fake_employees.py.
@@ -43,6 +43,9 @@ def load_column_mapping() -> dict[str, list[str]]:
     with open(SEED_DIR / "competency_types.csv", newline="", encoding="utf-8") as fh:
         for row in csv.DictReader(fh):
             mapping.setdefault(row["source_column"], []).append(row["competency_id"])
+    # Legacy combined column (before R9): sets both split competencies.
+    mapping.setdefault("Sterrad + poliklinikker/løspakk",
+                       mapping.get("Sterrad", []) + mapping.get("Poliklinikker/løspakk", []))
     return mapping
 
 

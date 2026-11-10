@@ -104,6 +104,22 @@ class ParsePlanTest(unittest.TestCase):
         self.assertEqual(e.exported_at, EXPORTED)
         self.assertTrue(any("Filnavnet" in a for a in e.alerts))
 
+    def test_a_turnus_without_personid_is_refused(self):
+        raw = fx.plan_csv(people(), START, 4, EXPORTED, with_ids=False)
+        with self.assertRaises(hr_export.Rejected) as ctx:
+            hr_export.read(raw, fx.plan_name(EXPORTED))
+        self.assertIn("PersonID", ctx.exception.reasons[0])
+
+    def test_a_row_without_personid_is_refused(self):
+        raw = fx.plan_csv(people(), START, 4, EXPORTED, missing_id_for="Olsen Tor")
+        with self.assertRaises(hr_export.Rejected) as ctx:
+            hr_export.read(raw, fx.plan_name(EXPORTED))
+        self.assertIn("Olsen Tor", ctx.exception.reasons[0])
+
+    def test_personid_is_read_in_the_turnus(self):
+        e = hr_export.read(fx.plan_csv(people(), START, 4, EXPORTED), fx.plan_name(EXPORTED))
+        self.assertEqual([r.person_id for r in e.rows][:3], ["1001", "1002", "1003"])
+
     def test_not_an_export(self):
         with self.assertRaises(hr_export.Rejected):
             hr_export.read("a;b;c\r\n1;2;3".encode("cp1252"), "x.csv")
@@ -132,7 +148,8 @@ class InterpretTest(unittest.TestCase):
         self.assertEqual(hr_import.interpret("DK/F3"), ("DK", "12:00", None))
         self.assertEqual(hr_import.interpret("D2*"), ("D2", None, None))
         self.assertIsNotNone(hr_import.interpret("D, A")[2])
-        self.assertIsNotNone(hr_import.interpret("M")[2])
+        self.assertEqual(hr_import.interpret("M"), (None, None, None))     # overtime only: no shift
+        self.assertIn("ukjent vaktkode", hr_import.interpret("D, A")[2])
         self.assertIsNotNone(hr_import.interpret("D/F9")[2])
 
 
@@ -235,11 +252,49 @@ class PipelineTest(unittest.TestCase):
 
     def test_codes_learned_from_the_legend(self):
         self.load()
-        row = self.conn.execute("SELECT * FROM learned_shift_codes WHERE code = 'D3'").fetchone()
-        self.assertEqual((row["start"], row["end"], row["category"]),
-                         ("09:00", "13:30", "tidligvakt"))
+        row = self.conn.execute("SELECT * FROM shift_code_defs WHERE code = 'D3'").fetchone()
+        self.assertEqual((row["start"], row["end"], row["category"], row["source"], row["reviewed"]),
+                         ("09:00", "13:30", "tidligvakt", "turnus", 0))
+        self.assertIsNotNone(self.conn.execute(
+            "SELECT 1 FROM shift_codes WHERE code = 'D3'").fetchone())
         self.assertIsNone(self.conn.execute(
-            "SELECT 1 FROM learned_shift_codes WHERE code = 'D2*'").fetchone())
+            "SELECT 1 FROM shift_code_defs WHERE code = 'D2*'").fetchone())
+        self.assertTrue(any("Ny vaktkode D3" in f for f in self.findings()))
+
+    def test_ignored_codes_overtime_and_legend_deviations(self):
+        crew = people()
+        crew[0][2][D(2027, 1, 13)] = "DMT"       # ignored code (R9): kept out of the plan
+        crew[0][2][D(2027, 1, 14)] = "M"         # overtime only: no shift, no question
+        crew[0][2][D(2027, 1, 15)] = "D, A"      # never valid: an unknown code
+        legend = [r if r[0] != "DK" else ("DK", "07:00", "15:30", "1", "Aktiv") for r in fx.LEGEND]
+        self.drop(fx.plan_name(EXPORTED), fx.plan_csv(crew, START, 4, EXPORTED, legend=legend))
+        hr_import.scan_inbox(self.conn, self.inbox)
+        hr_import.rebuild(self.conn, TODAY)
+        kari = self.roster("Hansen Kari")
+        self.assertEqual((kari["2027-01-13"]["shift_code"], kari["2027-01-13"]["hold"]), ("DMT", "kode"))
+        self.assertNotIn("2027-01-14", kari)
+        self.assertNotIn("2027-01-14", self.pending("Hansen Kari"))
+        self.assertIn("ukjent vaktkode «D, A»", self.pending("Hansen Kari")["2027-01-15"])
+        self.assertTrue(any("Vaktkoden DK er 07:00–15:30 i turnusen" in f for f in self.findings()))
+        # The admin takes the turnus's time; a seed reload keeps the edit.
+        with self.conn:
+            self.conn.execute("UPDATE shift_code_defs SET end = '15:30', edited = 1 WHERE code = 'DK'")
+            importer.seed_shift_codes(self.conn)
+            db.sync_shift_codes(self.conn)
+        hr_import.rebuild(self.conn, TODAY)
+        self.assertEqual(self.conn.execute("SELECT end FROM shift_codes WHERE code = 'DK'").fetchone()[0],
+                         "15:30")
+        self.assertFalse(any("Vaktkoden DK" in f for f in self.findings()))
+
+    def test_a_deleted_code_is_not_learned_again(self):
+        self.load()
+        with self.conn:
+            self.conn.execute("UPDATE shift_code_defs SET deleted_at = 'nå' WHERE code = 'D3'")
+            db.sync_shift_codes(self.conn)
+        hr_import.rebuild(self.conn, TODAY)
+        self.assertIsNotNone(self.conn.execute(
+            "SELECT deleted_at FROM shift_code_defs WHERE code = 'D3'").fetchone()[0])
+        self.assertIsNone(self.conn.execute("SELECT 1 FROM shift_codes WHERE code = 'D3'").fetchone())
 
     def test_title_rules_hold_days_out_until_classified(self):
         self.load()
@@ -268,14 +323,15 @@ class PipelineTest(unittest.TestCase):
         self.assertIsNone(temp["2027-01-04"]["title"])
         self.assertTrue(any("ikke i turnusen" in f for f in self.findings()))
 
-    def test_one_name_with_two_person_ids_alerts(self):
+    def test_one_name_with_two_person_ids_is_two_people(self):
         self.load()
         self.drop(fx.ukeplan_name(dt.datetime(2027, 1, 11, 6)), fx.ukeplan_csv(
             [("9999", "Hansen Kari", {MON + dt.timedelta(7): "D"})],
             MON + dt.timedelta(7), dt.datetime(2027, 1, 11, 6)))
         hr_import.scan_inbox(self.conn, self.inbox)
         hr_import.rebuild(self.conn, TODAY)
-        self.assertTrue(any("flere PersonID" in f for f in self.findings()))
+        # With PersonIDs on every row these are two people who share a name.
+        self.assertTrue(any("To ansatte heter «Hansen Kari»" in f for f in self.findings()))
 
     def test_newer_ukeplan_for_the_same_week_wins(self):
         self.load()
@@ -345,6 +401,21 @@ class PipelineTest(unittest.TestCase):
                                  "ansvarsvakt": "qualified"})
         self.assertTrue(any("Ingen kompetanse registrert" in f and "Tor O." in f
                             for f in self.findings()))
+
+    def test_two_employees_with_the_same_name_are_told_apart_by_personid(self):
+        twins = [("Hansen Kari", "Sterilforsyningstekniker", {MON: "D"}, "1001"),
+                 ("Hansen Kari", "Sterilforsyningstekniker", {MON: "A"}, "7777")]
+        self.drop(fx.plan_name(EXPORTED), fx.plan_csv(twins, START, 4, EXPORTED))
+        hr_import.scan_inbox(self.conn, self.inbox)
+        hr_import.rebuild(self.conn, TODAY)
+        rows = list(self.conn.execute(
+            "SELECT e.person_id, e.display_name, r.shift_code FROM roster r JOIN employees e "
+            "USING (employee_id) WHERE r.date = ? ORDER BY e.person_id", (MON.isoformat(),)))
+        self.assertEqual([tuple(r) for r in rows],
+                         [("1001", "Kari H. (1001)", "D"), ("7777", "Kari H. (7777)", "A")])
+        texts = self.findings()
+        self.assertTrue(any("To ansatte heter «Hansen Kari»" in f for f in texts))
+        self.assertFalse(any("to rader" in f for f in texts))
 
     def test_purge_removes_what_is_past_retention(self):
         self.load()

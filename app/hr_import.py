@@ -144,7 +144,7 @@ def process_file(conn: sqlite3.Connection, path: Path, unit: str) -> str:
         return message
 
     try:
-        if path.suffix.lower() == ".xlsx":
+        if path.suffix.lower() == ".xlsx" or competency.is_competency_file(conn, raw):
             # Never applied directly: staged for review under Administrasjon
             # → Kompetanse, where every change is shown first (D98).
             import_id = competency.stage(conn, path.name, raw)
@@ -209,13 +209,14 @@ def scan_inbox(conn: sqlite3.Connection, inbox: Path | None = None) -> list[str]
 # ---------------------------------------------------------- the rebuild
 def interpret(raw: str) -> tuple[str | None, str | None, str | None]:
     """Raw cell -> (code, end override, problem). Only what is confirmed is
-    applied (D86/D92); everything else comes back as a problem."""
+    applied (D86/D92); everything else comes back as a problem. A cell with
+    only overtime (M) is no shift at all (Q34): (None, None, None)."""
     parts = [p.strip() for p in raw.split(",") if p.strip()]
     parts = [p for p in parts if p.upper() != "M"]          # overtime (Q34)
     if not parts:
-        return None, None, "bare overtid (M) registrert – vakttid ukjent"
-    if len(parts) > 1:
-        return None, None, f"flere koder samme dag («{raw}»)"
+        return None, None, None
+    if len(parts) > 1:                                       # «D, A» is never valid (R9)
+        return None, None, f"ukjent vaktkode «{raw.strip()}» (to koder samme dag)"
     base, _, modifier = parts[0].partition("/")
     base = base.strip().rstrip("*").strip()                  # paid lunch (Q37)
     end_override = None
@@ -239,6 +240,22 @@ def suggest_category(start: str, end: str) -> str:
     if minutes < 13 * 60:
         return "mellomvakt"
     return "senvakt"
+
+
+def newest_legend(conn: sqlite3.Connection, plan_files=None) -> dict[str, tuple[str, str]]:
+    """code -> (start, end) as the newest active turnus describes it. Codes
+    ending in * are the paid-lunch variant of the same shift (Q37)."""
+    if plan_files is None:
+        plan_files = list(conn.execute(
+            "SELECT * FROM import_files WHERE status = 'active' AND kind = 'plan' "
+            "ORDER BY exported_at DESC, file_id DESC LIMIT 1"))
+    out = {}
+    for f in plan_files[:1]:
+        for row in conn.execute("SELECT code, start, end FROM import_legend WHERE file_id = ?",
+                                (f["file_id"],)):
+            if not row["code"].endswith("*"):
+                out[row["code"]] = (row["start"], row["end"])
+    return out
 
 
 def _supersede(conn: sqlite3.Connection, cutoff: dt.date) -> None:
@@ -314,6 +331,7 @@ class Rebuild:
 
         pid_names: dict[str, set[str]] = defaultdict(set)
         name_pids: dict[str, set[str]] = defaultdict(set)
+        names_without_pid: set[str] = set()
         mapping: dict[tuple[int, int], str | None] = {}
         # Ukeplans first (newest first) so PersonIDs attach before names are used.
         ordered = ([f for f in files if f["kind"] == "ajourhold"][::-1]
@@ -339,6 +357,7 @@ class Rebuild:
                             eid = create(name, pid)
                     mapping[key] = eid
                 else:
+                    names_without_pid.add(name)
                     candidates = by_name.get(name, [])
                     if len(candidates) == 1:
                         mapping[key] = candidates[0]
@@ -353,11 +372,17 @@ class Rebuild:
                           "Sjekk om det er en navneendring – turnusrader med det gamle navnet "
                           "knyttes ikke til personen.")
         for name, pids in name_pids.items():
-            if len(pids) > 1:
+            if len(pids) < 2:
+                continue
+            if name in names_without_pid:
                 self.find("alert", "identitet",
                           f"Navnet «{name}» har flere PersonID-er ({', '.join(sorted(pids))}). "
-                          "Turnusrader med dette navnet kan ikke knyttes sikkert og holdes "
+                          "Rader med dette navnet uten PersonID kan ikke knyttes sikkert og holdes "
                           "utenfor planen.")
+            else:
+                self.find("info", "identitet",
+                          f"To ansatte heter «{name}» (PersonID {', '.join(sorted(pids))}) – de "
+                          "skilles på PersonID; på tavlen står PersonID bak navnet.")
         # Temps: in an ukeplan but in no active turnus — the turnus holds every
         # regular employee (D97). Without any turnus nobody is called a temp.
         kinds = {f["file_id"]: f["kind"] for f in files}
@@ -369,40 +394,32 @@ class Rebuild:
                          [(e,) for e in self.temps])
         return mapping
 
-    # -- learned codes and legend drift ----------------------------------
+    # -- the shift-code master list and legend drift (D103) ---------------
     def legends(self, plan_files) -> None:
         conn = self.conn
-        learned = {r["code"] for r in conn.execute("SELECT code FROM learned_shift_codes")}
-        seed = {r["code"]: r for r in conn.execute("SELECT * FROM shift_codes")
-                if r["code"] not in learned}
-        for f in plan_files[:1]:  # the newest turnus describes the codes in use
-            for row in conn.execute("SELECT * FROM import_legend WHERE file_id = ?",
-                                    (f["file_id"],)):
-                code = row["code"]
-                if code.endswith("*"):
-                    continue  # paid-lunch variant, same shift (Q37)
-                if code in seed:
-                    if (seed[code]["start"], seed[code]["end"]) != (row["start"], row["end"]):
-                        self.find("warn", "vaktkode",
-                                  f"Vaktkoden {code} er {row['start']}–{row['end']} i turnusen, men "
-                                  f"{seed[code]['start']}–{seed[code]['end']} i appen "
-                                  "(data/seed/shift_codes.csv).")
-                    continue
-                if code not in learned:
-                    crosses = "yes" if row["end"] <= row["start"] else "no"
-                    s, e = domain.parse_time(row["start"]), domain.parse_time(row["end"])
-                    hours = ((e.hour * 60 + e.minute) - (s.hour * 60 + s.minute)) % (24 * 60) / 60
-                    conn.execute(
-                        """INSERT INTO learned_shift_codes (code, start, end, crosses_midnight,
-                               category, utpost_code, duration_hours, confirmed, learned_at)
-                           VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?)""",
-                        (code, row["start"], row["end"], crosses,
-                         suggest_category(row["start"], row["end"]),
-                         "yes" if code.upper().startswith("U") else "no", hours, _now()))
-                    log(conn, f"Ny vaktkode {code} ({row['start']}–{row['end']}) lært fra turnusen.",
-                        "vaktkode")
-        db.merge_learned_codes(conn)
-        for row in conn.execute("SELECT * FROM learned_shift_codes WHERE confirmed = 0"):
+        defs = {r["code"]: r for r in conn.execute("SELECT * FROM shift_code_defs")}
+        legend = newest_legend(conn, plan_files)
+        for code, (start, end) in legend.items():
+            known = defs.get(code)
+            if known is None:
+                s, e = domain.parse_time(start), domain.parse_time(end)
+                conn.execute(
+                    """INSERT INTO shift_code_defs (code, kind, start, end, category, utpost_code,
+                           comment, source, reviewed, updated_at)
+                       VALUES (?, 'vanlig', ?, ?, ?, ?, 'Lært fra turnusens forklaring', 'turnus', 0, ?)""",
+                    (code, f"{s:%H:%M}", f"{e:%H:%M}", suggest_category(start, end),
+                     "yes" if code.upper().startswith("U") else "no", _now()))
+                log(conn, f"Ny vaktkode {code} ({start}–{end}) lært fra turnusen.", "vaktkode")
+            elif known["deleted_at"] is None and known["kind"] == "vanlig" \
+                    and (known["start"], known["end"]) != (start, end) \
+                    and known["legend_ack"] != f"{start}-{end}":
+                self.find("warn", "vaktkode",
+                          f"Vaktkoden {code} er {start}–{end} i turnusen, men "
+                          f"{known['start']}–{known['end']} i appen – sjekk under "
+                          "Administrasjon → Vaktkoder.")
+        db.sync_shift_codes(conn)
+        for row in conn.execute("SELECT * FROM shift_code_defs WHERE reviewed = 0 "
+                                "AND deleted_at IS NULL ORDER BY code"):
             self.find("info", "vaktkode",
                       f"Ny vaktkode {row['code']} ({row['start']}–{row['end']}) er tatt i bruk som "
                       f"{row['category']}{' (utpost)' if row['utpost_code'] == 'yes' else ''} – "
@@ -524,10 +541,14 @@ class Rebuild:
                 pending.append((day, eid, raw, "to rader har vakt samme dag (D80)", source, 0))
                 continue
             code, end_override, problem = interpret(raw)
-            fixable = bool(problem) and not problem.startswith("flere koder")
+            if code is None and problem is None:
+                continue                       # only overtime (M): no shift (Q34)
             shift = codes.get(code) if not problem else None
             if not problem and shift is None:
-                problem, fixable = f"ukjent vaktkode «{code}»", True
+                problem = f"ukjent vaktkode «{code}» – definer den under Administrasjon → Vaktkoder"
+            fixable = False
+            if shift is not None and shift["kind"] == "egen_tid":
+                problem, fixable = f"tid angis per vakt («{code}»)", True
             start_override = category_override = None
             if problem:
                 entry = manual.get((eid, day))
@@ -548,7 +569,9 @@ class Rebuild:
                 date -= dt.timedelta(days=1)   # exported on the morning it ends (Q33)
             title, ambiguous = title_for(eid, day, source, key)
             hold = None
-            if ambiguous:
+            if shift["kind"] == "ignoreres":
+                hold = "kode"                  # e.g. DMT/DMK: never planned (R9)
+            elif ambiguous:
                 hold = "tvetydig"
             elif title:
                 rule = rules.get(title, "uavklart")
@@ -576,7 +599,7 @@ class Rebuild:
                 grouped[(reason, fixable)].append(
                     f"{names.get(eid, eid)} {dt.date.fromisoformat(day):%d.%m}")
         for (reason, fixable), who in sorted(grouped.items()):
-            hint = " Angi tid under Datagrunnlag → Ukjente vaktkoder." if fixable else ""
+            hint = " Angi tid under Datagrunnlag → Vakter uten fast tid." if fixable else ""
             self.find("alert", "vakt",
                       f"Kan ikke planlegges – {reason}: {', '.join(who[:12])}"
                       f"{' …' if len(who) > 12 else ''}.{hint}")
@@ -717,21 +740,24 @@ class Rebuild:
         conn = self.conn
         for f in files:
             for r in conn.execute(
-                    """SELECT r.full_name, c.export_date, COUNT(*) AS n FROM import_cells c
+                    """SELECT MIN(r.full_name) AS full_name, c.export_date, COUNT(*) AS n
+                       FROM import_cells c
                        JOIN import_rows r ON r.file_id = c.file_id AND r.row_no = c.row_no
-                       WHERE c.file_id = ? GROUP BY r.full_name, c.export_date HAVING n > 1
+                       WHERE c.file_id = ?
+                       GROUP BY COALESCE(r.person_id, r.full_name), c.export_date HAVING n > 1
                        ORDER BY c.export_date LIMIT 5""", (f["file_id"],)):
                 self.find("alert", "identitet",
                           f"«{r['full_name']}» har vakt på to rader {dt.date.fromisoformat(r['export_date']):%d.%m.%Y} "
-                          f"i {f['filename']} – to personer med samme navn, eller feil i turnusen?")
+                          f"i {f['filename']} – feil i turnusen?")
 
 
 def display_names(conn: sqlite3.Connection) -> None:
     """Board names for imported people: «Fornavn E.», the surname prefix
     lengthened until unique. The exports write names surname first (D82)."""
     people = list(conn.execute(
-        "SELECT employee_id, full_name FROM employees WHERE origin = 'import'"))
+        "SELECT employee_id, full_name, person_id FROM employees WHERE origin = 'import'"))
     full = {r["employee_id"]: r["full_name"] for r in people}
+    pids = {r["employee_id"]: r["person_id"] for r in people}
 
     def parts(full: str) -> tuple[str, str]:
         tokens = full.split()
@@ -752,7 +778,9 @@ def display_names(conn: sqlite3.Connection) -> None:
             clashes[label].append(eid)
         grew = False
         for eids in clashes.values():
-            if len(eids) > 1:
+            # Identical full names can't be told apart by a longer surname —
+            # they keep the short form and get their PersonID instead.
+            if len(eids) > 1 and len({full[e] for e in eids}) > 1:
                 for eid in eids:
                     surname = parts(full[eid])[1]
                     if length[eid] < len(surname):
@@ -764,7 +792,9 @@ def display_names(conn: sqlite3.Connection) -> None:
     labels = labels if people else {}
     for eid, label in sorted(labels.items()):
         seen[label] += 1
-        final = label if seen[label] == 1 else f"{label} ({seen[label]})"
+        twins = sum(1 for other in labels.values() if other == label) > 1
+        final = (label if not twins else
+                 f"{label} ({pids[eid]})" if pids.get(eid) else f"{label} ({seen[label]})")
         conn.execute("UPDATE employees SET display_name = ? WHERE employee_id = ?", (final, eid))
 
 

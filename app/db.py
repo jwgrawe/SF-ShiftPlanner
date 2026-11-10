@@ -167,6 +167,17 @@ CREATE TABLE IF NOT EXISTS positions (
     notes TEXT);
 CREATE TABLE IF NOT EXISTS position_exclusions (
     title TEXT NOT NULL, function_id TEXT NOT NULL, PRIMARY KEY (title, function_id));
+-- The shift-code master list (D103). Seeded from data/seed/shift_codes.csv,
+-- then owned by the app: admin edits win, deleted codes stay deleted.
+-- kind: 'vanlig' (fixed times) | 'ignoreres' (never planned, e.g. DMT)
+--     | 'egen_tid' (times entered per occurrence, e.g. DX/AX).
+-- source: 'standard' (seed) | 'turnus' (learned from a legend) | 'manuell'.
+-- shift_codes (joined everywhere) is derived from it by sync_shift_codes().
+CREATE TABLE IF NOT EXISTS shift_code_defs (
+    code TEXT PRIMARY KEY, kind TEXT NOT NULL DEFAULT 'vanlig', start TEXT, end TEXT,
+    category TEXT, utpost_code TEXT NOT NULL DEFAULT 'no', comment TEXT,
+    source TEXT NOT NULL, reviewed INTEGER NOT NULL DEFAULT 1,
+    edited INTEGER NOT NULL DEFAULT 0, deleted_at TEXT, updated_at TEXT);
 -- Shift codes learned from a Plan legend (not in data/seed/shift_codes.csv).
 -- Survive the seed reload on start-up; merged into shift_codes after it.
 CREATE TABLE IF NOT EXISTS learned_shift_codes (
@@ -199,7 +210,7 @@ MASTER_TABLES = [
     "function_competencies", "function_intensity", "staffing_demand",
     "employee_competencies", "employee_preferences", "employee_restrictions",
     "weekday_rules", "worktable_types", "opening_hours", "rotation_rules",
-    "planner_settings", "shift_codes", "functions", "competency_types",
+    "planner_settings", "functions", "competency_types",
     "employees", "zones",
 ]
 # In real mode people come from the imports, not from the seed: these are
@@ -240,22 +251,60 @@ def init_schema(conn: sqlite3.Connection) -> None:
     # Every log line belongs to an area, so each page can show its own (D100).
     _ensure_column(conn, "import_log", "area", "TEXT NOT NULL DEFAULT 'import'")
     _ensure_column(conn, "roster_pending", "fixable", "INTEGER NOT NULL DEFAULT 0")
+    _ensure_column(conn, "shift_codes", "kind", "TEXT NOT NULL DEFAULT 'vanlig'")
+    # A deviation from the turnus the admin chose to keep ("07:00-15:30").
+    _ensure_column(conn, "shift_code_defs", "legend_ack", "TEXT")
+    # Codes learned before D103 move into the master list once. Committed
+    # here: callers switch foreign keys off next, which a still-open
+    # transaction would silently ignore.
+    if conn.execute("SELECT 1 FROM learned_shift_codes LIMIT 1").fetchone():
+        with conn:
+            conn.execute(
+                """INSERT OR IGNORE INTO shift_code_defs
+                   (code, kind, start, end, category, utpost_code, comment, source, reviewed,
+                    updated_at)
+                   SELECT code, 'vanlig', start, end, category, utpost_code,
+                          'Lært fra turnusens forklaring', 'turnus', confirmed, learned_at
+                   FROM learned_shift_codes""")
+            conn.execute("DELETE FROM learned_shift_codes")
+    if conn.in_transaction:
+        conn.commit()
 
 
-def merge_learned_codes(conn: sqlite3.Connection) -> None:
-    """Shift codes learned from Plan legends join the seed codes (seed wins).
-    Also the reserved code MAN: a shift whose times a manager entered by hand
-    (its real times live on the roster row, D95)."""
-    conn.execute(
-        """INSERT OR IGNORE INTO shift_codes
-           (code, start, end, crosses_midnight, category, utpost_code, duration_hours, comment)
-           VALUES ('MAN', '00:00', '00:00', 'no', 'tidligvakt', 'no', 0,
-                   'Reservert: vakt med manuelt angitt tid (D95)')""")
-    conn.execute(
-        """INSERT OR IGNORE INTO shift_codes
-           (code, start, end, crosses_midnight, category, utpost_code, duration_hours, comment)
-           SELECT code, start, end, crosses_midnight, category, utpost_code, duration_hours,
-                  'Lært fra turnusens forklaring' FROM learned_shift_codes""")
+def _minutes(value: str) -> int:
+    hours, minutes = value.split(":")
+    return int(hours) * 60 + int(minutes)
+
+
+def sync_shift_codes(conn: sqlite3.Connection) -> None:
+    """Derive shift_codes from the master list (D103). Rows are upserted, so
+    roster rows keep their references; a code removed from the list goes
+    once nothing refers to it any more. MAN is the reserved code for a shift
+    whose times a manager entered (D95)."""
+    rows = [("MAN", "egen_tid", "00:00", "00:00", "no", "tidligvakt", "no", 0.0,
+             "Reservert: vakt med manuelt angitt tid (D95)")]
+    for r in conn.execute("SELECT * FROM shift_code_defs WHERE deleted_at IS NULL"):
+        start, end = r["start"] or "00:00", r["end"] or "00:00"
+        span = (_minutes(end) - _minutes(start)) % (24 * 60)
+        crosses = "yes" if r["kind"] == "vanlig" and _minutes(end) <= _minutes(start) else "no"
+        rows.append((r["code"], r["kind"], start, end, crosses, r["category"] or "tidligvakt",
+                     r["utpost_code"] or "no", round(span / 60, 2), r["comment"] or ""))
+    conn.executemany(
+        """INSERT INTO shift_codes (code, kind, start, end, crosses_midnight, category, utpost_code,
+               duration_hours, comment) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT(code) DO UPDATE SET kind = excluded.kind, start = excluded.start,
+               end = excluded.end, crosses_midnight = excluded.crosses_midnight,
+               category = excluded.category, utpost_code = excluded.utpost_code,
+               duration_hours = excluded.duration_hours, comment = excluded.comment""", rows)
+    keep = {r[0] for r in rows}
+    used = {r[0] for r in conn.execute("SELECT DISTINCT shift_code FROM roster")}
+    for (code,) in conn.execute("SELECT code FROM shift_codes").fetchall():
+        if code not in keep and code not in used:
+            conn.execute("DELETE FROM shift_codes WHERE code = ?", (code,))
+
+
+# Kept for callers from before D103.
+merge_learned_codes = sync_shift_codes
 
 
 def migrate_legacy_demo_db() -> str | None:

@@ -25,7 +25,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from app import absences as absences_mod
-from app import applog, checks, competency, db, domain, hr_import, planner, service
+from app import applog, checks, competency, db, domain, hr_import, planner, service, shift_codes
 from app.hr_export import Rejected
 
 try:
@@ -40,8 +40,9 @@ TEMPLATES = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 # Cache-Control header), which would leave a pulled restyle invisible until a
 # hard refresh. Stamping the URL with the file's mtime makes every change a
 # new URL, so the browser fetches it.
-_CSS = Path(__file__).parent / "static" / "app.css"
-TEMPLATES.env.globals["static_version"] = int(_CSS.stat().st_mtime) if _CSS.exists() else 0
+_STATIC = Path(__file__).parent / "static"
+TEMPLATES.env.globals["static_version"] = max(
+    (int(p.stat().st_mtime) for p in _STATIC.glob("*.*")), default=0)
 TEMPLATES.env.globals["is_demo"] = db.is_demo
 TEMPLATES.env.globals["kind_label"] = hr_import.kind_label
 
@@ -427,6 +428,7 @@ def admin_page(request: Request, conn, tab: str, template: str, model: dict):
         "badge_positions": conn.execute(
             "SELECT COUNT(*) FROM positions WHERE rule = 'uavklart'").fetchone()[0],
         "badge_competency": len(competency.pending_imports(conn)),
+        "badge_codes": shift_codes.attention(conn, local_now().date()),
     })
     return TEMPLATES.TemplateResponse(request, template, model)
 
@@ -518,8 +520,8 @@ async def admin_competency_upload(request: Request):
     form = await request.form()
     upload = form.get("fil")
     name = Path(getattr(upload, "filename", "") or "").name
-    if not name.lower().endswith(".xlsx"):
-        return back("/admin/kompetanse", "Velg en Excel-fil (.xlsx).")
+    if not name.lower().endswith((".xlsx", ".csv")):
+        return back("/admin/kompetanse", "Velg en Excel-fil (.xlsx) eller en CSV-fil (.csv).")
     raw = await upload.read()
     conn = get_conn()
     try:
@@ -607,15 +609,82 @@ def admin_competency_form():
 def admin_codes(request: Request):
     conn = get_conn(refresh=True)
     try:
-        return admin_page(request, conn, "vaktkoder", "admin_codes.html", {
-            "learned": list(conn.execute("SELECT * FROM learned_shift_codes ORDER BY code")),
-            "shift_codes": list(conn.execute("SELECT * FROM shift_codes WHERE code <> 'MAN' ORDER BY code")),
+        model = shift_codes.overview(conn, local_now().date())
+        model.update({
+            "kinds": shift_codes.KINDS,
+            "kind_help": shift_codes.KIND_HELP,
             "rotation_rules": list(conn.execute("SELECT * FROM rotation_rules")),
             "categories": service.SHIFT_CATEGORY_ORDER,
+            "category_labels": service.SHIFT_CATEGORY_LABELS,
             "log": applog.entries(conn, "vaktkode"),
         })
+        return admin_page(request, conn, "vaktkoder", "admin_codes.html", model)
     finally:
         conn.close()
+
+
+def _codes_action(action) -> RedirectResponse:
+    """Run one change to the shift-code list, rebuild the roster (real mode)
+    and go back with the outcome."""
+    conn = get_conn()
+    try:
+        try:
+            message = action(conn)
+        except shift_codes.Invalid as error:
+            return back("/admin/vaktkoder", f"Ikke lagret: {error}")
+        if not db.is_demo():
+            hr_import.rebuild(conn)
+    finally:
+        conn.close()
+    return back("/admin/vaktkoder", message)
+
+
+@app.post("/admin/vaktkoder/lagre")
+async def admin_codes_save(request: Request):
+    form = {k: str(v) for k, v in (await request.form()).items()}
+    return _codes_action(lambda conn: shift_codes.save(conn, form))
+
+
+@app.post("/admin/vaktkoder/bekreft")
+async def admin_codes_confirm(request: Request):
+    codes = [str(c) for c in (await request.form()).getlist("code")]
+    return _codes_action(lambda conn: f"{shift_codes.confirm(conn, codes)} vaktkode(r) bekreftet.")
+
+
+@app.post("/admin/vaktkoder/bruk-turnus")
+async def admin_codes_use_turnus(request: Request):
+    code = str((await request.form()).get("code", ""))
+    return _codes_action(lambda conn: shift_codes.use_turnus_time(conn, code))
+
+
+@app.post("/admin/vaktkoder/behold")
+async def admin_codes_keep(request: Request):
+    code = str((await request.form()).get("code", ""))
+    return _codes_action(lambda conn: shift_codes.keep_app_time(conn, code))
+
+
+@app.post("/admin/vaktkoder/fjern")
+async def admin_codes_delete(request: Request):
+    code = str((await request.form()).get("code", ""))
+    return _codes_action(lambda conn: shift_codes.delete(conn, code))
+
+
+@app.post("/admin/vaktkoder/gjenopprett")
+async def admin_codes_restore(request: Request):
+    code = str((await request.form()).get("code", ""))
+    return _codes_action(lambda conn: shift_codes.restore(conn, code))
+
+
+@app.get("/admin/vaktkoder.csv")
+def admin_codes_csv():
+    conn = get_conn()
+    try:
+        data = shift_codes.export_csv(conn)
+    finally:
+        conn.close()
+    stamp = local_now().strftime("%Y%m%d")
+    return Response(data, media_type="text/csv; charset=utf-8",
+                    headers={"Content-Disposition": f'attachment; filename="Vaktkoder_{stamp}.csv"'})
 
 
 @app.get("/admin/grunndata", response_class=HTMLResponse)
@@ -702,32 +771,6 @@ async def admin_positions(request: Request):
     return back("/admin/stillinger", "Stillingene er lagret.")
 
 
-@app.post("/admin/vaktkoder")
-async def admin_learned_codes(request: Request):
-    """Confirm (or correct) the category of codes learned from a turnus."""
-    form = await request.form()
-    allowed = set(service.SHIFT_CATEGORY_ORDER)
-    conn = get_conn()
-    try:
-        with conn:
-            for key in [k for k in form.keys() if k.startswith("code_")]:
-                index = key.split("_", 1)[1]
-                code = str(form[key])
-                category = str(form.get(f"category_{index}", ""))
-                if category not in allowed:
-                    continue
-                conn.execute("UPDATE learned_shift_codes SET category = ?, confirmed = 1 "
-                             "WHERE code = ?", (category, code))
-                applog.log(conn, "vaktkode", f"Vaktkoden {code} bekreftet som {category}.")
-                conn.execute("UPDATE shift_codes SET category = ? WHERE code = ? AND code IN "
-                             "(SELECT code FROM learned_shift_codes)", (category, code))
-        if not db.is_demo():
-            hr_import.rebuild(conn)
-    finally:
-        conn.close()
-    return back("/admin/vaktkoder", "Kategoriene er bekreftet.")
-
-
 # ---------------------------------------------------------------------------
 # Data sources: imported turnus and ukeplan files (real mode)
 
@@ -746,19 +789,28 @@ def import_page(request: Request, melding: str | None = None):
     return TEMPLATES.TemplateResponse(request, "import.html", model)
 
 
+def _shift_time(start: str, end: str) -> tuple[str, str]:
+    """Typed times for a per-shift code: forgiving format, whole or half
+    hours (R9). Raises ValueError with the reason."""
+    try:
+        s, e = domain.parse_clock(start), domain.parse_clock(end)
+    except ValueError:
+        raise ValueError("start og slutt må være klokkeslett") from None
+    if s.minute % 30 or e.minute % 30:
+        raise ValueError("bruk hele eller halve timer")
+    if s == e:
+        raise ValueError("start og slutt kan ikke være like")
+    return s.strftime("%H:%M"), e.strftime("%H:%M")
+
+
 @app.post("/import/manuell-tid")
 async def import_manual_time(request: Request):
     """A manager gives a held day (unknown code such as DX) its times."""
     form = await request.form()
-    start, end = str(form.get("start", "")), str(form.get("end", ""))
-    ok = True
     try:
-        domain.parse_time(start)
-        domain.parse_time(end)
-    except ValueError:
-        ok = False
-    if not ok or start == end:
-        return back("/import#ventende", "Oppgi gyldig start- og sluttid.")
+        start, end = _shift_time(str(form.get("start", "")), str(form.get("end", "")))
+    except ValueError as error:
+        return back("/import#ventende", f"Ikke lagret: {error}.")
     conn = get_conn()
     try:
         with conn:
@@ -821,17 +873,13 @@ async def unknown_shifts_save(request: Request):
         start, end = str(form.get(f"start_{i}", "")).strip(), str(form.get(f"end_{i}", "")).strip()
         if not start and not end:
             continue
-        if (start, end) == (str(form.get(f"old_start_{i}", "")), str(form.get(f"old_end_{i}", ""))):
-            continue
         day = str(form[key])
         try:
-            domain.parse_time(start)
-            domain.parse_time(end)
-            valid = start != end
-        except ValueError:
-            valid = False
-        if not valid:
-            problems.append(day)
+            start, end = _shift_time(start, end)
+        except ValueError as error:
+            problems.append(f"{dt.date.fromisoformat(day):%d.%m} ({error})")
+            continue
+        if (start, end) == (str(form.get(f"old_start_{i}", "")), str(form.get(f"old_end_{i}", ""))):
             continue
         rows.append((employee_id, day, str(form.get(f"raw_{i}", "")), start, end))
     conn = get_conn()
@@ -852,8 +900,7 @@ async def unknown_shifts_save(request: Request):
     finally:
         conn.close()
     if problems:
-        message = (f"{len(rows)} lagret. Sjekk tidene for {', '.join(problems)} – start og slutt må "
-                   "fylles ut og være ulike.")
+        message = f"{len(rows)} lagret. Sjekk {', '.join(problems)}."
     elif rows:
         message = f"{len(rows)} vakt{'er' if len(rows) != 1 else ''} fikk tid og tas med i planleggingen."
     else:

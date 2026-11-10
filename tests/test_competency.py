@@ -109,8 +109,10 @@ class MatrixTest(RealModeBase):
         self.assertTrue(rows["Vikar Vera"]["temp"])
         self.assertFalse(rows["Hansen Kari"]["temp"])
         self.assertEqual(rows["Hansen Kari"]["title"], "Sterilforsyningstekniker")
-        combined = [c for c in m["columns"] if c["key"].startswith("Sterrad")][0]
-        self.assertEqual(combined["ids"], ["sterrad", "poliklinikker_lospakk"])
+        split = {c["key"]: c["ids"] for c in m["columns"]}
+        self.assertEqual(split["Sterrad"], ["sterrad"])                       # own columns (Q20, R9)
+        self.assertEqual(split["Poliklinikker/løspakk"], ["poliklinikker_lospakk"])
+        self.assertEqual(rows["Hansen Kari"]["person_id"], "1001")
 
     def test_edits_save_and_stale_edits_are_refused(self):
         applied, conflicts = competency.apply_changes(self.conn, [
@@ -126,11 +128,23 @@ class MatrixTest(RealModeBase):
         log = [r[0] for r in self.conn.execute("SELECT text FROM import_log WHERE area = 'kompetanse'")]
         self.assertTrue(any("Kontrollsone Nei → Ja" in line for line in log))
 
-    def test_combined_column_sets_both_competencies(self):
-        competency.apply_changes(self.conn, [{"key": "Hansen Kari", "col": "Sterrad + poliklinikker/løspakk",
-                                              "old": "", "new": "qualified"}])
+    def test_old_combined_column_in_a_file_sets_both_competencies(self):
+        with self.conn:
+            import_id = competency.stage(self.conn, "gammel.xlsx", workbook([["Hansen Kari", "", "", "", "Ja"]]))
+        model = competency.review(self.conn, import_id)
+        self.assertTrue(any("samlekolonnen" in n for n in model["notes"]))
+        competency.apply_import(self.conn, import_id, overwrite_conflicts=False)
         hr_import.rebuild(self.conn, TODAY)
         self.assertEqual(set(self.comps("Hansen Kari")), {"sterrad", "poliklinikker_lospakk"})
+
+    def test_separate_columns_win_over_the_combined_one(self):
+        header = HEADER + ["Sterrad"]
+        with self.conn:
+            import_id = competency.stage(self.conn, "begge.xlsx",
+                                         workbook([["Hansen Kari", "", "", "", "Ja", ""]], header))
+        competency.apply_import(self.conn, import_id, overwrite_conflicts=False)
+        hr_import.rebuild(self.conn, TODAY)
+        self.assertEqual(set(self.comps("Hansen Kari")), {"poliklinikker_lospakk"})
 
     def test_standard_set_applies_to_temps_only(self):
         hr_import.rebuild(self.conn, TODAY)
@@ -227,6 +241,45 @@ class WorkbookTest(RealModeBase):
         self.assertEqual(values.get("Olsen Tor", {}), {})                                # conflict: app kept
 
 
+class CsvAndPersonIdTest(RealModeBase):
+    CSV = ("PersonID;Navn;Kontrollsone;Sterrad;Poliklinikker/løspakk\r\n"
+           "1001;Kari Hansen;Ja;;Ukjent\r\n"
+           "1002;Olsen Tor;;Ja;\r\n")
+
+    def test_a_csv_list_is_read_and_personid_links_the_rows(self):
+        with self.conn:
+            import_id = competency.stage(self.conn, "kompetanse.csv", self.CSV.encode("cp1252"))
+        model = competency.review(self.conn, import_id)
+        self.assertEqual(model["step"], "diff")                     # no name linking needed
+        self.assertEqual(model["linked"], {"Kari Hansen": "Hansen Kari"})
+        competency.apply_import(self.conn, import_id, overwrite_conflicts=False)
+        values = competency.current_values(self.conn)
+        self.assertEqual(values["Hansen Kari"], {"Kontrollsone": "qualified",
+                                                 "Poliklinikker/løspakk": "uncertain"})
+        self.assertEqual(values["Olsen Tor"], {"Sterrad": "qualified"})
+
+    def test_a_comma_separated_utf8_list_works_too(self):
+        text = self.CSV.replace(";", ",")
+        with self.conn:
+            import_id = competency.stage(self.conn, "k.csv", ("\ufeff" + text).encode("utf-8"))
+        self.assertEqual(competency.review(self.conn, import_id)["step"], "diff")
+
+    def test_a_competency_csv_in_the_inbox_is_staged_not_rejected(self):
+        self.drop("Kompetanse.csv", self.CSV.encode("cp1252"))
+        messages = hr_import.scan_inbox(self.conn, self.inbox)
+        self.assertIn("venter på gjennomgang", messages[0])
+        self.assertEqual(len(competency.pending_imports(self.conn)), 1)
+
+    def test_the_form_carries_personid(self):
+        from openpyxl import load_workbook
+        ws = load_workbook(io.BytesIO(competency.build_form(self.conn)))[competency.MAIN_SHEET]
+        heads = [ws.cell(row=2, column=c).value for c in range(1, ws.max_column + 1)]
+        pid = heads.index("PersonID") + 1
+        self.assertEqual([ws.cell(row=r, column=pid).value for r in (3, 4)], ["1001", "1002"])
+        self.assertIn("Sterrad", heads)
+        self.assertIn("Poliklinikker/løspakk", heads)
+
+
 class ManualTimesTest(RealModeBase):
     def pending(self):
         return {(r["date"], r["raw"]): r["fixable"] for r in self.conn.execute(
@@ -248,14 +301,14 @@ class ManualTimesTest(RealModeBase):
         self.assertEqual(planner.day_shifts(self.conn, D(2027, 1, 5))[vera]["start"], "07:30")
         # A newer ukeplan writes something else in that cell: asked again.
         week = fx.ukeplan_csv([("1001", "Hansen Kari", {TODAY: "D"}),
-                               ("2001", "Vikar Vera", {TODAY + dt.timedelta(1): "DY"})],
+                               ("2001", "Vikar Vera", {TODAY + dt.timedelta(1): "AX"})],
                               TODAY, dt.datetime(2027, 1, 5, 9))
         self.drop(fx.ukeplan_name(dt.datetime(2027, 1, 5, 9)), week)
         hr_import.scan_inbox(self.conn, self.inbox)
         hr_import.rebuild(self.conn, TODAY)
-        self.assertEqual(self.pending(), {("2027-01-05", "DY"): 1})
+        self.assertEqual(self.pending(), {("2027-01-05", "AX"): 1})
 
-    def test_overview_groups_occurrences_per_person_with_week_and_suggestions(self):
+    def test_overview_groups_occurrences_per_person_with_week(self):
         from app import service
         model = service.unknown_shifts_model(self.conn, TODAY)
         self.assertEqual(model["open"], 1)
@@ -263,7 +316,6 @@ class ManualTimesTest(RealModeBase):
         self.assertEqual((vera["display"], vera["temp"], vera["open"]), ("Vera V.", True, 1))
         item = vera["items"][0]
         self.assertEqual((item["date"], item["raw"]), (D(2027, 1, 5), "DX"))
-        self.assertTrue(all(s["code"].startswith("D") for s in item["suggestions"]))
         week = {d["date"]: (d["label"], d["kind"]) for d in item["week"]}
         self.assertEqual(week[D(2027, 1, 4)], ("D", "shift"))
         self.assertEqual(week[D(2027, 1, 5)], ("DX", "pending"))

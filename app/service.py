@@ -812,9 +812,8 @@ def unknown_shift_count(conn: sqlite3.Connection, today: dt.date) -> int:
 
 
 def unknown_shifts_model(conn: sqlite3.Connection, today: dt.date, show_past: bool = False) -> dict:
-    """Every occurrence of an unknown code (e.g. DX/AX) from `first` on,
-    grouped per person, each with that person's week for context and
-    suggested times from the shift codes sharing the code's first letter."""
+    """Every shift whose code has no fixed time (DX/AX, D95/D103) from
+    `first` on, grouped per person, each with that person's week for context."""
     first = today - dt.timedelta(days=14) if show_past else today
     names = {r["employee_id"]: r for r in conn.execute(
         "SELECT employee_id, display_name, full_name, is_temp FROM employees")}
@@ -848,24 +847,6 @@ def unknown_shifts_model(conn: sqlite3.Connection, today: dt.date, show_past: bo
         person(r["employee_id"])["items"].append(
             {"date": dt.date.fromisoformat(r["export_date"]), "raw": r["raw"], "done": True,
              "start": r["start"], "end": r["end"], "reason": ""})
-
-    codes = [r for r in conn.execute(
-        "SELECT code, start, end, utpost_code FROM shift_codes WHERE code <> 'MAN' ORDER BY code")]
-
-    def suggestions(raw: str) -> list[dict]:
-        letter = raw[:1].upper()
-        picks = [c for c in codes if c["code"][:1].upper() == letter and c["code"] != raw
-                 and (c["utpost_code"] != "yes" or letter == "U")]
-        if not picks:
-            picks = [c for c in codes if c["code"] in ("D", "A", "N")]
-        seen, result = set(), []
-        for c in picks:
-            span = (c["start"], c["end"])
-            if span in seen:
-                continue
-            seen.add(span)
-            result.append({"code": c["code"], "start": c["start"], "end": c["end"]})
-        return result[:5]
 
     def week_strip(eid: str, day: dt.date) -> list[dict]:
         monday = day - dt.timedelta(days=day.weekday())
@@ -901,7 +882,6 @@ def unknown_shifts_model(conn: sqlite3.Connection, today: dt.date, show_past: bo
             item["relative"] = ("i dag" if item["date"] == today else
                                 "i morgen" if item["date"] == today + dt.timedelta(days=1) else
                                 "passert" if item["date"] < today else "")
-            item["suggestions"] = suggestions(item["raw"])
             item["week"] = week_strip(eid, item["date"])
             item["previous_day"] = item["date"] - dt.timedelta(days=1)
         p["open"] = sum(1 for item in p["items"] if not item["done"])

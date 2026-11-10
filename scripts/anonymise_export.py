@@ -285,16 +285,16 @@ def find_lines(grid, axis, codes, force_header=None, kind="id"):
 
 def shifted_headers(grid, codes, force_header, kind, found):
     """The turnus summary puts every header one column right of its data: a
-    name header with nothing name-like under it, but names under the (empty)
-    cell to its left, anchors that left column from the header's row."""
+    header whose data is in the column to its left anchors that column from
+    the header's row — and stops anchoring its own (D90)."""
     for i, row in enumerate(grid):
         for j, value in enumerate(row):
             if j == 0 or not ((force_header and value.strip().lower() == force_header.lower())
                               or is_header(value, kind)):
                 continue
             left = j - 1
-            if row[left].strip():
-                continue
+            # Under the left neighbour: is that where this header's data is?
+            # (Its own cell may be empty, or hold the shifted «PersonID».)
             below = [r[left].strip() for r in grid[i + 1:] if left < len(r) and r[left].strip()]
             check = (lambda v: is_id(v, anchored=True)) if kind == "id" else (lambda v: name_in(v, codes, loose=True))
             if not (below and check(below[0])):

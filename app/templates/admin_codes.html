@@ -1,47 +1,299 @@
 {% extends "admin_base.html" %}
 {% from "_macros.html" import log_panel %}
 {% block admin_content %}
-{% if learned %}
-<h2>Vaktkoder lært fra turnusen</h2>
-<p class="small">Koder som står i turnusens forklaring, men ikke i appens vaktkodeliste.
-Tidene er hentet fra turnusen; kategorien (som styrer rulleringstidspunktet) er foreslått
-automatisk – bekreft eller endre.</p>
-<form method="post" action="/admin/vaktkoder">
-<div class="tablewrap"><table>
-  <tr><th>Kode</th><th>Tid</th><th>Utpost</th><th>Kategori</th><th>Status</th></tr>
-  {% for code in learned %}
-    <tr>
-      <td><input type="hidden" name="code_{{ loop.index }}" value="{{ code.code }}"><strong>{{ code.code }}</strong></td>
-      <td>{{ code.start }}–{{ code.end }}</td>
-      <td>{% if code.utpost_code == "yes" %}ja{% endif %}</td>
-      <td><select name="category_{{ loop.index }}">
-        {% for category in categories %}<option {% if code.category == category %}selected{% endif %}>{{ category }}</option>{% endfor %}
-      </select></td>
-      <td>{% if code.confirmed %}<span class="badge published">bekreftet</span>{% else %}<span class="badge draft">foreslått</span>{% endif %}</td>
-    </tr>
+<p class="intro small">Appens egen vaktkodeliste. Den startet fra standardlisten, lærer nye koder fra
+turnusens forklaring og varsler når turnusen beskriver en kode annerledes enn her. Du kan legge til,
+endre, ignorere og fjerne koder – alt logges, og planen bygges på nytt med en gang.</p>
+
+{# ------------------------------------------------------------ attention #}
+{% set needs = unknown|length + counts.avvik + counts.nye %}
+{% if needs %}
+<section class="vk-attention" aria-labelledby="vk-att-h">
+  <h2 id="vk-att-h">Trenger en avklaring <span class="tabbadge">{{ needs }}</span></h2>
+
+  {% for u in unknown %}
+    <div class="vk-item alert">
+      <div class="vk-item-main">
+        <code class="vk-code">{{ u.code }}</code>
+        <div>
+          <strong>Ukjent kode</strong> – står på {{ u.count }} vakt{{ "er" if u.count != 1 }} de neste fire ukene,
+          som holdes utenfor planen til koden er definert.
+          <div class="muted small">{{ u.examples|join(", ") }}{% if u.count > u.examples|length %} …{% endif %}
+            {% if u.deleted %}· koden ble fjernet fra listen tidligere{% endif %}</div>
+        </div>
+      </div>
+      <div class="vk-item-actions">
+        {% if u.deleted %}
+          <form method="post" action="/admin/vaktkoder/gjenopprett" class="inline">
+            <input type="hidden" name="code" value="{{ u.code }}">
+            <button class="btn secondary small" type="submit">Hent tilbake</button>
+          </form>
+        {% endif %}
+        <button class="btn small vk-new" type="button" data-code="{{ u.code }}">Definer {{ u.code }}</button>
+      </div>
+    </div>
   {% endfor %}
-</table></div>
-<button class="btn" type="submit">Bekreft kategoriene</button>
-</form>
+
+  {% for c in codes if c.deviation %}
+    <div class="vk-item warn">
+      <div class="vk-item-main">
+        <code class="vk-code">{{ c.code }}</code>
+        <div>
+          <strong>Avviker fra turnusen</strong> – appen: <strong>{{ c.start }}–{{ c.end }}</strong>,
+          turnusen: <strong>{{ c.legend[0] }}–{{ c.legend[1] }}</strong>.
+          <div class="muted small">Planen bruker appens tid til du velger.</div>
+        </div>
+      </div>
+      <div class="vk-item-actions">
+        <form method="post" action="/admin/vaktkoder/bruk-turnus" class="inline">
+          <input type="hidden" name="code" value="{{ c.code }}">
+          <button class="btn small" type="submit">Bruk turnusens tid</button>
+        </form>
+        <form method="post" action="/admin/vaktkoder/behold" class="inline">
+          <input type="hidden" name="code" value="{{ c.code }}">
+          <button class="btn secondary small" type="submit" title="Varsles igjen hvis turnusen endrer tiden">Behold appens tid</button>
+        </form>
+      </div>
+    </div>
+  {% endfor %}
+
+  {% for c in codes if not c.reviewed and not c.deviation %}
+    <div class="vk-item info">
+      <div class="vk-item-main">
+        <code class="vk-code">{{ c.code }}</code>
+        <div>
+          <strong>Ny fra turnusen</strong> – {{ c.start }}–{{ c.end }}, tatt i bruk som
+          {{ category_labels.get(c.category, c.category)|lower }}{% if c.utpost_code == "yes" %} (utpost){% endif %}.
+          <div class="muted small">Kategorien er foreslått ut fra starttiden og styrer rulleringstidspunktet.</div>
+        </div>
+      </div>
+      <div class="vk-item-actions">
+        <form method="post" action="/admin/vaktkoder/bekreft" class="inline">
+          <input type="hidden" name="code" value="{{ c.code }}">
+          <button class="btn small" type="submit">Bekreft</button>
+        </form>
+        <button class="btn secondary small vk-edit" type="button" data-code="{{ c.code }}">Endre</button>
+      </div>
+    </div>
+  {% endfor %}
+</section>
+{% elif has_turnus %}
+  <p class="vk-allgood"><span aria-hidden="true">✓</span> Alle koder i turnusen og ukeplanene er kjent, og tidene stemmer med turnusen.</p>
 {% endif %}
 
-<h2>Vaktkoder og rullering</h2>
-<div class="tablewrap"><table>
-  <tr><th>Kode</th><th>Tid</th><th>Kategori</th><th>Utpost</th><th>Merknad</th></tr>
-  {% for code in shift_codes %}
-    <tr><td>{{ code.code }}</td><td>{{ code.start }}–{{ code.end }}</td>
-        <td>{{ code.category }}</td>
-        <td>{% if code.utpost_code == "yes" %}ja{% endif %}</td>
-        <td class="muted">{{ code.comment }}</td></tr>
+{# ------------------------------------------------------------ the list #}
+<div class="vk-toolbar">
+  <div class="vk-filters" role="group" aria-label="Vis">
+    {% for key, label in [("alle", "Alle"), ("vanlig", "Fast tid"), ("egen_tid", "Tid per vakt"),
+                          ("ignoreres", "Ignoreres"), ("utpost", "Utpost")] %}
+      <button type="button" class="vk-filter {% if key == 'alle' %}active{% endif %}" data-filter="{{ key }}"
+              aria-pressed="{{ 'true' if key == 'alle' else 'false' }}">{{ label }} <span>{{ counts[key] }}</span></button>
+    {% endfor %}
+  </div>
+  <span class="uk-spacer"></span>
+  <a class="btn secondary small" href="/admin/vaktkoder.csv" download>Last ned som CSV</a>
+  <button class="btn small vk-new" type="button">+ Ny vaktkode</button>
+</div>
+
+<div class="tablewrap"><table class="vk-table">
+  <thead><tr><th style="width:5.5rem">Kode</th><th style="width:10.5rem">Type</th><th style="width:8rem">Tid</th>
+    <th>Kategori</th><th style="width:5.5rem" title="Vakter de neste fire ukene">I bruk</th>
+    <th>Merknad</th><th style="width:9.5rem"></th></tr></thead>
+  <tbody>
+  {% for c in codes %}
+    <tr class="vk-row kind-{{ c.kind }}{% if c.deviation %} deviation{% endif %}"
+        data-kind="{{ c.kind }}" data-utpost="{{ c.utpost_code }}"
+        data-code="{{ c.code }}" data-start="{{ c.start or '' }}" data-end="{{ c.end or '' }}"
+        data-category="{{ c.category or '' }}" data-comment="{{ c.comment or '' }}" data-used="{{ c.used }}">
+      <td><strong class="vk-codecell">{{ c.code }}</strong></td>
+      <td>
+        {% if c.kind == "ignoreres" %}<span class="badge vk-ignored" title="{{ kind_help.ignoreres }}">⊘ Ignoreres</span>
+        {% elif c.kind == "egen_tid" %}<span class="badge vk-pershift" title="{{ kind_help.egen_tid }}">Tid per vakt</span>
+        {% else %}<span class="muted">Fast tid</span>{% endif %}
+        {% if c.utpost_code == "yes" %}<span class="badge utpost" title="Dager med utpostkode holdes utenfor SF-planleggingen">utpost</span>{% endif %}
+      </td>
+      <td>
+        {% if c.kind == "vanlig" %}{{ c.start }}–{{ c.end }}
+          {% if c.deviation %}<div class="small vk-dev">turnus: {{ c.legend[0] }}–{{ c.legend[1] }}</div>{% endif %}
+        {% elif c.kind == "egen_tid" %}<a class="small" href="/import/ukjente">angis per vakt</a>
+        {% else %}<span class="muted">–</span>{% endif %}
+      </td>
+      <td>{% if c.kind == "vanlig" %}{{ category_labels.get(c.category, c.category) }}{% else %}<span class="muted">–</span>{% endif %}</td>
+      <td>{% if c.used %}{{ c.used }}{% else %}<span class="muted">0</span>{% endif %}</td>
+      <td class="small">
+        {{ c.comment or "" }}
+        <div class="muted">{{ c.source_label }}{% if c.edited and c.source != "manuell" %} · endret her{% endif %}
+          {% if not c.reviewed %} · <span class="badge draft">ikke bekreftet</span>{% endif %}</div>
+      </td>
+      <td class="vk-actions">
+        <button class="btn secondary small vk-edit" type="button" data-code="{{ c.code }}">Endre</button>
+        <form method="post" action="/admin/vaktkoder/fjern" class="inline vk-delete">
+          <input type="hidden" name="code" value="{{ c.code }}">
+          <button class="btn secondary small danger" type="submit">Fjern</button>
+        </form>
+      </td>
+    </tr>
   {% endfor %}
+  </tbody>
 </table></div>
+<p class="muted small">«I bruk» teller vakter de neste fire ukene. {% if manual_count %}{{ manual_count }} vakt{{ "er" if manual_count != 1 }} med
+tid angitt per vakt planlegges som «MAN». {% endif %}En kode som ender på <code>*</code> (betalt lunsj) regnes som samme vakt
+uten stjernen, og <code>M</code> (overtid) leses aldri som en vakt.
+{% if not_in_turnus %}Ikke beskrevet i nyeste turnus: {{ not_in_turnus|join(", ") }}.{% endif %}</p>
+
+{% if deleted %}
+<details class="vk-deleted">
+  <summary>Fjernede koder ({{ deleted|length }})</summary>
+  <p class="small muted">En fjernet kode læres ikke inn igjen fra turnusen. Står den i en turnus eller ukeplan,
+  vises den øverst som ukjent kode.</p>
+  <div class="tablewrap"><table>
+    {% for c in deleted %}
+      <tr><td style="width:5.5rem"><strong>{{ c.code }}</strong></td>
+          <td>{{ c.kind_label }}{% if c.kind == "vanlig" %} · {{ c.start }}–{{ c.end }}{% endif %}</td>
+          <td class="muted small">fjernet {{ c.deleted_at[:10] }}</td>
+          <td style="width:9rem"><form method="post" action="/admin/vaktkoder/gjenopprett" class="inline">
+            <input type="hidden" name="code" value="{{ c.code }}">
+            <button class="btn secondary small" type="submit">Hent tilbake</button></form></td></tr>
+    {% endfor %}
+  </table></div>
+</details>
+{% endif %}
+
+<h2>Rullering per vaktkategori</h2>
 <div class="tablewrap"><table>
   <tr><th>Vaktkategori</th><th>Rulleringstidspunkt</th><th>Merknad</th></tr>
   {% for rule in rotation_rules %}
-    <tr><td>{{ rule.category }}</td><td>{{ rule.rotation_time or "ingen" }}</td>
+    <tr><td>{{ category_labels.get(rule.category, rule.category) }}</td><td>{{ rule.rotation_time or "ingen" }}</td>
         <td class="muted">{{ rule.notes }}</td></tr>
   {% endfor %}
 </table></div>
+
+{# ------------------------------------------------------------ editor #}
+<dialog class="modal vk-dialog" id="vk-dialog" aria-labelledby="vk-dialog-h">
+  <form method="post" action="/admin/vaktkoder/lagre" id="vk-form">
+    <h2 id="vk-dialog-h">Ny vaktkode</h2>
+    <input type="hidden" name="existing" id="vk-existing">
+    <label class="vk-field"><span>Kode</span>
+      <input type="text" name="code" id="vk-code" required maxlength="6" autocomplete="off"
+             pattern="[A-Za-zÆØÅæøå0-9]{1,6}" title="Bokstaver og tall, maks 6 tegn" class="vk-codeinput"></label>
+
+    <fieldset class="vk-kinds">
+      <legend>Hva slags kode?</legend>
+      {% for key, label in kinds.items() %}
+        <label class="vk-kind">
+          <input type="radio" name="kind" value="{{ key }}" {% if key == "vanlig" %}checked{% endif %}>
+          <span><strong>{{ label }}</strong><br><span class="muted small">{{ kind_help[key] }}</span></span>
+        </label>
+      {% endfor %}
+    </fieldset>
+
+    <div id="vk-timed">
+      <div class="vk-times">
+        <label class="vk-field"><span>Start</span>
+          <input type="text" name="start" id="vk-start" class="clock" inputmode="numeric" placeholder="07:00" autocomplete="off"></label>
+        <span class="vk-dash">–</span>
+        <label class="vk-field"><span>Slutt</span>
+          <input type="text" name="end" id="vk-end" class="clock" inputmode="numeric" placeholder="15:00" autocomplete="off"></label>
+        <span class="muted small" id="vk-length"></span>
+      </div>
+      <p class="muted small vk-tip">Skriv f.eks. <kbd>7</kbd>, <kbd>730</kbd> eller <kbd>15.30</kbd>. Pil opp/ned endrer med en halvtime.</p>
+      <label class="vk-field"><span>Kategori <span class="muted small">(styrer rulleringen)</span></span>
+        <select name="category" id="vk-category">
+          <option value="">Foreslå ut fra starttiden</option>
+          {% for category in categories %}<option value="{{ category }}">{{ category_labels[category] }}</option>{% endfor %}
+        </select></label>
+      <label class="vk-check"><input type="checkbox" name="utpost" id="vk-utpost" value="yes">
+        Utpostkode <span class="muted small">– dager med koden holdes utenfor SF-planleggingen</span></label>
+    </div>
+
+    <label class="vk-field"><span>Merknad</span>
+      <input type="text" name="comment" id="vk-comment" maxlength="300" placeholder="Valgfritt – f.eks. hvor koden kommer fra"></label>
+
+    <div class="vk-dialog-foot">
+      <button type="button" class="btn secondary" id="vk-cancel">Avbryt</button>
+      <button type="submit" class="btn">Lagre</button>
+    </div>
+  </form>
+</dialog>
+
+<script src="/static/clock.js?v={{ static_version }}"></script>
+<script>
+(function () {
+  var dialog = document.getElementById("vk-dialog"), form = document.getElementById("vk-form");
+  var f = function (id) { return document.getElementById(id); };
+  var timed = f("vk-timed");
+
+  function kind() { return form.querySelector("input[name=kind]:checked").value; }
+  function syncKind() {
+    timed.hidden = kind() !== "vanlig";
+    f("vk-start").required = f("vk-end").required = kind() === "vanlig";
+  }
+  function length() {
+    var out = f("vk-length"), s = Clock.parse(f("vk-start").value), e = Clock.parse(f("vk-end").value);
+    if (s === null || e === null) { out.textContent = ""; return; }
+    out.textContent = Clock.describe(s, e);
+  }
+  form.querySelectorAll("input[name=kind]").forEach(function (r) { r.addEventListener("change", syncKind); });
+  [f("vk-start"), f("vk-end")].forEach(function (input) {
+    Clock.attach(input);
+    input.addEventListener("input", length);
+    input.addEventListener("change", length);
+  });
+
+  function open(values, isNew) {
+    f("vk-dialog-h").textContent = isNew ? "Ny vaktkode" : "Endre " + values.code;
+    f("vk-existing").value = isNew ? "" : "1";
+    f("vk-code").value = values.code || "";
+    f("vk-code").readOnly = !isNew;
+    form.querySelector("input[name=kind][value=" + (values.kind || "vanlig") + "]").checked = true;
+    f("vk-start").value = values.start || "";
+    f("vk-end").value = values.end || "";
+    f("vk-category").value = values.category || "";
+    f("vk-utpost").checked = values.utpost === "yes";
+    f("vk-comment").value = values.comment || "";
+    syncKind(); length();
+    dialog.showModal();
+    (isNew && !values.code ? f("vk-code") : (kind() === "vanlig" ? f("vk-start") : f("vk-comment"))).focus();
+  }
+  document.querySelectorAll(".vk-new").forEach(function (b) {
+    b.addEventListener("click", function () {
+      open({code: b.dataset.code || "", kind: "vanlig",
+            utpost: (b.dataset.code || "").toUpperCase().charAt(0) === "U" ? "yes" : "no"}, true);
+    });
+  });
+  document.querySelectorAll(".vk-edit").forEach(function (b) {
+    b.addEventListener("click", function () {
+      var row = document.querySelector(".vk-row[data-code='" + b.dataset.code + "']");
+      open(row.dataset, false);
+    });
+  });
+  f("vk-cancel").addEventListener("click", function () { dialog.close(); });
+
+  document.querySelectorAll(".vk-delete").forEach(function (del) {
+    del.addEventListener("submit", function (e) {
+      var row = del.closest(".vk-row"), used = +row.dataset.used, code = row.dataset.code;
+      var text = "Fjerne vaktkoden " + code + "?";
+      if (used) text += "\n\nDen står på " + used + " vakt" + (used === 1 ? "" : "er") +
+        " de neste fire ukene. De blir da «ukjent kode» og holdes utenfor planen.";
+      text += "\n\nKoden kan hentes tilbake senere.";
+      if (!confirm(text)) e.preventDefault();
+    });
+  });
+
+  // Filter chips.
+  var chips = document.querySelectorAll(".vk-filter");
+  chips.forEach(function (chip) {
+    chip.addEventListener("click", function () {
+      chips.forEach(function (c) { c.classList.toggle("active", c === chip); c.setAttribute("aria-pressed", c === chip); });
+      var key = chip.dataset.filter;
+      document.querySelectorAll(".vk-row").forEach(function (row) {
+        row.hidden = !(key === "alle" || row.dataset.kind === key ||
+                       (key === "utpost" && row.dataset.utpost === "yes" && row.dataset.kind === "vanlig"));
+      });
+    });
+  });
+})();
+</script>
 
 {{ log_panel(log, "Logg – vaktkoder") }}
 {% endblock %}

@@ -1,11 +1,12 @@
 {% extends "base.html" %}
-{% block title %}Ukjente vaktkoder – SF-Planlegger{% endblock %}
+{% block title %}Vakter uten fast tid – SF-Planlegger{% endblock %}
 {% block content %}
 <p><a href="/import">&larr; Datagrunnlag</a></p>
-<h1>Ukjente vaktkoder</h1>
-<p class="intro">Vakter med en kode appen ikke kjenner – typisk innleide vikarer med <code>DX</code> eller
-<code>AX</code>. Appen kan ikke vite når de jobber, så vakten holdes utenfor planen til du angir
-tiden. Hurtigvalgene fyller inn vanlige tider; ingenting lagres før du trykker «Lagre».</p>
+<h1>Vakter uten fast tid</h1>
+<p class="intro">Koder uten fast tid – typisk <code>DX</code> og <code>AX</code> fra vikarenheten. Appen kan ikke
+vite når vakten er, så den holdes utenfor planen til du angir tiden. Skriv tiden (<kbd>8</kbd>, <kbd>830</kbd>,
+<kbd>15.30</kbd> …) eller dra over tidslinjen; pil opp/ned endrer med en halvtime. Ingenting lagres før du
+trykker «Lagre». Hvilke koder dette gjelder, styres under <a href="/admin/vaktkoder">Administrasjon → Vaktkoder</a>.</p>
 
 {% if melding %}<p class="note">{{ melding }}</p>{% endif %}
 
@@ -13,7 +14,7 @@ tiden. Hurtigvalgene fyller inn vanlige tider; ingenting lagres før du trykker 
   {% if open %}
     <span class="uk-big">{{ open }}</span> vakt{{ "er" if open != 1 }} mangler tid
   {% else %}
-    <span class="uk-done">✓</span> Alle vakter med ukjent kode har fått tid.
+    <span class="uk-done">✓</span> Alle vakter uten fast tid har fått tid.
   {% endif %}
   <span class="muted small">
     {% if show_past %}<a href="/import/ukjente">Skjul tidligere</a>
@@ -60,17 +61,19 @@ tiden. Hurtigvalgene fyller inn vanlige tider; ingenting lagres før du trykker 
 
         <div class="uk-time">
           <div class="uk-inputs">
-            <input type="time" name="start_{{ i }}" value="{{ item.start }}" aria-label="Start {{ item.weekday }}" class="uk-start">
+            <label class="sr-only" for="start-{{ p.employee_id }}-{{ i }}">Start {{ item.weekday }}</label>
+            <input type="text" id="start-{{ p.employee_id }}-{{ i }}" name="start_{{ i }}" value="{{ item.start }}"
+                   class="clock uk-start" inputmode="numeric" autocomplete="off" placeholder="fra">
             <span>–</span>
-            <input type="time" name="end_{{ i }}" value="{{ item.end }}" aria-label="Slutt {{ item.weekday }}" class="uk-end">
+            <label class="sr-only" for="end-{{ p.employee_id }}-{{ i }}">Slutt {{ item.weekday }}</label>
+            <input type="text" id="end-{{ p.employee_id }}-{{ i }}" name="end_{{ i }}" value="{{ item.end }}"
+                   class="clock uk-end" inputmode="numeric" autocomplete="off" placeholder="til">
             <span class="uk-hint muted small" data-day="{{ item.date.strftime('%d.%m') }}"
                   data-prev="{{ item.previous_day.strftime('%d.%m') }}"></span>
           </div>
-          <div class="uk-chips">
-            {% for s in item.suggestions %}
-              <button type="button" class="uk-chip" data-start="{{ s.start }}" data-end="{{ s.end }}"
-                      title="Fyll inn som {{ s.code }}">{{ s.code }} <span>{{ s.start }}–{{ s.end }}</span></button>
-            {% endfor %}
+          <div class="uk-ruler" aria-hidden="true" title="Dra for å velge tid">
+            <div class="uk-track">{% for h in range(48) %}<span data-slot="{{ h }}"{% if h % 2 == 0 %} class="hour"{% endif %}></span>{% endfor %}</div>
+            <div class="uk-ticks">{% for h in range(0, 25, 3) %}<span style="left: {{ h / 24 * 100 }}%">{{ "%02d"|format(h) }}</span>{% endfor %}</div>
           </div>
         </div>
 
@@ -88,60 +91,82 @@ tiden. Hurtigvalgene fyller inn vanlige tider; ingenting lagres før du trykker 
     {% endfor %}
 
     <footer class="uk-foot">
-      {% set open_codes = p["items"]|rejectattr("done")|map(attribute="raw")|list %}
-      {% if open_codes|length > open_codes|unique|list|length %}<button type="button" class="btn secondary small uk-same">Samme tid på åpne dager med samme kode</button>{% endif %}
       <span class="uk-spacer"></span>
       <button class="btn" type="submit">Lagre for {{ p.display }}</button>
     </footer>
     <input type="hidden" name="back" value="/import/ukjente{{ '?tidligere=1' if show_past }}">
   </form>
 {% else %}
-  <p class="muted">Ingen vakter med ukjent kode{% if not show_past %} fra i dag og fremover{% endif %}.</p>
+  <p class="muted">Ingen vakter uten fast tid{% if not show_past %} fra i dag og fremover{% endif %}.</p>
 {% endfor %}
 
 <p class="muted small">Går en vakt over midnatt (f.eks. 22:00–07:00), regnes den – som i turnussystemet –
 som natten som <em>slutter</em> den viste datoen. Endres cellen i en nyere ukeplan, faller den angitte tiden
 bort og vakten dukker opp her igjen. Alt som lagres, logges.</p>
 
+<script src="/static/clock.js?v={{ static_version }}"></script>
 <script>
 (function () {
-  function minutes(v) { var p = v.split(":"); return +p[0] * 60 + +p[1]; }
   function hint(row) {
-    var s = row.querySelector(".uk-start").value, e = row.querySelector(".uk-end").value;
+    var s = Clock.parse(row.querySelector(".uk-start").value), e = Clock.parse(row.querySelector(".uk-end").value);
     var out = row.querySelector(".uk-hint");
-    if (!s || !e) { out.textContent = ""; return; }
-    if (s === e) { out.textContent = "Start og slutt kan ikke være like."; return; }
-    var d = minutes(e) - minutes(s), night = d < 0;
-    if (night) d += 24 * 60;
-    var text = Math.floor(d / 60) + " t" + (d % 60 ? " " + (d % 60) + " min" : "");
-    if (night) text += " · natt " + out.dataset.prev + "–" + out.dataset.day;
+    paint(row, s, e);
+    if (s === null || e === null) { out.textContent = ""; return; }
+    var text = Clock.describe(s, e);
+    if (e < s) text = text.replace("over midnatt", "natt " + out.dataset.prev + "–" + out.dataset.day);
     out.textContent = text;
   }
-  document.querySelectorAll(".uk-row").forEach(function (row) {
-    row.querySelectorAll("input[type=time]").forEach(function (input) {
-      input.addEventListener("input", function () { hint(row); });
+  // The ruler shows the chosen time; a night wraps round to the morning.
+  function paint(row, s, e) {
+    row.querySelectorAll(".uk-track span").forEach(function (cell) {
+      var a = +cell.dataset.slot * 30, on = false;
+      if (s !== null && e !== null && s !== e) on = s < e ? (a >= s && a < e) : (a >= s || a < e);
+      cell.classList.toggle("on", on);
     });
-    row.querySelectorAll(".uk-chip").forEach(function (chip) {
-      chip.addEventListener("click", function () {
-        row.querySelector(".uk-start").value = chip.dataset.start;
-        row.querySelector(".uk-end").value = chip.dataset.end;
-        hint(row);
-      });
+  }
+  function previous(row, cls) {          // the nearest filled-in row above, in the same card
+    var rows = Array.prototype.slice.call(row.closest(".uk-card").querySelectorAll(".uk-row"));
+    for (var k = rows.indexOf(row) - 1; k >= 0; k--) {
+      var v = rows[k].querySelector(cls).value;
+      if (Clock.parse(v) !== null) return v;
+    }
+    return cls === ".uk-start" ? "07:00" : "15:00";
+  }
+  document.querySelectorAll(".uk-row").forEach(function (row) {
+    var start = row.querySelector(".uk-start"), end = row.querySelector(".uk-end");
+    Clock.attach(start, {halfHours: true, fallback: function () { return previous(row, ".uk-start"); }});
+    Clock.attach(end, {halfHours: true, fallback: function () {
+      var s = Clock.parse(start.value);
+      return s === null ? previous(row, ".uk-end") : Clock.format(s + 7 * 60);
+    }});
+    [start, end].forEach(function (input) {
+      input.addEventListener("input", function () { hint(row); });
+      input.addEventListener("change", function () { hint(row); });
+    });
+    // Drag across the ruler: whole half-hours, from the first slot to the end of the last.
+    var track = row.querySelector(".uk-track"), anchor = null;
+    function slotAt(x) {
+      var box = track.getBoundingClientRect();
+      return Math.max(0, Math.min(47, Math.floor((x - box.left) / box.width * 48)));
+    }
+    function setRange(a, b) {
+      var lo = Math.min(a, b), hi = Math.max(a, b);
+      start.value = Clock.format(lo * 30);
+      end.value = Clock.format((hi + 1) * 30);
+      start.setCustomValidity(""); end.setCustomValidity("");
+      hint(row);
+    }
+    track.addEventListener("pointerdown", function (e) {
+      anchor = slotAt(e.clientX);
+      track.setPointerCapture(e.pointerId);
+      setRange(anchor, anchor);
+      e.preventDefault();
+    });
+    track.addEventListener("pointermove", function (e) { if (anchor !== null) setRange(anchor, slotAt(e.clientX)); });
+    ["pointerup", "pointercancel"].forEach(function (type) {
+      track.addEventListener(type, function () { anchor = null; });
     });
     hint(row);
-  });
-  document.querySelectorAll(".uk-same").forEach(function (button) {
-    button.addEventListener("click", function () {
-      var card = button.closest(".uk-card");
-      var rows = Array.prototype.slice.call(card.querySelectorAll(".uk-row.open"));
-      var source = rows.find(function (r) { return r.querySelector(".uk-start").value && r.querySelector(".uk-end").value; });
-      if (!source) { alert("Fyll inn tiden på én av vaktene først."); return; }
-      rows.filter(function (r) { return r.dataset.raw === source.dataset.raw; }).forEach(function (r) {
-        r.querySelector(".uk-start").value = source.querySelector(".uk-start").value;
-        r.querySelector(".uk-end").value = source.querySelector(".uk-end").value;
-        hint(r);
-      });
-    });
   });
 })();
 </script>
