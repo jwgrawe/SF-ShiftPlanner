@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+{% block title %}Ukjente vaktkoder – SF-Planlegger{% endblock %}
+{% block content %}
+<p><a href="/import">&larr; Datagrunnlag</a></p>
+<h1>Ukjente vaktkoder</h1>
+<p class="intro">Vakter med en kode appen ikke kjenner – typisk innleide vikarer med <code>DX</code> eller
+<code>AX</code>. Appen kan ikke vite når de jobber, så vakten holdes utenfor planen til du angir
+tiden. Hurtigvalgene fyller inn vanlige tider; ingenting lagres før du trykker «Lagre».</p>
+
+{% if melding %}<p class="note">{{ melding }}</p>{% endif %}
+
+<div class="uk-summary">
+  {% if open %}
+    <span class="uk-big">{{ open }}</span> vakt{{ "er" if open != 1 }} mangler tid
+  {% else %}
+    <span class="uk-done">✓</span> Alle vakter med ukjent kode har fått tid.
+  {% endif %}
+  <span class="muted small">
+    {% if show_past %}<a href="/import/ukjente">Skjul tidligere</a>
+    {% else %}<a href="/import/ukjente?tidligere=1">Vis også de siste to ukene</a>{% endif %}
+  </span>
+</div>
+
+{% for p in people %}
+  <form method="post" action="/import/ukjente/lagre" class="uk-card {% if p.open %}has-open{% endif %}">
+    <input type="hidden" name="employee_id" value="{{ p.employee_id }}">
+    <header class="uk-head">
+      <div>
+        <strong class="uk-name">{{ p.display }}</strong>
+        {% if p.full_name and p.full_name != p.display %}<span class="muted small">{{ p.full_name }}</span>{% endif %}
+        {% if p.temp %}<span class="badge draft">vikar</span>{% endif %}
+        {% if p.title %}<span class="muted small">· {{ p.title }}</span>{% endif %}
+      </div>
+      <div class="uk-status">
+        {% if p.open %}<span class="badge alert">{{ p.open }} mangler tid</span>{% else %}<span class="badge published">alt har tid</span>{% endif %}
+      </div>
+    </header>
+
+    {% for item in p["items"] %}
+      {% set i = loop.index %}
+      <div class="uk-row {{ 'done' if item.done else 'open' }}" data-raw="{{ item.raw }}">
+        <input type="hidden" name="date_{{ i }}" value="{{ item.date }}">
+        <input type="hidden" name="raw_{{ i }}" value="{{ item.raw }}">
+        <input type="hidden" name="old_start_{{ i }}" value="{{ item.start }}">
+        <input type="hidden" name="old_end_{{ i }}" value="{{ item.end }}">
+
+        <div class="uk-day">
+          <strong>{{ item.weekday }} {{ item.date.strftime("%d.%m") }}</strong>
+          {% if item.relative %}<span class="muted small">{{ item.relative }}</span>{% endif %}
+          <div><code class="uk-code">{{ item.raw }}</code></div>
+        </div>
+
+        <div class="uk-week" aria-label="Uka til {{ p.display }}">
+          {% for d in item.week %}
+            <span class="uk-wd {{ d.kind }}{% if d.this %} this{% endif %}" title="{{ d.date.strftime('%d.%m') }}">
+              <span class="wd">{{ d.weekday }}</span><span class="lbl">{{ d.label or "–" }}</span>
+            </span>
+          {% endfor %}
+        </div>
+
+        <div class="uk-time">
+          <div class="uk-inputs">
+            <input type="time" name="start_{{ i }}" value="{{ item.start }}" aria-label="Start {{ item.weekday }}" class="uk-start">
+            <span>–</span>
+            <input type="time" name="end_{{ i }}" value="{{ item.end }}" aria-label="Slutt {{ item.weekday }}" class="uk-end">
+            <span class="uk-hint muted small" data-day="{{ item.date.strftime('%d.%m') }}"
+                  data-prev="{{ item.previous_day.strftime('%d.%m') }}"></span>
+          </div>
+          <div class="uk-chips">
+            {% for s in item.suggestions %}
+              <button type="button" class="uk-chip" data-start="{{ s.start }}" data-end="{{ s.end }}"
+                      title="Fyll inn som {{ s.code }}">{{ s.code }} <span>{{ s.start }}–{{ s.end }}</span></button>
+            {% endfor %}
+          </div>
+        </div>
+
+        <div class="uk-state">
+          {% if item.done %}
+            <span class="badge published">lagret</span>
+            <button class="btn secondary small" type="submit" formaction="/import/manuell-tid/slett"
+                    formnovalidate name="date" value="{{ item.date }}"
+                    onclick="return confirm('Fjerne tiden? Vakten holdes da utenfor planen igjen.');">Fjern</button>
+          {% else %}
+            <span class="badge alert">mangler tid</span>
+          {% endif %}
+        </div>
+      </div>
+    {% endfor %}
+
+    <footer class="uk-foot">
+      {% set open_codes = p["items"]|rejectattr("done")|map(attribute="raw")|list %}
+      {% if open_codes|length > open_codes|unique|list|length %}<button type="button" class="btn secondary small uk-same">Samme tid på åpne dager med samme kode</button>{% endif %}
+      <span class="uk-spacer"></span>
+      <button class="btn" type="submit">Lagre for {{ p.display }}</button>
+    </footer>
+    <input type="hidden" name="back" value="/import/ukjente{{ '?tidligere=1' if show_past }}">
+  </form>
+{% else %}
+  <p class="muted">Ingen vakter med ukjent kode{% if not show_past %} fra i dag og fremover{% endif %}.</p>
+{% endfor %}
+
+<p class="muted small">Går en vakt over midnatt (f.eks. 22:00–07:00), regnes den – som i turnussystemet –
+som natten som <em>slutter</em> den viste datoen. Endres cellen i en nyere ukeplan, faller den angitte tiden
+bort og vakten dukker opp her igjen. Alt som lagres, logges.</p>
+
+<script>
+(function () {
+  function minutes(v) { var p = v.split(":"); return +p[0] * 60 + +p[1]; }
+  function hint(row) {
+    var s = row.querySelector(".uk-start").value, e = row.querySelector(".uk-end").value;
+    var out = row.querySelector(".uk-hint");
+    if (!s || !e) { out.textContent = ""; return; }
+    if (s === e) { out.textContent = "Start og slutt kan ikke være like."; return; }
+    var d = minutes(e) - minutes(s), night = d < 0;
+    if (night) d += 24 * 60;
+    var text = Math.floor(d / 60) + " t" + (d % 60 ? " " + (d % 60) + " min" : "");
+    if (night) text += " · natt " + out.dataset.prev + "–" + out.dataset.day;
+    out.textContent = text;
+  }
+  document.querySelectorAll(".uk-row").forEach(function (row) {
+    row.querySelectorAll("input[type=time]").forEach(function (input) {
+      input.addEventListener("input", function () { hint(row); });
+    });
+    row.querySelectorAll(".uk-chip").forEach(function (chip) {
+      chip.addEventListener("click", function () {
+        row.querySelector(".uk-start").value = chip.dataset.start;
+        row.querySelector(".uk-end").value = chip.dataset.end;
+        hint(row);
+      });
+    });
+    hint(row);
+  });
+  document.querySelectorAll(".uk-same").forEach(function (button) {
+    button.addEventListener("click", function () {
+      var card = button.closest(".uk-card");
+      var rows = Array.prototype.slice.call(card.querySelectorAll(".uk-row.open"));
+      var source = rows.find(function (r) { return r.querySelector(".uk-start").value && r.querySelector(".uk-end").value; });
+      if (!source) { alert("Fyll inn tiden på én av vaktene først."); return; }
+      rows.filter(function (r) { return r.dataset.raw === source.dataset.raw; }).forEach(function (r) {
+        r.querySelector(".uk-start").value = source.querySelector(".uk-start").value;
+        r.querySelector(".uk-end").value = source.querySelector(".uk-end").value;
+        hint(r);
+      });
+    });
+  });
+})();
+</script>
+{% endblock %}

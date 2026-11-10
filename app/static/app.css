@@ -354,6 +354,62 @@ details.logpanel > summary { cursor: pointer; padding: 0.5rem 0; font-weight: 60
 details.logpanel[open] > summary { color: var(--ink); }
 .timeform { display: flex; gap: 0.3rem; align-items: center; flex-wrap: wrap; margin: 0; }
 
+/* ----------------------------------------------- unknown shift codes */
+.navbadge {
+  display: inline-block; min-width: 1.2rem; padding: 0 0.35rem; margin-left: 0.15rem;
+  border-radius: 999px; background: var(--alert-ink); color: #fff; font-size: 0.72rem;
+  font-weight: 700; text-align: center; line-height: 1.2rem; vertical-align: 1px;
+}
+.uk-summary { display: flex; gap: 0.8rem; align-items: baseline; flex-wrap: wrap; margin: 0.6rem 0 1rem; font-size: 1.05rem; }
+.uk-big { font-size: 1.6rem; font-weight: 700; color: var(--alert-ink); }
+.uk-done { font-size: 1.3rem; color: var(--ok-ink); font-weight: 700; }
+.uk-card {
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+  margin: 0 0 1rem; overflow: hidden;
+}
+.uk-card.has-open { border-left: 4px solid var(--alert-ink); }
+.uk-head {
+  display: flex; justify-content: space-between; align-items: center; gap: 0.6rem; flex-wrap: wrap;
+  padding: 0.65rem 1rem; background: var(--surface-2); border-bottom: 1px solid var(--line);
+}
+.uk-name { font-size: 1.05rem; margin-right: 0.3rem; }
+.uk-row {
+  display: grid; grid-template-columns: 9.5rem minmax(19rem, auto) 1fr 8rem; gap: 0.6rem 1rem;
+  align-items: center; padding: 0.7rem 1rem; border-bottom: 1px solid var(--line);
+}
+.uk-row.done { background: color-mix(in srgb, var(--ok-bg) 35%, var(--surface)); }
+.uk-day .small { display: block; }
+.uk-code { font-size: 0.95rem; font-weight: 700; color: var(--alert-ink); }
+.uk-row.done .uk-code { color: var(--ink-soft); }
+.uk-week { display: flex; gap: 0.2rem; }
+.uk-wd {
+  display: inline-flex; flex-direction: column; align-items: center; width: 2.9rem;
+  border: 1px solid var(--line); border-radius: 5px; padding: 0.1rem 0; font-size: 0.72rem;
+  background: var(--surface);
+}
+.uk-wd .wd { color: var(--ink-faint); font-size: 0.66rem; text-transform: uppercase; }
+.uk-wd .lbl { font-weight: 600; white-space: nowrap; overflow: hidden; max-width: 2.8rem; text-overflow: ellipsis; }
+.uk-wd.off .lbl { color: var(--ink-faint); font-weight: 400; }
+.uk-wd.pending { background: var(--alert-bg); border-color: var(--alert-line); color: var(--alert-ink); }
+.uk-wd.manual { background: var(--ok-bg); border-color: var(--ok-line); color: var(--ok-ink); }
+.uk-wd.this { outline: 2px solid var(--accent); outline-offset: 1px; }
+.uk-inputs { display: flex; gap: 0.35rem; align-items: center; flex-wrap: wrap; }
+.uk-hint { margin-left: 0.4rem; }
+.uk-chips { display: flex; gap: 0.3rem; flex-wrap: wrap; margin-top: 0.35rem; }
+.uk-chip {
+  font: inherit; font-size: 0.78rem; font-weight: 700; border: 1px solid var(--line);
+  border-radius: 999px; background: var(--surface-2); color: var(--ink); padding: 0.1rem 0.6rem; cursor: pointer;
+}
+.uk-chip span { font-weight: 400; color: var(--ink-soft); }
+.uk-chip:hover { border-color: var(--accent); background: var(--accent-soft); }
+.uk-state { display: flex; gap: 0.4rem; align-items: center; justify-content: flex-end; flex-wrap: wrap; }
+.uk-foot { display: flex; gap: 0.6rem; align-items: center; padding: 0.65rem 1rem; }
+.uk-spacer { flex: 1; }
+@media (max-width: 70rem) {
+  .uk-row { grid-template-columns: 1fr; }
+  .uk-state { justify-content: flex-start; }
+}
+
 /* ================================================================ DISPLAY */
 /* Wall screen: portrait, published plans only. Sizes are in `em` on a
    viewport-scaled root, so one layout serves a laptop preview and a

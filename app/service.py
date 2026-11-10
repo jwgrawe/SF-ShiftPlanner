@@ -800,3 +800,112 @@ def positions_model(conn: sqlite3.Connection) -> list[dict]:
         for row in conn.execute(
             "SELECT * FROM positions ORDER BY rule = 'uavklart' DESC, title")
     ]
+
+
+# --------------------------------------------------------------------------
+# Unknown shift codes (D95/D101): occurrences a manager gives times by hand
+
+def unknown_shift_count(conn: sqlite3.Connection, today: dt.date) -> int:
+    return conn.execute(
+        "SELECT COUNT(*) FROM roster_pending WHERE fixable = 1 AND date >= ?",
+        (today.isoformat(),)).fetchone()[0]
+
+
+def unknown_shifts_model(conn: sqlite3.Connection, today: dt.date, show_past: bool = False) -> dict:
+    """Every occurrence of an unknown code (e.g. DX/AX) from `first` on,
+    grouped per person, each with that person's week for context and
+    suggested times from the shift codes sharing the code's first letter."""
+    first = today - dt.timedelta(days=14) if show_past else today
+    names = {r["employee_id"]: r for r in conn.execute(
+        "SELECT employee_id, display_name, full_name, is_temp FROM employees")}
+    people: dict[str, dict] = {}
+
+    def person(eid: str) -> dict:
+        if eid not in people:
+            row = names.get(eid)
+            title = conn.execute(
+                "SELECT title FROM roster WHERE employee_id = ? AND title IS NOT NULL "
+                "ORDER BY date DESC LIMIT 1", (eid,)).fetchone()
+            people[eid] = {
+                "employee_id": eid,
+                "display": row["display_name"] if row else eid,
+                "full_name": (row["full_name"] if row else None) or "",
+                "temp": bool(row["is_temp"]) if row else False,
+                "title": title[0] if title else "",
+                "items": [],
+            }
+        return people[eid]
+
+    for r in conn.execute(
+            "SELECT * FROM roster_pending WHERE fixable = 1 AND date >= ? ORDER BY date",
+            (first.isoformat(),)):
+        person(r["employee_id"])["items"].append(
+            {"date": dt.date.fromisoformat(r["date"]), "raw": r["raw"], "done": False,
+             "start": "", "end": "", "reason": r["reason"]})
+    for r in conn.execute(
+            "SELECT * FROM manual_shift_times WHERE export_date >= ? ORDER BY export_date",
+            (first.isoformat(),)):
+        person(r["employee_id"])["items"].append(
+            {"date": dt.date.fromisoformat(r["export_date"]), "raw": r["raw"], "done": True,
+             "start": r["start"], "end": r["end"], "reason": ""})
+
+    codes = [r for r in conn.execute(
+        "SELECT code, start, end, utpost_code FROM shift_codes WHERE code <> 'MAN' ORDER BY code")]
+
+    def suggestions(raw: str) -> list[dict]:
+        letter = raw[:1].upper()
+        picks = [c for c in codes if c["code"][:1].upper() == letter and c["code"] != raw
+                 and (c["utpost_code"] != "yes" or letter == "U")]
+        if not picks:
+            picks = [c for c in codes if c["code"] in ("D", "A", "N")]
+        seen, result = set(), []
+        for c in picks:
+            span = (c["start"], c["end"])
+            if span in seen:
+                continue
+            seen.add(span)
+            result.append({"code": c["code"], "start": c["start"], "end": c["end"]})
+        return result[:5]
+
+    def week_strip(eid: str, day: dt.date) -> list[dict]:
+        monday = day - dt.timedelta(days=day.weekday())
+        strip = []
+        for i in range(7):
+            d = monday + dt.timedelta(days=i)
+            shift = conn.execute(
+                """SELECT r.shift_code, COALESCE(r.start_override, s.start) AS start,
+                          COALESCE(r.end_override, s.end) AS end
+                   FROM roster r JOIN shift_codes s ON s.code = r.shift_code
+                   WHERE r.employee_id = ? AND r.date = ?""", (eid, d.isoformat())).fetchone()
+            pending = conn.execute(
+                "SELECT raw FROM roster_pending WHERE employee_id = ? AND date = ?",
+                (eid, d.isoformat())).fetchone()
+            if pending:
+                label, kind = pending[0], "pending"
+            elif shift:
+                def short(t: str) -> str:
+                    return t[:2] if t.endswith(":00") else t
+                label = (f"{short(shift['start'])}–{short(shift['end'])}" if shift["shift_code"] == "MAN"
+                         else shift["shift_code"])
+                kind = "manual" if shift["shift_code"] == "MAN" else "shift"
+            else:
+                label, kind = "", "off"
+            strip.append({"weekday": WEEKDAYS_SHORT_NB[i][:2], "date": d, "label": label,
+                          "kind": kind, "this": d == day})
+        return strip
+
+    for eid, p in people.items():
+        p["items"].sort(key=lambda item: item["date"])
+        for item in p["items"]:
+            item["weekday"] = WEEKDAYS_NB[item["date"].weekday()]
+            item["relative"] = ("i dag" if item["date"] == today else
+                                "i morgen" if item["date"] == today + dt.timedelta(days=1) else
+                                "passert" if item["date"] < today else "")
+            item["suggestions"] = suggestions(item["raw"])
+            item["week"] = week_strip(eid, item["date"])
+            item["previous_day"] = item["date"] - dt.timedelta(days=1)
+        p["open"] = sum(1 for item in p["items"] if not item["done"])
+    ordered = sorted(people.values(), key=lambda p: (p["open"] == 0, p["items"][0]["date"],
+                                                     p["display"]))
+    return {"people": ordered, "open": sum(p["open"] for p in ordered),
+            "done": sum(len(p["items"]) - p["open"] for p in ordered), "show_past": show_past}

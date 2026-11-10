@@ -71,45 +71,27 @@ står i den.</p>
   {% endfor %}
 </table></div>
 
-{% if pending or manual %}
-  <h2 id="ventende">Vakter som ikke kan planlegges ennå</h2>
-  <p class="small">Holdes utenfor planen til årsaken er ryddet – appen gjetter aldri. For koder appen
-  ikke kjenner (f.eks. vikarers <code>DX</code>) kan du angi tiden for akkurat denne vakten. Går vakten
-  over midnatt, regnes den – som i turnussystemet – som natten som <em>slutter</em> denne datoen.
-  Endres cellen i en nyere ukeplan, faller den angitte tiden bort og du blir spurt på nytt.</p>
-  {% if pending %}
+{% set fixable = pending|selectattr("fixable")|list %}
+{% set other = pending|rejectattr("fixable")|list %}
+{% if fixable or manual %}
+  <div class="card" id="ventende">
+    <strong>Ukjente vaktkoder</strong> –
+    {% if fixable %}<span class="badge alert">{{ fixable|length }} mangler tid</span>{% endif %}
+    {% if manual %}<span class="badge published">{{ manual|length }} har fått tid</span>{% endif %}
+    <a class="btn small" href="/import/ukjente">Åpne</a>
+    <span class="muted small">Vakter med koder appen ikke kjenner (f.eks. vikarers DX/AX) – angi tiden for hver.</span>
+  </div>
+{% endif %}
+{% if other %}
+  <h2>Vakter som må rettes i turnussystemet</h2>
+  <p class="small">Holdes utenfor planen til de er rettet i kilden – appen gjetter aldri.</p>
   <div class="tablewrap"><table>
-    <tr><th style="width:8rem">Dato</th><th style="width:12rem">Ansatt</th><th style="width:7rem">I filen</th><th>Årsak</th><th style="width:20rem">Angi tid</th></tr>
-    {% for row in pending %}
+    <tr><th style="width:8rem">Dato</th><th style="width:12rem">Ansatt</th><th style="width:7rem">I filen</th><th>Årsak</th></tr>
+    {% for row in other %}
       <tr><td>{{ row.date.strftime("%d.%m.%Y") }}</td><td>{{ row.display_name }}</td>
-          <td><code>{{ row.raw }}</code></td><td>{{ row.reason }}</td>
-          <td>{% if row.fixable %}
-            <form method="post" action="/import/manuell-tid" class="timeform">
-              <input type="hidden" name="employee_id" value="{{ row.employee_id }}">
-              <input type="hidden" name="date" value="{{ row.date }}">
-              <input type="hidden" name="raw" value="{{ row.raw }}">
-              <input type="time" name="start" required aria-label="Start"> –
-              <input type="time" name="end" required aria-label="Slutt">
-              <button class="btn small" type="submit">Lagre</button>
-            </form>
-          {% else %}<span class="muted small">må rettes i turnussystemet</span>{% endif %}</td></tr>
+          <td><code>{{ row.raw }}</code></td><td>{{ row.reason }}</td></tr>
     {% endfor %}
   </table></div>
-  {% endif %}
-  {% if manual %}
-    <h3>Angitte tider</h3>
-    <div class="tablewrap"><table>
-      <tr><th style="width:8rem">Dato</th><th style="width:12rem">Ansatt</th><th style="width:7rem">I filen</th><th>Tid</th><th style="width:8rem"></th></tr>
-      {% for row in manual %}
-        <tr><td>{{ row.date.strftime("%d.%m.%Y") }}</td><td>{{ row.display_name }}</td>
-            <td><code>{{ row.raw }}</code></td><td>{{ row.start }}–{{ row.end }}</td>
-            <td><form method="post" action="/import/manuell-tid/slett">
-              <input type="hidden" name="employee_id" value="{{ row.employee_id }}">
-              <input type="hidden" name="date" value="{{ row.date }}">
-              <button class="btn secondary small" type="submit">Fjern</button></form></td></tr>
-      {% endfor %}
-    </table></div>
-  {% endif %}
 {% endif %}
 
 <h2>Filer</h2>

@@ -576,7 +576,7 @@ class Rebuild:
                 grouped[(reason, fixable)].append(
                     f"{names.get(eid, eid)} {dt.date.fromisoformat(day):%d.%m}")
         for (reason, fixable), who in sorted(grouped.items()):
-            hint = " Angi tidene under Datagrunnlag." if fixable else ""
+            hint = " Angi tid under Datagrunnlag → Ukjente vaktkoder." if fixable else ""
             self.find("alert", "vakt",
                       f"Kan ikke planlegges – {reason}: {', '.join(who[:12])}"
                       f"{' …' if len(who) > 12 else ''}.{hint}")

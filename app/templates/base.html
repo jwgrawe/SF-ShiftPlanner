@@ -16,7 +16,8 @@
       <a href="/">I dag</a>
       <a href="/display">Tavle</a>
       <a href="/plan">Planlegging</a>
-      <a href="/import">Datagrunnlag</a>
+      {% set unknown = unknown_shift_count() %}
+      <a href="/import">Datagrunnlag{% if unknown %} <span class="navbadge" title="{{ unknown }} vakt(er) med ukjent kode mangler tid">{{ unknown }}</span>{% endif %}</a>
       <a href="/admin">Administrasjon</a>
     </nav>
     <span class="muted small" style="margin-left:auto">

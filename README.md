@@ -23,7 +23,9 @@ display.
   absences, set the day's «Diverse info», and open a person view.
 - **`/import`** «Datagrunnlag» — the real roster's sources: which turnus
   (Plan) and ukeplan (Ajourhold) each week rests on, what needs attention,
-  files read or refused, upload, and a log.
+  files read or refused, upload, and a log. Its sub-page «Ukjente vaktkoder»
+  is where managers give times to days with codes the app doesn't know
+  (temps' `DX`/`AX`), one card per person.
 - **`/admin`** — in tabs: *Innstillinger* (board palette, retention, the
   full log), *Stillinger* (job-title rules), *Kompetanse* (the competency
   matrix: edit in place, import from Excel with review and name linking,

@@ -9,6 +9,14 @@
   {% if now_day.manually_edited %}<span class="badge edited">manuelt endret</span>{% endif %}
 </h1>
 
+{% set unknown = unknown_shift_count() %}
+{% if unknown %}
+  <div class="note">
+    <strong>{{ unknown }} vakt{{ "er" if unknown != 1 }} med ukjent kode</strong> (f.eks. vikarers DX/AX)
+    mangler tid og holdes utenfor planen.
+    <a class="btn small" href="/import/ukjente">Angi tid</a>
+  </div>
+{% endif %}
 {% set source_issues = import_findings|selectattr("level", "in", ["alert", "warn"])|list %}
 {% if source_issues %}
   <div class="card">

@@ -45,6 +45,24 @@ TEMPLATES.env.globals["static_version"] = int(_CSS.stat().st_mtime) if _CSS.exis
 TEMPLATES.env.globals["is_demo"] = db.is_demo
 TEMPLATES.env.globals["kind_label"] = hr_import.kind_label
 
+
+def _unknown_shift_count() -> int:
+    """Open unknown-code days (D101), for the badge in the menu."""
+    if db.is_demo():
+        return 0
+    try:
+        conn = db.get_conn()
+        try:
+            db.init_schema(conn)
+            return service.unknown_shift_count(conn, domain.operational_day(local_now()))
+        finally:
+            conn.close()
+    except Exception:  # noqa: BLE001 - a badge must never break a page
+        return 0
+
+
+TEMPLATES.env.globals["unknown_shift_count"] = _unknown_shift_count
+
 app = FastAPI(title="SF-Planlegger", docs_url=None, redoc_url=None)
 app.mount(
     "/static", StaticFiles(directory=str(Path(__file__).parent / "static")), name="static"
@@ -767,11 +785,80 @@ async def import_manual_time_delete(request: Request):
         with conn:
             conn.execute("DELETE FROM manual_shift_times WHERE employee_id = ? AND export_date = ?",
                          (str(form["employee_id"]), str(form["date"])))
-            applog.log(conn, "import", f"Angitt tid fjernet ({form['employee_id']} {form['date']}).")
+            name = conn.execute("SELECT display_name FROM employees WHERE employee_id = ?",
+                                (str(form["employee_id"]),)).fetchone()
+            applog.log(conn, "import", f"Angitt tid fjernet for {name[0] if name else form['employee_id']} "
+                                       f"{form['date']} – vakten må få tid på nytt.")
         hr_import.rebuild(conn)
     finally:
         conn.close()
-    return back("/import#ventende", "Den angitte tiden er fjernet.")
+    return back(str(form.get("back", "/import/ukjente")), "Den angitte tiden er fjernet.")
+
+
+@app.get("/import/ukjente", response_class=HTMLResponse)
+def unknown_shifts_page(request: Request, tidligere: str | None = None):
+    """Days with a code the app doesn't know (temps' DX/AX): one card per
+    person, each day with the person's week for context (D101)."""
+    conn = get_conn(refresh=True)
+    try:
+        model = service.unknown_shifts_model(conn, domain.operational_day(local_now()),
+                                             show_past=bool(tidligere))
+    finally:
+        conn.close()
+    model["melding"] = request.query_params.get("melding")
+    return TEMPLATES.TemplateResponse(request, "unknown_shifts.html", model)
+
+
+@app.post("/import/ukjente/lagre")
+async def unknown_shifts_save(request: Request):
+    """Save the times entered on one person's card: only rows with both
+    times, and only those that changed."""
+    form = await request.form()
+    employee_id = str(form["employee_id"])
+    rows, problems = [], []
+    for key in [k for k in form.keys() if k.startswith("date_")]:
+        i = key.split("_", 1)[1]
+        start, end = str(form.get(f"start_{i}", "")).strip(), str(form.get(f"end_{i}", "")).strip()
+        if not start and not end:
+            continue
+        if (start, end) == (str(form.get(f"old_start_{i}", "")), str(form.get(f"old_end_{i}", ""))):
+            continue
+        day = str(form[key])
+        try:
+            domain.parse_time(start)
+            domain.parse_time(end)
+            valid = start != end
+        except ValueError:
+            valid = False
+        if not valid:
+            problems.append(day)
+            continue
+        rows.append((employee_id, day, str(form.get(f"raw_{i}", "")), start, end))
+    conn = get_conn()
+    try:
+        if rows:
+            name = conn.execute("SELECT display_name FROM employees WHERE employee_id = ?",
+                                (employee_id,)).fetchone()
+            label = name[0] if name else employee_id
+            with conn:
+                for eid, day, raw, start, end in rows:
+                    conn.execute(
+                        """INSERT OR REPLACE INTO manual_shift_times
+                           (employee_id, export_date, raw, start, end, entered_at)
+                           VALUES (?, ?, ?, ?, ?, ?)""",
+                        (eid, day, raw, start, end, local_now().isoformat(timespec="seconds")))
+                    applog.log(conn, "import", f"Tid angitt for {label} {day} («{raw}»): {start}–{end}.")
+            hr_import.rebuild(conn)
+    finally:
+        conn.close()
+    if problems:
+        message = (f"{len(rows)} lagret. Sjekk tidene for {', '.join(problems)} – start og slutt må "
+                   "fylles ut og være ulike.")
+    elif rows:
+        message = f"{len(rows)} vakt{'er' if len(rows) != 1 else ''} fikk tid og tas med i planleggingen."
+    else:
+        message = "Ingen endringer å lagre."
+    return back("/import/ukjente", message)
 
 
 @app.post("/import/sjekk")

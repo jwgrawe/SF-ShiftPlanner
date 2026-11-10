@@ -255,6 +255,20 @@ class ManualTimesTest(RealModeBase):
         hr_import.rebuild(self.conn, TODAY)
         self.assertEqual(self.pending(), {("2027-01-05", "DY"): 1})
 
+    def test_overview_groups_occurrences_per_person_with_week_and_suggestions(self):
+        from app import service
+        model = service.unknown_shifts_model(self.conn, TODAY)
+        self.assertEqual(model["open"], 1)
+        vera = model["people"][0]
+        self.assertEqual((vera["display"], vera["temp"], vera["open"]), ("Vera V.", True, 1))
+        item = vera["items"][0]
+        self.assertEqual((item["date"], item["raw"]), (D(2027, 1, 5), "DX"))
+        self.assertTrue(all(s["code"].startswith("D") for s in item["suggestions"]))
+        week = {d["date"]: (d["label"], d["kind"]) for d in item["week"]}
+        self.assertEqual(week[D(2027, 1, 4)], ("D", "shift"))
+        self.assertEqual(week[D(2027, 1, 5)], ("DX", "pending"))
+        self.assertEqual(service.unknown_shift_count(self.conn, TODAY), 1)
+
     def test_a_night_entered_by_hand_ends_on_the_shown_date(self):
         vera = self.conn.execute("SELECT employee_id FROM employees WHERE full_name = 'Vikar Vera'").fetchone()[0]
         with self.conn:
