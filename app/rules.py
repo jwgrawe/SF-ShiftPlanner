@@ -65,9 +65,11 @@ def overview(conn: sqlite3.Connection) -> dict:
                       "standard": swap["swap_id"] in seed_ids, "tokens": tokens})
     zones = list(conn.execute(
         """SELECT z.zone_id, z.name FROM zones z WHERE EXISTS (SELECT 1 FROM functions f
-           WHERE f.zone_id = z.zone_id AND f.active = 'yes') ORDER BY z.sort_order"""))
+           WHERE f.zone_id = z.zone_id AND f.active = 'yes' AND f.staffing_mode <> 'adhoc')
+           ORDER BY z.sort_order"""))
     functions = list(conn.execute(
-        "SELECT function_id, name, zone_id FROM functions WHERE active = 'yes' ORDER BY sort_order"))
+        "SELECT function_id, name, zone_id FROM functions WHERE active = 'yes' "
+        "AND staffing_mode <> 'adhoc' ORDER BY sort_order"))
     settings = []
     values = {r["key"]: r for r in conn.execute("SELECT * FROM planner_settings")}
     for key, (label, help_text, kind, low, high) in SETTINGS.items():
@@ -216,5 +218,7 @@ def reset(conn: sqlite3.Connection) -> str:
             if swap_id not in seed_ids:
                 conn.execute("DELETE FROM rotation_swaps WHERE swap_id = ?", (swap_id,))
         importer.seed_rules(conn)
+        from .contingency import reset as reset_contingency
+        reset_contingency(conn)
         applog.log(conn, "regler", "Alle planregler satt tilbake til standard.")
     return "Alle planregler er satt tilbake til standard."

@@ -10,6 +10,7 @@
   --z-ren:    #4877ab;
   --z-steril: #54876a;
   --z-utpost: #9c7a3d;
+  --z-adhoc:  #6b7a83;   /* «Ad hoc» (D115): neutral, not a zone colour */
 
   /* Neutrals and surfaces (light, slightly blue-grey) */
   --ground:    #f6f8f9;
@@ -507,7 +508,7 @@ body.display .nextchip.ren    { background: var(--z-ren); }
 body.display .nextchip.steril { background: var(--z-steril); }
 body.display .nextchip.utpost { background: var(--z-utpost); }
 body.display .nextchip.none { background: transparent; color: var(--d-chip-none); font-weight: 400; }
-body.display .adhoc {
+body.display .adhoc-tag {
   font-size: 0.72em; font-weight: 600; background: rgba(255,255,255,0.25);
   border-radius: 999px; padding: 0.12em 0.7em;
 }
@@ -650,3 +651,26 @@ input.clock:invalid { border-color: var(--alert-ink); background: var(--alert-bg
 .pr-setting p { margin: 0.35rem 0 0; }
 .pr-reset { display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap; margin: 0 0 1rem; }
 @media (max-width: 700px) { .pr-sides { grid-template-columns: 1fr; } }
+
+/* ------------------------------------------------ «Ad hoc» placement (D115) */
+.badge.adhoc { background: var(--z-adhoc); color: #fff; }
+.tl-bar.adhoc { background: var(--z-adhoc); }
+body.display .zone.adhoc > header { background: var(--z-adhoc); }
+body.display .nextchip.adhoc { background: var(--z-adhoc); }
+
+/* ---------------------------------------------------- Avvik og tiltak (D114) */
+.av-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(26rem, 1fr)); gap: 0.6rem 1rem; margin: 0 0 1rem; }
+.av-rule {
+  border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface);
+  padding: 0.55rem 0.9rem 0.7rem; margin: 0;
+}
+.av-rule.changed { border-left: 4px solid var(--info-ink); }
+.av-rule legend { font-weight: 600; padding: 0 0.3rem; font-size: 0.95rem; }
+.av-rule p { margin: 0.1rem 0 0.4rem; }
+.av-id { display: inline-block; min-width: 2.2rem; font-size: 0.78rem; color: var(--ink-soft); font-weight: 700; }
+.av-choice { display: block; margin: 0.25rem 0; font-size: 0.92rem; }
+.av-inline { font-size: 0.92rem; }
+.av-inline select { font: inherit; padding: 0.2rem 0.3rem; }
+details.av-fixed { margin: 0.4rem 0 1rem; }
+details.av-fixed > summary { cursor: pointer; color: var(--ink-soft); font-weight: 600; }
+@media (max-width: 700px) { .av-list { grid-template-columns: 1fr; } }

@@ -1,6 +1,12 @@
 # «Avvik og tiltak»: contingency rules as settings
 
-Plan, round 11 (2026-11-12). Nothing here is built yet. The aim: every
+**Built in round 13** (D114) under Planregler → Avvik og tiltak, with the owner's
+choices from the Q48 review: P5 → «Ad hoc» (D115), S2 → the ukeplan is the truth,
+S5 → flagged whenever found (red within the set days, yellow later), P3 → a
+notice when the weekly target gives way (P3N). P7 (level per function) is left
+for later. The inventory below is kept as the background.
+
+Plan, round 11 (2026-11-12). The aim: every
 «when X happens, the app does Y» that is a judgement call becomes a visible
 setting under Administrasjon → Planregler. The rules that guard safety or data
 integrity stay fixed, but are listed on the page too, so nothing is hidden.

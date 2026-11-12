@@ -50,8 +50,9 @@ From this the app keeps two counts per person:
    3. **Zone totals**: uren and steril are topped up to their head-count
       with Produksjon uren/steril, the same way.
    4. **Everyone left** goes to Arbeidsbord (weekdays).
-   5. Anyone still free who can't take Arbeidsbord helps in a zone they're
-      qualified for.
+   5. Anyone still free who can't take Arbeidsbord goes to **«Ad hoc»**
+      (finds their own place or asks a manager), unless chosen otherwise under
+      Avvik og tiltak (P5).
 4. Days are planned **in date order**, so each day sees the plans before it.
 
 ## 3. Choosing «the best of the rest»
@@ -66,7 +67,7 @@ question only matters between people tied on the first, and so on:
 | 3 | Their place in the **swap and continuity** (see below) | lower |
 | 4 | Would this put them **over the weekly target** (1 heavy day)? | no |
 | 5 | **Ledger**: heavy work → fewest weighted hours first; light work → most first | as said |
-| 6 | Employee number (only so the result is always the same) | lower |
+| 6 | A tie-breaker that changes every day but is reproducible (D116) | – |
 
 Place in the swap, question 3 (with uren ↔ Arbeidsbord):
 
@@ -98,6 +99,10 @@ for the heavy places that come later in the day.
   heavy week gets lighter places the following weeks, until the window has
   moved past it.
 
+Several of these behaviours are choices under Planregler → **Avvik og tiltak**
+(for example: rotate even when too few, never go past the cap, put the
+weekly target before rotation, plan weekends in full).
+
 ## 5. Limits worth knowing
 
 - **Greedy, not a global optimum**: it decides block by block and day by day,
@@ -107,6 +112,8 @@ for the heavy places that come later in the day.
 - **It counts the app's plans.** The ledger is empty at go-live and fills up
   over the first weeks. A swap on the floor that isn't edited into the plan
   isn't counted.
-- **Ties in the first days** are broken by employee number, until the ledger
-  separates people (a day or two).
+- **Ties** (e.g. at go-live, when everyone's count is 0) are broken by a value
+  that changes every day, so no employee number is favoured (D116).
 - Plans must be kept longer than the window. The app enforces this.
+- Fairness over the long run (part-time, scarce competencies, evening
+  patterns): see [fairness.md](fairness.md).

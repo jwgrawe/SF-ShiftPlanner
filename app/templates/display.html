@@ -21,11 +21,11 @@
   {% endif %}
 
   {% for zone in zones %}
-    {% if zone.functions or day_kind == "weekday" %}
+    {% if zone.functions or (day_kind == "weekday" and not zone.optional) %}
     <section class="zone {{ zone.zone_id }}">
       <header>
         {{ zone.name }}
-        {% if zone.adhoc_zone %}<span class="adhoc">fordeles ad hoc</span>{% endif %}
+        {% if zone.adhoc_zone %}<span class="adhoc-tag">fordeles ad hoc</span>{% endif %}
       </header>
       <div class="fngroup">
         {% for fn in zone.functions %}
@@ -50,7 +50,7 @@
 
   {% if adhoc_crew %}
     <section class="zone ren">
-      <header>På jobb i dag <span class="adhoc">fordeles ad hoc</span></header>
+      <header>På jobb i dag <span class="adhoc-tag">fordeles ad hoc</span></header>
       <div class="fngroup">
         <ul class="people">
           {% for person in adhoc_crew %}

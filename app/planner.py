@@ -32,10 +32,11 @@ zone remainders and swap rules all come from the data.
 from __future__ import annotations
 
 import datetime as dt
+import hashlib
 import sqlite3
 from collections import defaultdict
 
-from app import domain, exposure, service
+from app import contingency, domain, exposure, service
 
 def segment_hours(segment: domain.Segment) -> list[int]:
     hours, cursor = [], segment.start
@@ -122,6 +123,7 @@ def plan_structure(conn: sqlite3.Connection) -> dict:
                        for f in functions},
         "zone_fill": zone_fill,
         "remainder": remainder,
+        "adhoc": next((f["function_id"] for f in functions if f["staffing_mode"] == "adhoc"), None),
     }
 
 
@@ -142,6 +144,42 @@ def swap_maps(conn: sqlite3.Connection) -> tuple[dict, dict, set]:
     return leave_to, pulls, on_swap
 
 
+def plan_out_of_date(conn: sqlite3.Connection, date: dt.date) -> bool:
+    """Does the day's plan no longer match the roster? (someone placed who
+    isn't on duty or outside their hours, or someone on duty not placed)"""
+    shifts = day_shifts(conn, date)
+    placed: set[str] = set()
+    for row in conn.execute("SELECT employee_id, start, end FROM assignments WHERE plan_date = ?",
+                            (date.isoformat(),)):
+        shift = shifts.get(row["employee_id"])
+        if shift is None:
+            return True
+        s_start, s_end = (dt.datetime.combine(date, domain.parse_time(t)) for t in (shift["start"], shift["end"]))
+        if s_end <= s_start:
+            s_end += dt.timedelta(days=1)
+        a, b = (dt.datetime.combine(date, domain.parse_time(t)) for t in (row["start"], row["end"]))
+        if b <= a:
+            b += dt.timedelta(days=1)
+        if a < s_start or b > s_end:
+            return True
+        placed.add(row["employee_id"])
+    full = domain.day_kind(date) == "weekday" or contingency.value(conn, "P6") == "full"
+    return full and bool(set(shifts) - placed)
+
+
+def redo_changed_drafts(conn: sqlite3.Connection, today: dt.date, touched: set[str] = frozenset()) -> list[dt.date]:
+    """P8 «utkast»: remake unpublished plans from `today` on whose roster
+    changed. Locked rows are kept (suggest_day plans around them)."""
+    redone = []
+    for row in conn.execute("SELECT plan_date FROM plan_days WHERE status <> 'published' AND plan_date >= ? "
+                            "ORDER BY plan_date", (today.isoformat(),)).fetchall():
+        date = dt.date.fromisoformat(row["plan_date"])
+        if row["plan_date"] in touched or plan_out_of_date(conn, date):
+            suggest_day(conn, date)
+            redone.append(date)
+    return redone
+
+
 def suggest_day(conn: sqlite3.Connection, date: dt.date, source: str = "forslag") -> int:
     """(Re)generate the suggestion for one day. Locked assignments are kept
     and planned around; all other assignments for the day are replaced.
@@ -154,6 +192,13 @@ def suggest_day(conn: sqlite3.Connection, date: dt.date, source: str = "forslag"
     eligibility = service.eligible_functions(conn, date)
     rotations = service.rotation_times(conn)
     plan = plan_structure(conn)
+    choice = contingency.values(conn)          # «Avvik og tiltak» (D114)
+    plan_all = day_type == "weekday" or choice["P6"] == "full"
+
+    def tie(e: str) -> str:
+        """Last resort between equals: varies from day to day, so the same
+        employee numbers don't always win (D116), yet reproducible."""
+        return hashlib.sha1(f"{date_str}|{e}".encode()).hexdigest()
     leave_to, pulls, on_swap = swap_maps(conn)
     # A function whose people some swap draws elsewhere (Arbeidsbord → uren).
     pulls_from = {f: {g for g, sources in pulls.items() if f in sources and g not in leave_to.get(f, ())}
@@ -286,16 +331,32 @@ def suggest_day(conn: sqlite3.Connection, date: dt.date, source: str = "forslag"
             """Who first: the lead code, then never past the weekly cap unless
             nobody else can, the swap, the weekly target, the exposure balance."""
             over_cap, over_target, balance = exposure_key(e, function_id, segment)
+            if choice["P3"] == "maal":             # the weekly target before structure
+                return (roster.get(e) not in lead, over_cap, over_target, rank(e, function_id),
+                        balance, tie(e))
             return (roster.get(e) not in lead, over_cap, rank(e, function_id), over_target,
-                    balance, e)
+                    balance, tie(e))
+
+        def allowed(e: str, function_id: str) -> bool:
+            """Candidates the chosen contingency rules rule out entirely."""
+            if function_id not in eligibility.get(e, set()):
+                return False
+            if choice["P1"] == "roter" and rank(e, function_id) == 4:
+                return False                        # rotate anyway, leave it short
+            if choice["P2"] == "kort" and exposure_key(e, function_id, segment)[0]:
+                return False                        # never past the weekly cap
+            return True
 
         def keep(function_id: str, still_short) -> None:
             """Continuity: people already on `function_id` (outside the swap)
             keep it while it is short – unless that breaks the weekly cap."""
             for e in free_people(segment):
-                if continuing(e) == function_id and still_short() > 0 \
-                        and not exposure_key(e, function_id, segment)[0]:
-                    register(e, segment, function_id)
+                if continuing(e) != function_id or still_short() <= 0:
+                    continue
+                over_cap, over_target, _ = exposure_key(e, function_id, segment)
+                if over_cap or (over_target and choice["P3"] == "maal"):
+                    continue
+                register(e, segment, function_id)
 
         # 0) Whoever can't cross over stays where they were.
         for e in free_people(segment):
@@ -309,7 +370,7 @@ def suggest_day(conn: sqlite3.Connection, date: dt.date, source: str = "forslag"
             if needed <= 0:
                 continue
             lead = plan["lead_codes"].get(function_id, set())
-            candidates = [e for e in free_people(segment) if function_id in eligibility.get(e, set())]
+            candidates = [e for e in free_people(segment) if allowed(e, function_id)]
             candidates.sort(key=lambda e: order(e, function_id, segment, lead))
             for employee_id in candidates[:needed]:
                 register(employee_id, segment, function_id)
@@ -319,22 +380,25 @@ def suggest_day(conn: sqlite3.Connection, date: dt.date, source: str = "forslag"
             needed = zone_short(zone)
             if needed <= 0:
                 continue
-            candidates = [e for e in free_people(segment) if function_id in eligibility.get(e, set())]
+            candidates = [e for e in free_people(segment) if allowed(e, function_id)]
             candidates.sort(key=lambda e: order(e, function_id, segment, set()))
             for employee_id in candidates[:needed]:
                 register(employee_id, segment, function_id)
         # 3) Everyone left -> the department's remainder (Arbeidsbord, D13/D14).
-        #    Weekends self-manage (D21): only demand functions are planned there.
-        if day_type == "weekday" and plan["remainder"]:
+        #    Weekends self-manage unless chosen otherwise (D21, P6).
+        if plan_all and plan["remainder"]:
             for employee_id in free_people(segment):
                 if plan["remainder"] in eligibility.get(employee_id, set()):
                     register(employee_id, segment, plan["remainder"])
-        # 4) Anyone still free who can't take the remainder (e.g. no Arbeidsbord
-        #    competency) helps out in a zone they can work in, rather than idle.
-        if day_type == "weekday":
+        # 4) Anyone still free (e.g. no Arbeidsbord competency): «Ad hoc», a
+        #    zone they can work in, or nothing – as chosen (P5, D115).
+        if plan_all and choice["P5"] != "ingen":
             for employee_id in free_people(segment):
-                fill = next((f for f in plan["zone_fill"].values()
-                             if f in eligibility.get(employee_id, set())), None)
+                if choice["P5"] == "adhoc":
+                    fill = plan["adhoc"] if plan["adhoc"] in eligibility.get(employee_id, set()) else None
+                else:
+                    fill = next((f for f in plan["zone_fill"].values()
+                                 if f in eligibility.get(employee_id, set())), None)
                 if fill:
                     register(employee_id, segment, fill)
 

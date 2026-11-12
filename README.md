@@ -33,7 +33,8 @@ display.
   *Vaktkoder* (the app's shift-code list: add, change, ignore or remove
   codes; unknown codes and deviations from the turnus are flagged),
   *Planregler* (who swaps with whom at the rotation point, when each shift
-  category rotates, and the heavy-work numbers),
+  category rotates, the heavy-work numbers, and «Avvik og tiltak»: what the
+  app does when something doesn't fit),
   *Grunndata* (master data, preferences and fritak — only here).
 
 Two modes (D89): **`python run.py`** is the real planner — the roster comes
@@ -115,9 +116,11 @@ Tips for the hospital PC:
 |---|---|
 | [docs/assessment.md](docs/assessment.md) | Proposed architecture, eligibility model, rotation framework, planning engine, roadmap |
 | [docs/decisions.md](docs/decisions.md) | **Decision log** — everything settled, as referenceable D-numbers (superseded ones struck through) |
-| [docs/open-questions.md](docs/open-questions.md) | **Open questions** — stable Q-numbers; currently Q20, Q27, Q40, Q45, Q48–Q50 |
+| [docs/open-questions.md](docs/open-questions.md) | **Open questions** — stable Q-numbers; currently Q20, Q27, Q40, Q45, Q49, Q51, Q52 |
 | [docs/generic.md](docs/generic.md) | Can other departments use the app? What is already generic, what isn't, and a suggested order |
 | [docs/how-the-planner-works.md](docs/how-the-planner-works.md) | How a suggestion is made: heavy-work counting, the ledger, the weekly cap and target, the order of preference |
+| [docs/fairness.md](docs/fairness.md) | Is the heavy-work measure right, and how fair is the planner over time? Research, risks, recommendations |
+| [docs/access-and-board.md](docs/access-and-board.md) | Keeping admin screens off the public board on one PC: recommended setup |
 | [docs/contingency-rules.md](docs/contingency-rules.md) | Plan: every «when X, the app does Y» rule, which become settings and which stay fixed |
 | [docs/source-data-findings.md](docs/source-data-findings.md) | What the source workbooks contain, how they were restructured, and how each flag got resolved |
 

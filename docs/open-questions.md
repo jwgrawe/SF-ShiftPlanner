@@ -1,6 +1,6 @@
 # Open questions
 
-Current list as of 2026-11-12 (round 12: CSV format, storage, statistics). Q-numbers are stable across
+Current list as of 2026-11-12 (round 13: Avvik og tiltak built, fairness, board/admin separation). Q-numbers are stable across
 rounds — resolved ones are recorded in [decisions.md](decisions.md) and
 listed at the bottom. Where an *interim rule* is stated, work proceeds on
 that assumption; the question is whether it's right.
@@ -27,13 +27,16 @@ tilrettelegging can be health information). Proposal: an admin-only editor under
 Administrasjon (per person: fritak from heavy work or from given functions, from/to
 dates, note), stored only in the database and logged.
 
-**Q50 🟡 Statistics page.** Which figures matter most (heavy days over the cap/target,
-heavy-hour spread, shortfall hours per function, «Rullerer ikke», DX/AX use), who may
-see per-person figures, and how long anonymous weekly totals should be kept?
+**Q51 🟡 Balance heavy work per hour worked?** Today the planner balances the absolute
+belastningstimer of the last 28 days, which makes part-timers look less loaded, so they
+get more than their share of heavy work. Recommendation: balance the share
+(belastningstimer ÷ hours worked); keep the weekly cap in absolute days. Also: rename the
+measure «belastningstimer» in the app. See [fairness.md](fairness.md).
 
-**Q48 🟡 Contingency rules.** Review the inventory in
-[contingency-rules.md](contingency-rules.md): is any of today's behaviour wrong for you,
-and which situations from the floor are missing?
+**Q52 🔴 Board and admin on one PC.** Recommended: the board in its own kiosk window on the
+big screen that can only ever show the board, PIN for everything else with auto-lock,
+plus a few habits. Decide: one shared admin PIN or one per manager, and the auto-lock
+time. See [access-and-board.md](access-and-board.md).
 
 ## Resolved (all rounds)
 
@@ -55,6 +58,8 @@ Q41 (titles: hold out until classified, once → D87).
 Round 7: Q42 (surname first; the first word is the full surname, hyphens included —
 as implemented), Q43 (`DX`: manual times per occurrence → D95), Q44 (temps get a
 manager-defined standard set; new staff are assessed → D97).
+Round 13: Q48 (contingency rules reviewed; choices built → D114/D115), Q50 (statistics:
+admin-only, serious findings and short-staffing first, anonymous totals three years → D117).
 Round 11: Q46 (Kontrollsone rotation, if app-managed, is with another function – most
 likely Arbeidsbord: the ready «Kontrollsone ↔ Arbeidsbord» rule, switched on under
 Planregler when decided; no split needed), Q47 (other departments export from the same

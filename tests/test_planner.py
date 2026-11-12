@@ -149,7 +149,7 @@ class ExposureTest(Base):
         # Heavy in the data: Produksjon uren/steril from 07, Kontrollsone from 12
         # (counted to the end of the shift, since it continues).
         heavy = {e for e, f in morning.items() if f in HEAVY}
-        self.assertGreaterEqual(len(heavy), 3)
+        self.assertGreaterEqual(len(heavy), 2)
         self.assertFalse(heavy & recent, morning)
 
     def test_the_window_length_is_the_setting(self):
@@ -159,7 +159,7 @@ class ExposureTest(Base):
             self.conn.execute("UPDATE planner_settings SET value = 60 WHERE key = 'intensity_ledger_window_days'")
         planner.suggest_day(self.conn, DAY)
         heavy = {e for e, f in self.at("07:00").items() if f in HEAVY}
-        self.assertGreaterEqual(len(heavy), 3)
+        self.assertGreaterEqual(len(heavy), 2)
         # P14 can't take Arbeidsbord, so works in uren whatever his history.
         self.assertFalse(heavy & {f"P{i:02d}" for i in range(9, 17) if i != 14})
 
@@ -194,6 +194,90 @@ class ExposureTest(Base):
         planner.suggest_day(self.conn, DAY)
         self.assertEqual(len(self.kontrollsone_after_rotation()), 2)
         self.assertTrue([f for f in checks.day_checks(self.conn, DAY) if f["kind"] == "heavy_cap"])
+
+
+class ContingencyTest(Base):
+    """«Avvik og tiltak» (D114): each choice changes what the planner does."""
+
+    def set(self, **values):
+        from app import contingency
+        from starlette.datastructures import FormData
+        contingency.save(self.conn, FormData(list(values.items())))
+
+    def at(self, start):
+        return {r["employee_id"]: r["function_id"] for r in self.conn.execute(
+            "SELECT * FROM assignments WHERE plan_date = ? AND start = ?", (DAY.isoformat(), start))}
+
+    def test_p5_someone_who_fits_nowhere_goes_ad_hoc_by_default(self):
+        planner.suggest_day(self.conn, DAY)
+        self.assertEqual(self.at("07:00")["P14"], "adhoc")           # no Arbeidsbord competency
+        self.set(P5="sone")
+        planner.suggest_day(self.conn, DAY)
+        self.assertTrue(self.at("07:00")["P14"].startswith(("uren_", "steril_")))
+        self.set(P5="ingen")
+        planner.suggest_day(self.conn, DAY)
+        self.assertNotIn("P14", self.at("07:00"))
+        self.assertTrue([f for f in checks.day_checks(self.conn, DAY) if f["kind"] == "unplanned"])
+
+    def test_p1_rotate_anyway_leaves_uren_short(self):
+        # Only three people besides the fixed places: uren needs more after 11.
+        with self.conn:
+            self.conn.execute("DELETE FROM roster WHERE employee_id IN "
+                              "('P10','P11','P12','P13','P15','P16')")
+        planner.suggest_day(self.conn, DAY)
+        stayed = [f for f in checks.day_checks(self.conn, DAY) if f["kind"] == "no_rotation"]
+        self.set(P1="roter")
+        planner.suggest_day(self.conn, DAY)
+        morning, after = self.at("07:00"), self.at("11:00")
+        uren_before = {e for e, f in morning.items() if f.startswith("uren_") and e != "P14"}
+        self.assertTrue(stayed)
+        self.assertFalse({e for e in uren_before if after.get(e, "").startswith("uren_")})
+        self.assertTrue([f for f in checks.day_checks(self.conn, DAY)
+                         if f["kind"] == "shortfall" and "Uren" in f["text"]])
+
+    def test_p2_never_past_the_cap_leaves_the_function_short(self):
+        for i in range(1, 17):
+            for offset in (-1, 1, 2):
+                day = DAY + dt.timedelta(days=offset)
+                with self.conn:
+                    self.conn.execute("INSERT OR IGNORE INTO plan_days (plan_date, status) VALUES (?, 'published')",
+                                      (day.isoformat(),))
+                    self.conn.execute("INSERT INTO assignments (plan_date, employee_id, function_id, start, end, "
+                                      "locked, source) VALUES (?, ?, 'ren_kontrollsone', '12:00', '15:00', 0, 'x')",
+                                      (day.isoformat(), f"P{i:02d}"))
+        self.set(P2="kort")
+        planner.suggest_day(self.conn, DAY)
+        self.assertNotIn("ren_kontrollsone", self.at("11:00").values())
+        kinds = {f["kind"] for f in checks.day_checks(self.conn, DAY)}
+        self.assertIn("shortfall", kinds)
+        self.assertNotIn("heavy_cap", kinds)
+
+    def test_p6_full_plans_the_weekend_like_a_weekday(self):
+        saturday = dt.date(2026, 11, 21)
+        with self.conn:
+            self.conn.execute("INSERT INTO plan_days (plan_date, status) VALUES (?, 'draft')", (saturday.isoformat(),))
+            for i in range(1, 6):
+                self.conn.execute("INSERT INTO roster (date, employee_id, shift_code) VALUES (?, ?, 'H1')",
+                                  (saturday.isoformat(), f"P{i:02d}"))
+        planner.suggest_day(self.conn, saturday)
+        count = lambda: self.conn.execute("SELECT COUNT(DISTINCT employee_id) FROM assignments WHERE plan_date = ?",
+                                          (saturday.isoformat(),)).fetchone()[0]
+        self.assertEqual(count(), 1)                               # DK/ansvarsvakt only
+        self.set(P6="full")
+        planner.suggest_day(self.conn, saturday)
+        self.assertEqual(count(), 5)
+
+    def test_levels_switch_notices_off_and_bad_values_are_refused(self):
+        from app import contingency
+        planner.suggest_day(self.conn, DAY)
+        self.assertTrue([f for f in checks.day_checks(self.conn, DAY) if f["kind"] == "draft"])
+        self.set(N1="av")
+        self.assertFalse([f for f in checks.day_checks(self.conn, DAY) if f["kind"] == "draft"])
+        with self.assertRaises(contingency.Invalid):
+            self.set(S4="3")
+        with self.assertRaises(contingency.Invalid):
+            self.set(P1="noe")
+        self.assertTrue(any("Avvik og tiltak – N1" in r[0] for r in self.conn.execute("SELECT text FROM import_log")))
 
 
 class RulesPageTest(Base):

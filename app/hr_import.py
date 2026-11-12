@@ -38,7 +38,7 @@ import time
 from collections import defaultdict
 from pathlib import Path
 
-from app import applog, competency, db, domain, hr_export, planner
+from app import applog, competency, contingency, db, domain, hr_export, planner
 from app.hr_export import Rejected, norm
 
 INBOX = db.DATA_DIR / "import"
@@ -300,6 +300,14 @@ class Rebuild:
     def __init__(self, conn: sqlite3.Connection, today: dt.date):
         self.conn, self.today = conn, today
         self.findings: list[tuple[str, str, str, str | None]] = []
+        self.choice = contingency.values(conn)      # «Avvik og tiltak» (D114)
+        self.touched: set[str] = set()                 # plan days changed by the rebuild
+
+    def find_at(self, rule_id: str, kind: str, text: str, date: dt.date | None = None) -> None:
+        """A finding whose level is chosen under Avvik og tiltak (or off)."""
+        level = contingency.LEVEL_TO_FINDING[self.choice[rule_id]]
+        if level:
+            self.find(level, kind, text, date)
 
     def find(self, level: str, kind: str, text: str, date: dt.date | None = None) -> None:
         self.findings.append((level, kind, text, date.isoformat() if date else None))
@@ -380,7 +388,7 @@ class Rebuild:
                           "Rader med dette navnet uten PersonID kan ikke knyttes sikkert og holdes "
                           "utenfor planen.")
             else:
-                self.find("info", "identitet",
+                self.find_at("N3", "identitet",
                           f"To ansatte heter «{name}» (PersonID {', '.join(sorted(pids))}) – de "
                           "skilles på PersonID; på tavlen står PersonID bak navnet.")
         # Temps: in an ukeplan but in no active turnus — the turnus holds every
@@ -497,13 +505,33 @@ class Rebuild:
         for monday, listed in listed_weeks.items():
             days = {(dt.date.fromisoformat(monday) + dt.timedelta(days=i)).isoformat()
                     for i in range(7)}
-            missing = sorted({names.get(eid, eid) for (eid, day), (_, source, _) in effective.items()
-                              if source == "plan" and day in days and eid not in listed})
-            if missing:
-                week = dt.date.fromisoformat(monday).isocalendar().week
+            in_turnus = {eid for (eid, day), (_, source, _) in effective.items()
+                         if source == "plan" and day in days}
+            absent_ids = in_turnus - listed
+            missing = sorted(names.get(eid, eid) for eid in absent_ids)
+            if not missing:
+                continue
+            week = dt.date.fromisoformat(monday).isocalendar().week
+            if self.choice["S2"] == "turnus":
                 self.find("warn", "ukeplan",
                           f"Uke {week}: {', '.join(missing)} har vakter i turnusen, men står ikke "
                           "i ukeplanen – turnusen brukes for dem. Sjekk at ukeplanen er komplett.")
+                continue
+            # The ukeplan is the truth for the week (S2): not in it = not working.
+            for key in [k for k, (_, source, _) in effective.items()
+                        if source == "plan" and k[1] in days and k[0] in absent_ids]:
+                effective.pop(key)
+                conflicts.discard(key)
+            if len(absent_ids) > len(in_turnus) / 2:
+                self.find("alert", "ukeplan",
+                          f"Uke {week}: ukeplanen ser ufullstendig ut – {len(absent_ids)} av "
+                          f"{len(in_turnus)} med turnusvakter står ikke i den og regnes som ikke på "
+                          "jobb. Eksporter ukeplanen på nytt, eller velg «Bruk turnusen» under "
+                          "Planregler → Avvik og tiltak.")
+            else:
+                self.find("info", "ukeplan",
+                          f"Uke {week}: {', '.join(missing)} står i turnusen, men ikke i ukeplanen – "
+                          "regnet som ikke på jobb den uken.")
         for name, count in sorted(unmatched.items()):
             self.find("alert", "identitet",
                       f"{count} turnusvakter for «{name}» kan ikke knyttes til én person og "
@@ -575,7 +603,8 @@ class Rebuild:
                 hold = "tvetydig"
             elif title:
                 rule = rules.get(title, "uavklart")
-                hold = rule if rule in ("aldri", "uavklart") else None
+                held_rules = ("aldri", "uavklart") if self.choice["S1"] == "hold" else ("aldri",)
+                hold = rule if rule in held_rules else None
             elif source == "ajourhold":
                 not_in_plan.add(eid)
             if (eid, date.isoformat()) in placed:
@@ -593,26 +622,31 @@ class Rebuild:
             "VALUES (?, ?, ?, ?, ?, ?)", pending)
 
         horizon = (self.today + dt.timedelta(days=LOOKAHEAD_DAYS)).isoformat()
-        grouped: dict[tuple[str, int], list[str]] = defaultdict(list)
+        # Flagged as soon as found, however far ahead (S5): red for the next
+        # days, yellow for later ones.
+        red_until = (self.today + dt.timedelta(days=int(self.choice["S5"]))).isoformat()
+        grouped: dict[tuple[bool, str, int], list[str]] = defaultdict(list)
         for day, eid, raw, reason, _, fixable in pending:
-            if self.today.isoformat() <= day <= horizon:
-                grouped[(reason, fixable)].append(
+            if day >= self.today.isoformat():
+                grouped[(day > red_until, reason, fixable)].append(
                     f"{names.get(eid, eid)} {dt.date.fromisoformat(day):%d.%m}")
-        for (reason, fixable), who in sorted(grouped.items()):
+        for (later, reason, fixable), who in sorted(grouped.items()):
             hint = " Angi tid under Datagrunnlag → Vakter uten fast tid." if fixable else ""
-            self.find("alert", "vakt",
-                      f"Kan ikke planlegges – {reason}: {', '.join(who[:12])}"
-                      f"{' …' if len(who) > 12 else ''}.{hint}")
+            self.find("warn" if later else "alert", "vakt",
+                      f"Kan ikke planlegges{' (lenger frem)' if later else ''} – {reason}: "
+                      f"{', '.join(who[:12])}{' …' if len(who) > 12 else ''}.{hint}")
         held = defaultdict(int)
         for r in conn.execute("SELECT title, COUNT(*) AS n FROM roster WHERE hold = 'uavklart' "
                               "AND date BETWEEN ? AND ? GROUP BY title",
                               (self.today.isoformat(), horizon)):
             held[r["title"]] = r["n"]
         for title in sorted(t for t, rule in rules.items() if rule == "uavklart"):
+            consequence = (f"{held.get(title, 0)} vakter de neste fire ukene holdes utenfor planen "
+                           "til da." if self.choice["S1"] == "hold" else
+                           "Vaktene planlegges som «vanlig» i mellomtiden (Avvik og tiltak, S1).")
             self.find("alert", "stilling",
                       f"Stillingen «{title}» er ny og må klassifiseres under Administrasjon → "
-                      f"Stillinger. {held.get(title, 0)} vakter de neste fire ukene holdes utenfor "
-                      "planen til da.")
+                      f"Stillinger. {consequence}")
         if not_in_plan:
             self.find("info", "ukeplan",
                       f"Vikarer (i ukeplanen, ikke i turnusen): "
@@ -636,7 +670,7 @@ class Rebuild:
                 "INSERT INTO employee_competencies (employee_id, competency_id, status, source) "
                 "VALUES (?, ?, ?, 'standard')", [(eid, r[0], r[1]) for r in standard])
         for row in conn.execute("SELECT filename FROM competency_imports WHERE status = 'venter'"):
-            self.find("warn", "kompetanse",
+            self.find_at("S7", "kompetanse",
                       f"Kompetansefilen {row['filename']} venter på gjennomgang under "
                       "Administrasjon → Kompetanse – ingenting er endret ennå.")
         horizon = (self.today + dt.timedelta(days=14)).isoformat()
@@ -648,11 +682,11 @@ class Rebuild:
         if not on_duty:
             return
         if any(temp for _, temp in on_duty.values()) and not standard:
-            self.find("warn", "kompetanse",
+            self.find_at("S7", "kompetanse",
                       "Standardkompetansen for vikarer er ikke satt – vikarer kan ikke plasseres "
                       "automatisk. Sett den nederst under Administrasjon → Kompetanse.")
         if not conn.execute("SELECT COUNT(*) FROM competency_rows").fetchone()[0]:
-            self.find("warn", "kompetanse",
+            self.find_at("S7", "kompetanse",
                       "Ingen kompetanse er registrert ennå – ingen kan plasseres automatisk. "
                       "Importer kompetansefilen eller fyll ut under Administrasjon → Kompetanse.")
             return
@@ -661,7 +695,7 @@ class Rebuild:
         lacking = sorted(name for eid, (name, temp) in on_duty.items()
                          if eid not in with_comp and not temp)
         if lacking:
-            self.find("warn", "kompetanse",
+            self.find_at("S7", "kompetanse",
                       f"Ingen kompetanse registrert for {', '.join(lacking)} – kan ikke plasseres "
                       "automatisk. Fyll ut under Administrasjon → Kompetanse.")
 
@@ -681,6 +715,7 @@ class Rebuild:
                 continue
             conn.executemany("DELETE FROM assignments WHERE plan_date = ? AND employee_id = ?",
                              [(row["plan_date"], eid) for eid in gone])
+            self.touched.add(row["plan_date"])
             log(conn, f"Plan {date:%d.%m.%Y}: {', '.join(names.get(e, e) for e in gone)} tatt ut – "
                       "ikke lenger på vakt ifølge nyeste turnus/ukeplan.", "plan")
 
@@ -694,7 +729,7 @@ class Rebuild:
         else:
             gaps = []
             day = today
-            while day <= today + dt.timedelta(days=LOOKAHEAD_DAYS - 1):
+            while day <= today + dt.timedelta(days=int(self.choice["S4"]) - 1):
                 if not any(f["first_date"] <= day.isoformat() <= f["last_date"] for f in plans):
                     gaps.append(day)
                 day += dt.timedelta(days=1)
@@ -705,7 +740,7 @@ class Rebuild:
                           "en ny turnus.", gaps[0])
             if len(plans) > 1 and plans[1]["person_count"]:
                 change = abs(plans[0]["person_count"] - plans[1]["person_count"]) / plans[1]["person_count"]
-                if change > HEADCOUNT_CHANGE_WARN:
+                if change > int(self.choice["S6"]) / 100:
                     self.find("warn", "fil",
                               f"Nyeste turnus har {plans[0]['person_count']} personrader, forrige "
                               f"hadde {plans[1]['person_count']} – sjekk at eksporten er komplett.")
@@ -825,6 +860,13 @@ def rebuild(conn: sqlite3.Connection, today: dt.date | None = None) -> None:
             sorted(work.findings, key=lambda f: order[f[0]]))
         conn.execute("INSERT INTO app_settings (key, value) VALUES ('roster_built_at', ?) "
                      "ON CONFLICT(key) DO UPDATE SET value = excluded.value", (_now(),))
+    # P8 «utkast»: unpublished plans that no longer match the roster are remade;
+    # published ones keep their warning («lag forslag på nytt»).
+    if work.choice["P8"] == "utkast":
+        redone = planner.redo_changed_drafts(conn, today, work.touched)
+        if redone:
+            log(conn, "Utkast laget på nytt etter endret vaktliste: "
+                      + ", ".join(f"{d:%d.%m}" for d in redone) + ".", "plan")
 
 
 def purge(conn: sqlite3.Connection, today: dt.date | None = None) -> int:

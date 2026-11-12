@@ -11,7 +11,7 @@ import datetime as dt
 import sqlite3
 from collections import defaultdict
 
-from app import domain, exposure, planner, service
+from app import contingency, domain, exposure, planner, service
 
 
 def rotation_misses(conn: sqlite3.Connection, plan_date: dt.date) -> list[dict]:
@@ -139,7 +139,8 @@ def day_checks(conn: sqlite3.Connection, plan_date: dt.date) -> list[dict]:
         findings.append({"level": "warn", "kind": "no_plan", "date": plan_date,
                          "text": "Ingen plan er laget for dagen."})
         return findings
-    if plan is not None and plan["status"] != "published":
+    choice = contingency.values(conn)
+    if plan is not None and plan["status"] != "published" and choice["N1"] != "av":
         findings.append({"level": "info", "kind": "draft", "date": plan_date,
                          "text": "Planen er et utkast – den vises ikke på tavlen før den publiseres."})
 
@@ -218,18 +219,38 @@ def day_checks(conn: sqlite3.Connection, plan_date: dt.date) -> list[dict]:
                          "text": f"Vakttiden er endret etter at planen ble laget for "
                                  f"{', '.join(sorted(moved))} – lag forslag på nytt."})
 
-    # Rostered but unplanned (weekdays; weekends are ad hoc by design, D21).
-    if day_type == "weekday":
-        assigned = {row["employee_id"] for row in conn.execute(
-            "SELECT DISTINCT employee_id FROM assignments WHERE plan_date = ?", (date_str,))}
-        idle = sorted(
-            row["display_name"] for row in conn.execute(
-                "SELECT employee_id, display_name FROM employees")
-            if row["employee_id"] in roster and row["employee_id"] not in assigned
-        )
-        if idle:
-            findings.append({"level": "info", "kind": "unplanned", "date": plan_date,
-                             "text": f"På vakt uten plassering: {', '.join(idle)}."})
+    # On duty without a placement for some or all of the shift (weekdays, or
+    # weekends when they are planned in full – D21, P6).
+    if day_type == "weekday" or choice["P6"] == "full":
+        covered: dict[str, list[tuple[dt.datetime, dt.datetime]]] = {}
+        for row in conn.execute("SELECT employee_id, start, end FROM assignments WHERE plan_date = ?",
+                                (date_str,)):
+            a = dt.datetime.combine(plan_date, domain.parse_time(row["start"]))
+            b = dt.datetime.combine(plan_date, domain.parse_time(row["end"]))
+            covered.setdefault(row["employee_id"], []).append((a, b if b > a else b + dt.timedelta(days=1)))
+        idle = []
+        names_by_id = {r["employee_id"]: r["display_name"] for r in conn.execute(
+            "SELECT employee_id, display_name FROM employees")}
+        for e, shift in shifts.items():
+            s_start = dt.datetime.combine(plan_date, domain.parse_time(shift["start"]))
+            s_end = dt.datetime.combine(plan_date, domain.parse_time(shift["end"]))
+            if s_end <= s_start:
+                s_end += dt.timedelta(days=1)
+            gaps, cursor = [], s_start
+            for a, b in sorted(covered.get(e, [])):
+                if a > cursor:
+                    gaps.append((cursor, a))
+                cursor = max(cursor, b)
+            if cursor < s_end:
+                gaps.append((cursor, s_end))
+            if gaps and e in names_by_id:
+                when = "" if gaps == [(s_start, s_end)] else " (" + ", ".join(
+                    f"{a:%H:%M}–{b:%H:%M}" for a, b in gaps) + ")"
+                idle.append(names_by_id[e] + when)
+        level = contingency.finding_level(conn, "N2", choice)
+        if idle and level:
+            findings.append({"level": level, "kind": "unplanned", "date": plan_date,
+                             "text": f"På vakt uten plassering: {', '.join(sorted(idle))}."})
 
     # Weekly heavy-exposure cap (D51).
     settings = _settings(conn)
@@ -246,8 +267,21 @@ def day_checks(conn: sqlite3.Connection, plan_date: dt.date) -> list[dict]:
         findings.append({"level": "warn", "kind": "heavy_cap", "date": plan_date,
                          "text": f"{name} har {count} økter med tungt arbeid denne uken "
                                  f"(grensen er {cap})."})
+    # Over the weekly target – the soft rule gave way to rotation or a fixed
+    # place (P3); shown so the managers see it (P3N).
+    target = int(settings.get("heavy_occurrence_target_per_week", 1))
+    above = sorted(f"{row['display_name']} ({counts[row['employee_id']]})"
+                   for row in conn.execute("SELECT employee_id, display_name FROM employees")
+                   if row["employee_id"] in roster and target < counts.get(row["employee_id"], 0) <= cap)
+    level = contingency.finding_level(conn, "P3N", choice)
+    if above and level:
+        findings.append({"level": level, "kind": "heavy_target", "date": plan_date,
+                         "text": f"Over ukemålet på {target} tung{'e' if target != 1 else ''} dag"
+                                 f"{'er' if target != 1 else ''}: {', '.join(above)}."})
 
-    findings.extend(rotation_misses(conn, plan_date))
+    level = contingency.finding_level(conn, "P4", choice)
+    if level:
+        findings.extend({**f, "level": level} for f in rotation_misses(conn, plan_date))
 
     order = {"alert": 0, "warn": 1, "info": 2}
     findings.sort(key=lambda f: order[f["level"]])

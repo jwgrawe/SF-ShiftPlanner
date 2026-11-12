@@ -10,7 +10,7 @@
     <tr>
       <td><span class="badge {{ fn.zone_id }}">{{ fn.zone_name }}</span></td>
       <td>{{ fn.name }}</td>
-      <td>{{ {"remainder": "Resterende", "demand": "Påkrevd", "adhoc_zone": "Ad hoc"}[fn.staffing_mode] }}</td>
+      <td>{{ {"remainder": "Resterende", "demand": "Påkrevd", "adhoc_zone": "Ad hoc i sonen", "adhoc": "Ad hoc (alle)"}[fn.staffing_mode] }}</td>
       <td>{% if fn.active == "yes" %}ja{% else %}<span class="badge soft">parkert</span>{% endif %}</td>
       <td class="muted">{{ fn.notes }}</td>
     </tr>

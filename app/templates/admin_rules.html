@@ -133,10 +133,57 @@ alt er planlagt, endres ikke før du lager forslag på nytt.</p>
   </table></div>
 </section>
 
+{# ------------------------------------------------------------ contingency #}
+<section id="avvik" class="pr-section">
+  <h2>Avvik og tiltak</h2>
+  <p class="small">Hva appen gjør når noe ikke passer. Standardvalgene er de dere valgte i gjennomgangen (Q48);
+  et endret valg er merket «endret her». Reglene nederst er faste – de beskytter mot feil og vises bare så
+  ingenting er skjult.</p>
+  <form method="post" action="/admin/regler/avvik">
+    {% for group in avvik.groups %}
+      <h3>{{ group.label }}</h3>
+      <div class="av-list">
+      {% for item in group["items"] %}
+        {% set r = item.rule %}
+        <fieldset class="av-rule {% if item.changed %}changed{% endif %}">
+          <legend><span class="av-id">{{ r.id }}</span> {{ r.title }}
+            {% if item.changed %}<span class="badge edited">endret her</span>{% endif %}</legend>
+          {% if r.help %}<p class="muted small">{{ r.help }}</p>{% endif %}
+          {% if r.kind == "choice" %}
+            {% for key, label in item.choices %}
+              <label class="av-choice"><input type="radio" name="{{ r.id }}" value="{{ key }}"
+                {% if item.value == key %}checked{% endif %}> {{ label }}
+                {% if key == r.default %}<span class="muted small">(standard)</span>{% endif %}</label>
+            {% endfor %}
+          {% elif r.kind == "level" %}
+            <label class="av-inline">Vises som
+              <select name="{{ r.id }}">
+                {% for key, label in item.choices %}<option value="{{ key }}" {% if item.value == key %}selected{% endif %}>{{ label }}{% if key == r.default %} (standard){% endif %}</option>{% endfor %}
+              </select></label>
+          {% else %}
+            <label class="av-inline"><input type="number" name="{{ r.id }}" value="{{ item.value }}" min="{{ r.low }}"
+              max="{{ r.high }}" required style="width:5.5rem"> {{ r.unit }}
+              <span class="muted small">(standard {{ r.default }})</span></label>
+          {% endif %}
+        </fieldset>
+      {% endfor %}
+      </div>
+    {% endfor %}
+    <button class="btn" type="submit">Lagre avvik og tiltak</button>
+  </form>
+  <details class="av-fixed">
+    <summary>Faste regler ({{ avvik.fixed|length }}) – kan ikke endres</summary>
+    <div class="tablewrap"><table>
+      <tr><th style="width:40%">Når</th><th>Gjør appen alltid</th></tr>
+      {% for when, what in avvik.fixed %}<tr><td>{{ when }}</td><td>{{ what }}</td></tr>{% endfor %}
+    </table></div>
+  </details>
+</section>
+
 <form method="post" action="/admin/regler/standard" class="pr-reset"
       onsubmit="return confirm('Sette alle planregler tilbake til standard? Egne bytteregler fjernes.');">
   <button class="btn secondary small" type="submit">Tilbake til standard</button>
-  <span class="muted small">Setter tidspunkt, bytteregler og tallene over tilbake til det som følger med appen.</span>
+  <span class="muted small">Setter tidspunkt, bytteregler, tallene og avvik og tiltak tilbake til det som følger med appen.</span>
 </form>
 
 <script src="/static/clock.js?v={{ static_version }}"></script>

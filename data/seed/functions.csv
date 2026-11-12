@@ -13,3 +13,4 @@ steril_gang_vognvask;steril;Gang/vognvaskere;Gang/vognvask;adhoc_zone;yes;11;;;"
 utpost_kir_pol;utpost;Kir. Pol.;Kir. Pol.;demand;no;12;;;"Utposter er utenfor planleggingsomfanget inntil videre (D39); modellen beholdes klar for reaktivering"
 utpost_gastrolab;utpost;Gastrolab.;Gastrolab.;demand;no;13;;;Utposter er utenfor planleggingsomfanget inntil videre (D39)
 utpost_kop_barn;utpost;KOP barn;KOP barn;demand;no;14;;;Utposter er utenfor planleggingsomfanget inntil videre (D39)
+adhoc;adhoc;Ad hoc – avklar med leder;Ad hoc;adhoc;yes;15;;;"Plassering uten fast funksjon; alle på vakt kan settes her. Brukes når ingen annen plass passer (P5, D115)"

@@ -72,7 +72,7 @@ def main() -> int:
     for row in functions:
         if row["zone_id"] not in zone_ids:
             errors.append(f"functions.csv: unknown zone_id {row['zone_id']!r}")
-        if row["staffing_mode"] not in {"demand", "remainder", "adhoc_zone"}:
+        if row["staffing_mode"] not in {"demand", "remainder", "adhoc_zone", "adhoc"}:
             errors.append(
                 f"functions.csv: {row['function_id']}: bad staffing_mode {row['staffing_mode']!r}"
             )
@@ -98,7 +98,8 @@ def main() -> int:
                 f"function_competencies.csv: {row['function_id']}: bad priority {row['priority']!r}"
             )
         covered_functions.add(row["function_id"])
-    for function_id in sorted(function_ids - covered_functions):
+    adhoc = {r["function_id"] for r in functions if r["staffing_mode"] == "adhoc"}   # anyone (D115)
+    for function_id in sorted(function_ids - covered_functions - adhoc):
         errors.append(f"function_competencies.csv: function {function_id} has no competency mapping")
 
     for row in intensity:

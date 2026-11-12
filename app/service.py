@@ -111,6 +111,8 @@ def eligible_functions(conn: sqlite3.Connection, on_date: dt.date) -> dict[str, 
             "SELECT employee_id, title FROM roster WHERE date = ? AND title IS NOT NULL", (date_str,))
     }
 
+    adhoc_functions = {r[0] for r in conn.execute(
+        "SELECT function_id FROM functions WHERE staffing_mode = 'adhoc' AND active = 'yes'")}
     result: dict[str, set[str]] = {}
     for employee_id in sf_employees:
         functions = {
@@ -121,6 +123,7 @@ def eligible_functions(conn: sqlite3.Connection, on_date: dt.date) -> dict[str, 
         functions -= blocked.get(employee_id, set())
         if preferences.get(employee_id):
             functions &= preferences[employee_id]
+        functions |= adhoc_functions          # «Ad hoc» needs no competency (D115)
         title = titles.get(employee_id)
         rule = rules.get(title) if title else None
         if rule in ("aldri", "uavklart"):
@@ -277,10 +280,14 @@ def build_display_model(conn: sqlite3.Connection, now: dt.datetime) -> dict:
             (zone["zone_id"],),
         ).fetchone()[0]
         if has_active_functions:
+            only_adhoc = not conn.execute(
+                "SELECT COUNT(*) FROM functions WHERE zone_id = ? AND active = 'yes' "
+                "AND staffing_mode <> 'adhoc'", (zone["zone_id"],)).fetchone()[0]
             zones.append({
                 "zone_id": zone["zone_id"], "name": zone["name"],
                 "functions": function_list,
                 "adhoc_zone": bool(function_list) and all(f["adhoc"] for f in function_list),
+                "optional": only_adhoc,          # «Ad hoc» (D115): shown only when used
             })
 
     # Weekend/holiday: the crew largely self-manages (D21) — show the rostered

@@ -25,7 +25,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from app import absences as absences_mod
-from app import applog, checks, competency, db, domain, exposure, hr_import, planner, rules, service, shift_codes
+from app import applog, checks, competency, contingency, db, domain, exposure, hr_import, planner, rules, service, shift_codes
 from app.hr_export import Rejected
 
 try:
@@ -691,6 +691,7 @@ def admin_rules(request: Request):
     conn = get_conn()
     try:
         model = rules.overview(conn)
+        model["avvik"] = contingency.overview(conn)
         model["log"] = applog.entries(conn, "regler")
         return admin_page(request, conn, "regler", "admin_rules.html", model)
     finally:
@@ -702,7 +703,7 @@ def _rules_action(action, anchor: str = "") -> RedirectResponse:
     try:
         try:
             message = action(conn)
-        except rules.Invalid as error:
+        except (rules.Invalid, contingency.Invalid) as error:
             return back(f"/admin/regler{anchor}", f"Ikke lagret: {error}")
     finally:
         conn.close()
@@ -733,6 +734,12 @@ async def admin_rules_rotation(request: Request):
 async def admin_rules_settings(request: Request):
     form = await request.form()
     return _rules_action(lambda conn: rules.save_settings(conn, form), "#tungt")
+
+
+@app.post("/admin/regler/avvik")
+async def admin_rules_contingency(request: Request):
+    form = await request.form()
+    return _rules_action(lambda conn: contingency.save(conn, form), "#avvik")
 
 
 @app.post("/admin/regler/standard")

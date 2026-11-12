@@ -176,6 +176,13 @@ class PipelineTest(unittest.TestCase):
         path.write_bytes(raw)
         os.utime(path, (0, 0))   # old enough: not "still being copied"
 
+    def use_turnus_for_unlisted(self):
+        """These tests are about other rules; the week-1 ukeplan only lists a
+        few people, so keep the turnus for the rest (S2 = «turnus»)."""
+        from app import contingency
+        with self.conn:
+            self.conn.execute("INSERT OR REPLACE INTO contingency_settings (rule_id, value) VALUES ('S2', 'turnus')")
+
     def load(self, ukeplan=True):
         self.drop(fx.plan_name(EXPORTED), fx.plan_csv(people(), START, 4, EXPORTED))
         if ukeplan:
@@ -227,7 +234,64 @@ class PipelineTest(unittest.TestCase):
             self.assertNotIn(day, kari)
         self.assertEqual(kari["2027-01-11"]["source"], "plan")        # next week: turnus
 
-    def test_people_not_in_the_ukeplan_keep_the_turnus_with_a_warning(self):
+    def test_people_not_in_the_ukeplan_are_off_that_week_by_default(self):
+        self.load()
+        siri = self.roster("Vik Siri")
+        self.assertNotIn("2027-01-04", siri)                          # week 1: the ukeplan rules
+        self.assertEqual(siri["2027-01-11"]["source"], "plan")        # week 2: no ukeplan yet
+        # 5 of the 7 with turnus shifts are missing: looks incomplete → alert.
+        self.assertTrue(any("ser ufullstendig ut" in f for f in self.findings()))
+
+    def test_unplannable_shifts_are_flagged_however_far_ahead(self):
+        self.use_turnus_for_unlisted()
+        with self.conn:      # red for 5 days only: Siri's X9 (06.01, two days ahead) stays red…
+            self.conn.execute("INSERT INTO contingency_settings (rule_id, value) VALUES ('S5', '1')")
+        self.load()
+        texts = {f[0]: f[1] for f in self.conn.execute("SELECT text, level FROM import_findings")}
+        later = [t for t in texts if "Kan ikke planlegges (lenger frem)" in t and "X9" in t]
+        self.assertTrue(later)                                       # …now beyond 1 day: yellow
+        self.assertEqual(texts[later[0]], "warn")
+
+    def redo_scenario(self, choice):
+        from app import planner
+        with self.conn:
+            self.conn.execute("INSERT INTO contingency_settings (rule_id, value) VALUES ('P8', ?)", (choice,))
+        self.load()
+        tue = MON + dt.timedelta(1)
+        planner.suggest_day(self.conn, tue)          # a draft: Kari on A (14–22) from the ukeplan
+        # A newer ukeplan moves Kari's Tuesday to D (07–15).
+        newer = dt.datetime(2027, 1, 4, 12, 0)
+        self.drop(fx.ukeplan_name(newer), fx.ukeplan_csv([
+            ("1001", "Hansen Kari", {MON: "D", tue: "D"}),
+            ("1002", "Olsen Tor", {tue: "N, M", MON + dt.timedelta(2): "N", MON + dt.timedelta(3): "DX"}),
+            ("1153", "Vikar Temp", {MON: "D"})], MON, newer))
+        hr_import.scan_inbox(self.conn, self.inbox)
+        hr_import.rebuild(self.conn, TODAY)
+        return [r["start"] for r in self.conn.execute(
+            """SELECT a.start FROM assignments a JOIN employees e USING (employee_id)
+               WHERE e.full_name = 'Hansen Kari' AND a.plan_date = ? ORDER BY a.start""", (tue.isoformat(),))]
+
+    def test_p8_unpublished_drafts_are_remade_when_chosen(self):
+        self.assertEqual(self.redo_scenario("utkast")[0], "07:00")
+        self.assertTrue(any("Utkast laget på nytt" in r[0] for r in self.conn.execute("SELECT text FROM import_log")))
+
+    def test_p8_by_default_the_plan_is_left_and_warned(self):
+        from app import checks
+        self.assertEqual(self.redo_scenario("varsle")[0], "14:00")   # left as it was …
+        self.assertTrue([f for f in checks.day_checks(self.conn, MON + dt.timedelta(1))
+                         if f["kind"] == "shift_changed" and "Kari" in f["text"]])   # … and warned
+
+    def test_new_titles_can_be_planned_meanwhile(self):
+        self.use_turnus_for_unlisted()
+        with self.conn:
+            self.conn.execute("INSERT INTO contingency_settings (rule_id, value) VALUES ('S1', 'planlegg')")
+        self.load()
+        self.assertIsNone(self.roster("Dahl Per")["2027-01-04"]["hold"])      # «Driftsleder» is new
+        self.assertTrue(any("«Driftsleder» er ny" in f and "planlegges som «vanlig»" in f
+                            for f in self.findings()))
+
+    def test_people_not_in_the_ukeplan_keep_the_turnus_when_chosen(self):
+        self.use_turnus_for_unlisted()
         self.load()
         self.assertEqual(self.roster("Vik Siri")["2027-01-04"]["source"], "plan")
         self.assertTrue(any("står ikke i ukeplanen" in f and "Siri V." in f
@@ -242,6 +306,7 @@ class PipelineTest(unittest.TestCase):
         self.assertIn("DX", self.pending("Olsen Tor")["2027-01-07"])
 
     def test_f3_asterisk_and_unknown_codes(self):
+        self.use_turnus_for_unlisted()
         self.load()
         siri = self.roster("Vik Siri")
         self.assertEqual((siri["2026-12-31"]["shift_code"], siri["2026-12-31"]["end_override"]),
@@ -297,6 +362,7 @@ class PipelineTest(unittest.TestCase):
         self.assertIsNone(self.conn.execute("SELECT 1 FROM shift_codes WHERE code = 'D3'").fetchone())
 
     def test_title_rules_hold_days_out_until_classified(self):
+        self.use_turnus_for_unlisted()
         self.load()
         self.assertEqual(self.roster("Berg Anne")["2027-01-04"]["hold"], "aldri")
         self.assertEqual(self.roster("Dahl Per")["2027-01-04"]["hold"], "uavklart")
@@ -308,6 +374,7 @@ class PipelineTest(unittest.TestCase):
         self.assertFalse(any("Driftsleder" in f for f in self.findings()))
 
     def test_two_rows_with_a_shift_the_same_day_are_held(self):
+        self.use_turnus_for_unlisted()
         self.load()
         self.assertNotIn("2027-01-04", self.roster("Nilsen Ola"))
         self.assertIn("D80", self.pending("Nilsen Ola")["2027-01-04"])

@@ -77,6 +77,9 @@ CREATE TABLE IF NOT EXISTS planner_settings (
     key TEXT PRIMARY KEY, value REAL NOT NULL, notes TEXT);
 -- Who swaps with whom at the rotation point (D107). A side is a list of
 -- function ids and/or «zone:<zone_id>», separated by «;».
+-- «Avvik og tiltak» (D114): only values changed from the default (app/contingency.py).
+CREATE TABLE IF NOT EXISTS contingency_settings (
+    rule_id TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT);
 CREATE TABLE IF NOT EXISTS rotation_swaps (
     swap_id TEXT PRIMARY KEY, name TEXT NOT NULL, side_a TEXT NOT NULL, side_b TEXT NOT NULL,
     active INTEGER NOT NULL DEFAULT 1, notes TEXT, edited INTEGER NOT NULL DEFAULT 0);
