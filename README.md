@@ -25,7 +25,9 @@ display.
   (Plan) and ukeplan (Ajourhold) each week rests on, what needs attention,
   files read or refused, upload, and a log. Its sub-page «Vakter uten fast
   tid» is where managers type the times of shifts whose code has none (the
-  staffing unit's `DX`/`AX`), one card per person.
+  staffing unit's `DX`/`AX`), one card per person; «Endringer i vaktlisten»
+  is where changes on the floor are recorded (another shift, own times, not
+  at work) — they win over turnus and ukeplan.
 - **`/admin`** — in tabs: *Innstillinger* (board palette, retention, the
   full log), *Stillinger* (job-title rules), *Kompetanse* (the competency
   matrix: edit in place, import from Excel or CSV with review, name linking
@@ -41,7 +43,9 @@ Two modes (D89): **`python run.py`** is the real planner — the roster comes
 from the HR exports in `data/import/`; **`python run.py --demo`** is the
 presentation demo with fictional staff and a generated four-week roster, in
 its own database, marked DEMO. Remaining in M2: PINs, and the real
-competency data (Q40).
+competency data (Q40). **`python run.py --tavle`** also opens the
+board in kiosk mode on the second screen, locked to the board (D120;
+`--tavle-x` sets where the second screen starts, default 1920).
 
 ## Running the prototype
 
@@ -116,11 +120,12 @@ Tips for the hospital PC:
 |---|---|
 | [docs/assessment.md](docs/assessment.md) | Proposed architecture, eligibility model, rotation framework, planning engine, roadmap |
 | [docs/decisions.md](docs/decisions.md) | **Decision log** — everything settled, as referenceable D-numbers (superseded ones struck through) |
-| [docs/open-questions.md](docs/open-questions.md) | **Open questions** — stable Q-numbers; currently Q20, Q27, Q40, Q45, Q49, Q51, Q52 |
+| [docs/open-questions.md](docs/open-questions.md) | **Open questions** — stable Q-numbers; currently Q20, Q27, Q40, Q45, Q49, Q53 |
 | [docs/generic.md](docs/generic.md) | Can other departments use the app? What is already generic, what isn't, and a suggested order |
 | [docs/how-the-planner-works.md](docs/how-the-planner-works.md) | How a suggestion is made: heavy-work counting, the ledger, the weekly cap and target, the order of preference |
 | [docs/fairness.md](docs/fairness.md) | Is the heavy-work measure right, and how fair is the planner over time? Research, risks, recommendations |
 | [docs/access-and-board.md](docs/access-and-board.md) | Keeping admin screens off the public board on one PC: recommended setup |
+| [docs/smart-card-login.md](docs/smart-card-login.md) | Assessment: logging in with the Buypass ID card |
 | [docs/contingency-rules.md](docs/contingency-rules.md) | Plan: every «when X, the app does Y» rule, which become settings and which stay fixed |
 | [docs/source-data-findings.md](docs/source-data-findings.md) | What the source workbooks contain, how they were restructured, and how each flag got resolved |
 

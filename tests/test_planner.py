@@ -139,10 +139,11 @@ class ExposureTest(Base):
             "SELECT * FROM assignments WHERE plan_date = ? AND start = ?", (DAY.isoformat(), start))}
 
     def test_heavy_work_goes_to_the_least_exposed_within_the_window(self):
-        recent = {f"P{i:02d}" for i in range(2, 9)}            # heavy work 5 days ago: counts
-        for eid in recent:
-            self.history(eid, DAY - dt.timedelta(days=5), "uren_produksjon")
-        for i in range(9, 17):                                 # 40 days ago: outside the window
+        recent = {f"P{i:02d}" for i in range(2, 9)}
+        for i in range(2, 17):            # 5 days ago, in the window: P02–P08 heavy, the rest light
+            self.history(f"P{i:02d}", DAY - dt.timedelta(days=5),
+                         "uren_produksjon" if f"P{i:02d}" in recent else "ren_arbeidsbord")
+        for i in range(9, 17):            # 40 days ago: outside the window, doesn't count
             self.history(f"P{i:02d}", DAY - dt.timedelta(days=40), "uren_produksjon")
         planner.suggest_day(self.conn, DAY)
         morning = self.at("07:00")
@@ -153,8 +154,9 @@ class ExposureTest(Base):
         self.assertFalse(heavy & recent, morning)
 
     def test_the_window_length_is_the_setting(self):
-        for i in range(9, 17):
-            self.history(f"P{i:02d}", DAY - dt.timedelta(days=40), "uren_produksjon")
+        for i in range(2, 17):            # 40 days ago: P09–P16 heavy, the rest light
+            self.history(f"P{i:02d}", DAY - dt.timedelta(days=40),
+                         "uren_produksjon" if i >= 9 else "ren_arbeidsbord")
         with self.conn:
             self.conn.execute("UPDATE planner_settings SET value = 60 WHERE key = 'intensity_ledger_window_days'")
         planner.suggest_day(self.conn, DAY)
@@ -162,6 +164,31 @@ class ExposureTest(Base):
         self.assertGreaterEqual(len(heavy), 2)
         # P14 can't take Arbeidsbord, so works in uren whatever his history.
         self.assertFalse(heavy & {f"P{i:02d}" for i in range(9, 17) if i != 14})
+
+    def test_part_time_is_measured_per_hour_worked(self):
+        from app import exposure
+        # Same belastningstimer (8), but 16 hours worked against 48: the one
+        # with fewer hours has done more heavy work per hour, so is «more exposed».
+        part, full = exposure.share(8, 16, 0.25), exposure.share(8, 48, 0.25)
+        self.assertGreater(part, full)
+        # Someone with no hours in the window counts as average, not as «fresh».
+        self.assertAlmostEqual(exposure.share(0, 0, 0.25), 0.25)
+        # In the planner: P03 has P02's heavy hours on twice the shifts → P03 first.
+        for day in (3, 4):
+            self.history("P02", DAY - dt.timedelta(days=day), "uren_produksjon")
+            self.history("P03", DAY - dt.timedelta(days=day), "uren_produksjon")
+        for day in (5, 6, 7, 8):
+            self.history("P03", DAY - dt.timedelta(days=day), "ren_arbeidsbord")
+        for i in range(4, 17):            # everyone else: clearly more exposed
+            for day in (3, 4, 5, 6):
+                self.history(f"P{i:02d}", DAY - dt.timedelta(days=day), "uren_produksjon")
+        with self.conn:
+            self.conn.execute("DELETE FROM roster WHERE employee_id NOT IN ('P01', 'P02', 'P03', 'P14')")
+            self.conn.execute("UPDATE functions SET active = 'no' WHERE function_id = 'adhoc'")
+        planner.suggest_day(self.conn, DAY)
+        morning = self.at("07:00")
+        self.assertIn(morning["P03"], HEAVY)          # fewer heavy hours per hour worked
+        self.assertNotIn(morning["P02"], HEAVY)       # same heavy hours on fewer shifts
 
     def kontrollsone_week(self, eids, days=(-1, 1, 2)):
         for eid in eids:

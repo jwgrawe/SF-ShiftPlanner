@@ -71,6 +71,12 @@ står i den.</p>
   {% endfor %}
 </table></div>
 
+<div class="card">
+  <strong>Endringer i vaktlisten</strong> –
+  {% if roster_changes %}<span class="badge edited">{{ roster_changes }} fra i dag og fremover</span>{% else %}<span class="muted">ingen fremover</span>{% endif %}
+  <a class="btn small" href="/import/endringer">Åpne</a>
+  <span class="muted small">Noen byttet vakt, kom ekstra eller gikk hjem? Legg det inn – det går foran turnus og ukeplan.</span>
+</div>
 {% set fixable = pending|selectattr("fixable")|list %}
 {% set other = pending|rejectattr("fixable")|list %}
 {% if fixable or manual %}

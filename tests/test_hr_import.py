@@ -281,6 +281,66 @@ class PipelineTest(unittest.TestCase):
         self.assertTrue([f for f in checks.day_checks(self.conn, MON + dt.timedelta(1))
                          if f["kind"] == "shift_changed" and "Kari" in f["text"]])   # … and warned
 
+    def change(self, name, day, **fields):
+        from app import roster_changes
+        from starlette.datastructures import FormData
+        eid = self.conn.execute("SELECT employee_id FROM employees WHERE full_name = ?", (name,)).fetchone()[0]
+        message = roster_changes.save(self.conn, FormData([("employee_id", eid), ("date", day.isoformat())]
+                                                          + list(fields.items())))
+        hr_import.rebuild(self.conn, TODAY)
+        return eid, message
+
+    def test_roster_changes_win_over_turnus_and_ukeplan(self):
+        self.use_turnus_for_unlisted()
+        self.load()
+        wed, mon2 = MON + dt.timedelta(2), MON + dt.timedelta(7)
+        self.change("Hansen Kari", wed, kind="vakt", code="A")          # blank in the ukeplan
+        self.change("Hansen Kari", MON, kind="fri")                     # D in the ukeplan
+        self.change("Hansen Kari", mon2, kind="tid", start="22", end="7")   # D in the turnus
+        kari = self.roster("Hansen Kari")
+        self.assertEqual((kari[wed.isoformat()]["shift_code"], kari[wed.isoformat()]["source"]), ("A", "manuell"))
+        self.assertNotIn(MON.isoformat(), kari)
+        night = kari[mon2.isoformat()]
+        self.assertEqual((night["shift_code"], night["start_override"], night["end_override"]), ("MAN", "22:00", "07:00"))
+        replaced = {r["date"]: r["replaced"] for r in self.conn.execute("SELECT * FROM roster_overrides")}
+        self.assertEqual(replaced[wed.isoformat()], "ingen vakt")
+        self.assertEqual(replaced[MON.isoformat()], "D 07:00–15:00")
+        # A newer ukeplan doesn't undo it; removing it does.
+        newer = dt.datetime(2027, 1, 4, 12, 0)
+        self.drop(fx.ukeplan_name(newer), ukeplan_week1(exported=newer))
+        hr_import.scan_inbox(self.conn, self.inbox)
+        hr_import.rebuild(self.conn, TODAY)
+        self.assertNotIn(MON.isoformat(), self.roster("Hansen Kari"))
+        from app import roster_changes
+        eid = self.conn.execute("SELECT employee_id FROM employees WHERE full_name = 'Hansen Kari'").fetchone()[0]
+        roster_changes.remove(self.conn, eid, MON.isoformat())
+        hr_import.rebuild(self.conn, TODAY)
+        self.assertEqual(self.roster("Hansen Kari")[MON.isoformat()]["shift_code"], "D")
+
+    def test_a_roster_change_settles_a_conflict(self):
+        self.use_turnus_for_unlisted()
+        self.load()
+        self.assertIn("D80", self.pending("Nilsen Ola")[MON.isoformat()])
+        self.change("Nilsen Ola", MON, kind="vakt", code="D", note="avklart med leder")
+        self.assertEqual(self.roster("Nilsen Ola")[MON.isoformat()]["shift_code"], "D")
+        self.assertNotIn(MON.isoformat(), self.pending("Nilsen Ola"))
+        levels = {r["text"]: r["level"] for r in self.conn.execute("SELECT * FROM import_findings")}
+        settled = [t for t in levels if "to rader" in t and "Ola" in t]
+        self.assertTrue(settled and all(levels[t] == "info" and "Avklart" in t for t in settled))
+
+    def test_roster_change_validation(self):
+        from app import roster_changes
+        from starlette.datastructures import FormData
+        self.load()
+        eid = self.conn.execute("SELECT employee_id FROM employees WHERE full_name = 'Hansen Kari'").fetchone()[0]
+        for fields, text in (([("employee_id", "X999"), ("date", "2027-01-05"), ("kind", "fri")], "ansatt"),
+                             ([("employee_id", eid), ("date", "2027-01-05"), ("kind", "vakt"), ("code", "DX")], "Egen tid"),
+                             ([("employee_id", eid), ("date", "2027-01-05"), ("kind", "tid"), ("start", "7"), ("end", "07:00")], "like"),
+                             ([("employee_id", eid), ("date", "nei"), ("kind", "fri")], "dato")):
+            with self.assertRaises(roster_changes.Invalid) as ctx:
+                roster_changes.save(self.conn, FormData(fields))
+            self.assertIn(text, str(ctx.exception))
+
     def test_new_titles_can_be_planned_meanwhile(self):
         self.use_turnus_for_unlisted()
         with self.conn:

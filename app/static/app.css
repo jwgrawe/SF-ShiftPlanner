@@ -674,3 +674,11 @@ body.display .nextchip.adhoc { background: var(--z-adhoc); }
 details.av-fixed { margin: 0.4rem 0 1rem; }
 details.av-fixed > summary { cursor: pointer; color: var(--ink-soft); font-weight: 600; }
 @media (max-width: 700px) { .av-list { grid-template-columns: 1fr; } }
+
+/* --------------------------------------------- Endringer i vaktlisten (D119) */
+.rc-form { max-width: 46rem; }
+.rc-grid { display: grid; grid-template-columns: 1fr 14rem; gap: 0 1rem; }
+.rc-kinds .vk-kind span { line-height: 2; }
+.rc-kinds input.clock { width: 4.6rem; font: inherit; padding: 0.15rem 0.35rem; text-align: center; }
+.rc-code { font: inherit; padding: 0.15rem 0.3rem; margin-left: 0.4rem; }
+@media (max-width: 700px) { .rc-grid { grid-template-columns: 1fr; } }

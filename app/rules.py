@@ -31,8 +31,8 @@ SETTINGS = {
         "etter kl. 12); 0,5 tar med de moderat tunge funksjonene.", float, 0.1, 1.0),
     "intensity_ledger_window_days": (
         "Utjevningsvindu (dager)",
-        "Hvor mange dager bakover tunge timer telles. Tungt arbeid går til den med færrest "
-        "tunge timer i vinduet, lett arbeid til den med flest.", int, 7, 90),
+        "Hvor mange dager bakover belastningen telles. Tungt arbeid går til den med lavest "
+        "andel belastningstimer per time på jobb i vinduet, lett arbeid til den med høyest (D118).", int, 7, 90),
 }
 CATEGORY_LABELS = service.SHIFT_CATEGORY_LABELS
 

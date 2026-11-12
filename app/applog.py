@@ -19,6 +19,7 @@ AREAS = {
     "regler": "Planregler",
     "plan": "Plan",
     "fravaer": "Fravær",
+    "vaktliste": "Endringer i vaktlisten",
     "innstilling": "Innstillinger",
 }
 

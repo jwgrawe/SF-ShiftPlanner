@@ -25,6 +25,10 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--port", type=int, default=8000)
     parser.add_argument("--no-browser", action="store_true")
+    parser.add_argument("--tavle", action="store_true",
+                        help="open the board in kiosk mode on the second screen (D120)")
+    parser.add_argument("--tavle-x", type=int, default=1920,
+                        help="left edge of the second screen in pixels (default 1920)")
     parser.add_argument("--demo", action="store_true",
                         help="start the demo (fictional staff, own database)")
     parser.add_argument("--check-deps", action="store_true",
@@ -92,6 +96,11 @@ def main() -> None:
     url = f"http://127.0.0.1:{args.port}/"
     if not args.no_browser:
         threading.Timer(1.5, webbrowser.open, args=(url,)).start()
+    if args.tavle:
+        from app import kiosk
+
+        profile = ROOT / "data" / "tavle-profil"
+        threading.Timer(2.0, lambda: print(kiosk.open_board(f"{url}tavle", profile, args.tavle_x))).start()
     mode = "DEMO (fiktive ansatte)" if db.is_demo() else "ekte data fra data/import/"
     print(f"SF-Planlegger kjører på {url} – {mode}  (stopp med Ctrl+C)")
     uvicorn.run(fastapi_app, host="127.0.0.1", port=args.port, log_level="warning")

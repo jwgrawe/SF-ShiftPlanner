@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% from "_macros.html" import log_panel %}
+{% block title %}Endringer i vaktlisten – SF-Planlegger{% endblock %}
+{% block content %}
+<p><a href="/import">&larr; Datagrunnlag</a></p>
+<h1>Endringer i vaktlisten</h1>
+<p class="intro">Når noe blir annerledes enn i turnus og ukeplan – noen bytter til en annen vakt, kommer inn
+ekstra, går hjem eller jobber andre tider – legg det inn her. Endringen <strong>går foran både turnus og
+ukeplan</strong> for den personen den dagen, slik at planen og utjevningen av tungt arbeid følger det som
+faktisk skjer. <span class="muted">Hvem som stod <em>hvor</em> endres i dagsplanen («Rediger») – også i
+etterkant. Fravær (syk, kurs …) registreres som før i dagsplanen.</span></p>
+
+{% if melding %}<p class="note">{{ melding }}</p>{% endif %}
+{% if is_demo() %}<p class="note">I demoen er vaktlisten fast – denne siden brukes i den ekte planleggeren.</p>{% endif %}
+
+<form method="post" action="/import/endringer/lagre" class="card rc-form">
+  <div class="rc-grid">
+    <label class="vk-field"><span>Ansatt</span>
+      <select name="employee_id" required>
+        <option value="">Velg …</option>
+        {% for p in people %}<option value="{{ p.employee_id }}">{{ p.full_name or p.display_name }}{% if p.person_id %} ({{ p.person_id }}){% endif %}{% if p.is_temp %} – vikar{% endif %}</option>{% endfor %}
+      </select></label>
+    <label class="vk-field"><span>Dato <span class="muted small">(dagen vakten starter)</span></span>
+      <input type="date" name="date" required value="{{ today.isoformat() }}"></label>
+  </div>
+  <fieldset class="vk-kinds rc-kinds">
+    <legend>Hva er endret?</legend>
+    <label class="vk-kind"><input type="radio" name="kind" value="vakt" checked>
+      <span><strong>Annen vakt</strong>
+        <select name="code" class="rc-code">
+          {% for c in codes %}<option value="{{ c.code }}">{{ c.code }} {{ c.start }}–{{ c.end }}</option>{% endfor %}
+        </select></span></label>
+    <label class="vk-kind"><input type="radio" name="kind" value="tid">
+      <span><strong>Egen tid</strong>
+        <input type="text" name="start" class="clock" inputmode="numeric" placeholder="fra" aria-label="Fra">
+        – <input type="text" name="end" class="clock" inputmode="numeric" placeholder="til" aria-label="Til">
+        <span class="muted small">f.eks. 7–1330; over midnatt: 22–7</span></span></label>
+    <label class="vk-kind"><input type="radio" name="kind" value="fri">
+      <span><strong>Ikke på jobb</strong> <span class="muted small">– vakten i turnus/ukeplan faller bort</span></span></label>
+  </fieldset>
+  <label class="vk-field"><span>Merknad <span class="muted small">(valgfritt)</span></span>
+    <input type="text" name="note" maxlength="200" placeholder="F.eks. byttet med Kari"></label>
+  <button class="btn" type="submit" {% if is_demo() %}disabled{% endif %}>Lagre endringen</button>
+</form>
+
+<h2>Registrerte endringer</h2>
+<p class="muted small">
+  {% if show_past %}<a href="/import/endringer">Skjul tidligere</a>{% else %}<a href="/import/endringer?tidligere=1">Vis også de siste to ukene</a>{% endif %}
+</p>
+<div class="tablewrap"><table>
+  <tr><th style="width:8rem">Dato</th><th>Ansatt</th><th>Endring</th><th>Turnus/ukeplan sa</th><th>Merknad</th><th style="width:6rem"></th></tr>
+  {% for r in rows %}
+    <tr {% if r.past %}class="muted"{% endif %}>
+      <td>{{ r.weekday }} {{ r.day.strftime("%d.%m.%Y") }}</td>
+      <td><strong>{{ r.display }}</strong>{% if r.full_name and r.full_name != r.display %} <span class="muted small">{{ r.full_name }}</span>{% endif %}</td>
+      <td>{{ r.kind_label }}: {{ r.what }}{% if r.broken %} <span class="badge alert">ukjent kode</span>{% endif %}</td>
+      <td class="muted">{{ r.replaced or "–" }}</td>
+      <td class="small">{{ r.note or "" }}</td>
+      <td><form method="post" action="/import/endringer/fjern" class="inline"
+                onsubmit="return confirm('Fjerne endringen? Turnus og ukeplan gjelder da igjen for denne dagen.');">
+        <input type="hidden" name="employee_id" value="{{ r.employee_id }}">
+        <input type="hidden" name="date" value="{{ r.date }}">
+        <button class="btn secondary small" type="submit">Fjern</button></form></td>
+    </tr>
+  {% else %}
+    <tr><td colspan="6" class="muted">Ingen endringer{% if not show_past %} fra i dag og fremover{% endif %}.</td></tr>
+  {% endfor %}
+</table></div>
+
+<script src="/static/clock.js?v={{ static_version }}"></script>
+<script>
+  document.querySelectorAll("input.clock").forEach(function (i) { Clock.attach(i); });
+  // Picking a code or typing a time chooses that option.
+  var form = document.querySelector(".rc-form");
+  form.querySelector(".rc-code").addEventListener("change", function () { form.querySelector("input[value=vakt]").checked = true; });
+  form.querySelectorAll("input.clock").forEach(function (i) {
+    i.addEventListener("input", function () { form.querySelector("input[value=tid]").checked = true; });
+  });
+</script>
+
+{{ log_panel(log, "Logg – endringer i vaktlisten") }}
+{% endblock %}

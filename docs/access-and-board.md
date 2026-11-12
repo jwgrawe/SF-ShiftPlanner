@@ -1,6 +1,9 @@
 # The public board and the admin screens on one PC
 
-Recommendation, round 13 (2026-11-12). Nothing here is built yet (Q52).
+Recommendation, round 13 (2026-11-12). **Round 14:** layers 1 and 2 are built
+(D120: `python run.py --tavle`, and the board lock). Layer 3 becomes a login
+with the Buypass ID card, one account per manager (assessment in
+[smart-card-login.md](smart-card-login.md), Q53).
 
 ## The situation
 

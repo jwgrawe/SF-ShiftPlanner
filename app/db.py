@@ -77,6 +77,14 @@ CREATE TABLE IF NOT EXISTS planner_settings (
     key TEXT PRIMARY KEY, value REAL NOT NULL, notes TEXT);
 -- Who swaps with whom at the rotation point (D107). A side is a list of
 -- function ids and/or «zone:<zone_id>», separated by «;».
+-- Changes on the floor a manager records (D119): they win over turnus and
+-- ukeplan for that person and day. date = the day the shift starts.
+-- kind: 'vakt' (another shift code) | 'tid' (own times) | 'fri' (not working).
+-- replaced: what turnus/ukeplan said, as last seen (shown next to it).
+CREATE TABLE IF NOT EXISTS roster_overrides (
+    employee_id TEXT NOT NULL, date TEXT NOT NULL, kind TEXT NOT NULL, code TEXT,
+    start TEXT, end TEXT, note TEXT, replaced TEXT, entered_at TEXT NOT NULL,
+    PRIMARY KEY (employee_id, date));
 -- «Avvik og tiltak» (D114): only values changed from the default (app/contingency.py).
 CREATE TABLE IF NOT EXISTS contingency_settings (
     rule_id TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT);

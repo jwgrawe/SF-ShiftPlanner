@@ -221,11 +221,15 @@ def suggest_day(conn: sqlite3.Connection, date: dt.date, source: str = "forslag"
     # this day, and this week's full-intensity days apart from this one.
     rules = exposure.settings(conn)
     wins = exposure.windows(conn)
-    history = exposure.ledger(conn, date - dt.timedelta(days=rules["window_days"]),
-                              date - dt.timedelta(days=1), wins)
+    window_first, window_last = date - dt.timedelta(days=rules["window_days"]), date - dt.timedelta(days=1)
+    history = exposure.ledger(conn, window_first, window_last, wins)
+    history_hours = exposure.worked(conn, window_first, window_last)
+    group_hours = sum(history_hours.values())
+    average_share = sum(history.values()) / group_hours if group_hours else 0.0
     week = exposure.week_occurrences(conn, date - dt.timedelta(days=date.weekday()),
                                      rules["threshold"], exclude=date, wins=wins)
-    today_hours: dict[str, float] = defaultdict(float)
+    today_hours: dict[str, float] = defaultdict(float)       # belastningstimer today
+    today_worked: dict[str, float] = defaultdict(float)      # hours placed today
     heavy_today: set[str] = set()
     load_cache: dict[tuple, tuple[float, float]] = {}
 
@@ -248,6 +252,7 @@ def suggest_day(conn: sqlite3.Connection, date: dt.date, source: str = "forslag"
             coverage[function_id][hour] += 1
         weighted, peak = load(function_id, segment.start, segment.end)
         today_hours[employee_id] += weighted
+        today_worked[employee_id] += (segment.end - segment.start).total_seconds() / 3600
         if peak >= rules["threshold"]:
             heavy_today.add(employee_id)
 
@@ -260,7 +265,10 @@ def suggest_day(conn: sqlite3.Connection, date: dt.date, source: str = "forslag"
         weighted, peak = load(function_id, segment.start, end)
         new_occurrence = peak >= rules["threshold"] and e not in heavy_today
         done = week.get(e, 0)
-        exposed = history.get(e, 0.0) + today_hours[e]
+        # Belastningstimer per hour worked in the window (D118), not the sum:
+        # fewer shifts must not mean more heavy work per shift.
+        exposed = exposure.share(history.get(e, 0.0) + today_hours[e],
+                                 history_hours.get(e, 0.0) + today_worked[e], average_share)
         return (new_occurrence and done >= rules["cap"],
                 new_occurrence and done >= rules["target"],
                 # Heavy work goes to the least exposed; light work to the most

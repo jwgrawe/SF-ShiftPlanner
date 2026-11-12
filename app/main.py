@@ -25,7 +25,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from app import absences as absences_mod
-from app import applog, checks, competency, contingency, db, domain, exposure, hr_import, planner, rules, service, shift_codes
+from app import applog, checks, competency, contingency, db, domain, exposure, hr_import, planner, roster_changes, rules, service, shift_codes
 from app.hr_export import Rejected
 
 try:
@@ -68,6 +68,40 @@ app = FastAPI(title="SF-Planlegger", docs_url=None, redoc_url=None)
 app.mount(
     "/static", StaticFiles(directory=str(Path(__file__).parent / "static")), name="static"
 )
+
+
+# --------------------------------------------------------------------------
+# The board window (D120): a browser that opened /tavle is «the board» and is
+# only ever shown the board – whatever is clicked or typed there. The admin
+# browser never has this cookie (the kiosk window has its own profile).
+BOARD_COOKIE = "sf_tavle"
+
+
+def _board_path(path: str) -> bool:
+    return path == "/display" or path.startswith("/static/") or path.startswith("/tavle")
+
+
+@app.middleware("http")
+async def board_lock(request: Request, call_next):
+    if request.cookies.get(BOARD_COOKIE) == "1" and not _board_path(request.url.path):
+        return RedirectResponse("/display", status_code=303)
+    return await call_next(request)
+
+
+@app.get("/tavle")
+def board_mode():
+    """Make this browser the board (the kiosk window opens this)."""
+    response = RedirectResponse("/display", status_code=303)
+    response.set_cookie(BOARD_COOKIE, "1", max_age=10 * 365 * 24 * 3600, httponly=True, samesite="strict")
+    return response
+
+
+@app.get("/tavle/av")
+def board_mode_off():
+    """Undo /tavle in a browser that got it by mistake."""
+    response = RedirectResponse("/", status_code=303)
+    response.delete_cookie(BOARD_COOKIE)
+    return response
 
 
 def get_conn(refresh: bool = False):
@@ -369,6 +403,7 @@ def plan_person(request: Request, id: str, fra: str | None = None):
         if model is None:
             return HTMLResponse("Ukjent ansatt", status_code=404)
         model["heavy_hours"] = checks.intensity_hours(conn, id, first, last)
+        model["worked_hours"] = exposure.worked(conn, first, last).get(id, 0.0)
         model["heavy_week"] = checks.week_heavy_counts(
             conn, service.monday_of(anchor)).get(id, 0)
         settings = {row["key"]: row["value"] for row in conn.execute(
@@ -841,6 +876,7 @@ def import_page(request: Request, melding: str | None = None):
     try:
         model = service.build_import_model(conn, domain.operational_day(local_now()))
         model["retention"] = hr_import.retention_days(conn)
+        model["roster_changes"] = roster_changes.active_count(conn, domain.operational_day(local_now()))
     finally:
         conn.close()
     model["last_refresh"] = hr_import.last_refresh()
@@ -906,6 +942,48 @@ async def import_manual_time_delete(request: Request):
     finally:
         conn.close()
     return back(str(form.get("back", "/import/ukjente")), "Den angitte tiden er fjernet.")
+
+
+@app.get("/import/endringer", response_class=HTMLResponse)
+def roster_changes_page(request: Request, tidligere: str | None = None):
+    """Changes on the floor (D119): win over turnus and ukeplan."""
+    conn = get_conn(refresh=True)
+    try:
+        model = roster_changes.model(conn, domain.operational_day(local_now()), show_past=bool(tidligere))
+        model["log"] = applog.entries(conn, "vaktliste")
+    finally:
+        conn.close()
+    model["melding"] = request.query_params.get("melding")
+    return TEMPLATES.TemplateResponse(request, "roster_changes.html", model)
+
+
+def _roster_change(action, back_url: str) -> RedirectResponse:
+    if db.is_demo():
+        return back(back_url, "I demoen er vaktlisten fast – endringer gjøres i den ekte planleggeren.")
+    conn = get_conn()
+    try:
+        try:
+            message = action(conn)
+        except roster_changes.Invalid as error:
+            return back(back_url, f"Ikke lagret: {error}")
+        hr_import.rebuild(conn)
+    finally:
+        conn.close()
+    return back(back_url, message)
+
+
+@app.post("/import/endringer/lagre")
+async def roster_changes_save(request: Request):
+    form = await request.form()
+    return _roster_change(lambda conn: roster_changes.save(conn, form), str(form.get("back") or "/import/endringer"))
+
+
+@app.post("/import/endringer/fjern")
+async def roster_changes_remove(request: Request):
+    form = await request.form()
+    return _roster_change(lambda conn: roster_changes.remove(conn, str(form.get("employee_id", "")),
+                                                             str(form.get("date", ""))),
+                          str(form.get("back") or "/import/endringer"))
 
 
 @app.get("/import/ukjente", response_class=HTMLResponse)

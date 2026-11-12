@@ -59,8 +59,24 @@ quarter working most. With real part-time contracts it will be larger.
 **Recommendation:** balance the **share**: belastningstimer ÷ hours worked in
 the window. Scheduling practice handles part-time the same way, with load
 targets in proportion to FTE (stillingsprosent). The weekly cap stays in
-absolute days, since that protects the body regardless of contract. *(Not built
-— needs the owner's agreement, Q51.)*
+absolute days, since that protects the body regardless of contract. **Built in
+round 14 (D118)**, with the owner's agreement.
+
+**Risks of the change, and how they're handled:**
+
+- *Few hours in the window* (newcomer, back from leave, mostly ad hoc weekends):
+  a share computed from little data is noisy, and 0 ÷ few hours would look
+  «fresh». The share is pulled towards the group average as if the person had
+  worked two shifts at it, so they count as average, not as fresh.
+- *Full-timers now carry more heavy hours in absolute terms*, in proportion to
+  their hours. That's the intent; the weekly cap (whole days) still protects
+  everyone's body.
+- *What isn't planned isn't counted* (e.g. weekends left ad hoc): those hours
+  are missing from both the heavy hours and the hours worked, so the share
+  isn't skewed by it. Shift changes on the floor can now be recorded
+  (Endringer i vaktlisten, D119), and placement swaps edited in the day plan,
+  also afterwards.
+- *Nothing to migrate*: the same stored plans, just a different ordering.
 
 ## 2. How optimal and how fair is the planner?
 

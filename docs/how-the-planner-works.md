@@ -25,9 +25,15 @@ intensity, added up. Examples:
 
 From this the app keeps two counts per person:
 
-- **The ledger («utjevningsvindu»)**: the sum of weighted heavy hours over the
-  last *N* days of plans (N = 28 by default), plus what the person has already
-  been given earlier the same day.
+- **Belastningstimer over the «utjevningsvindu»**: the sum of weighted heavy
+  hours over the last *N* days of plans (N = 28 by default), plus what the
+  person has already been given earlier the same day — and the **share**:
+  belastningstimer ÷ hours worked in the same plans (D118). The planner
+  balances the share, so someone with fewer shifts (part-time) doesn't carry
+  more heavy work per hour than anyone else. Until a person has worked a
+  couple of shifts in the window, their share is pulled towards the group
+  average, so a newcomer or someone back from leave isn't handed all the heavy
+  work just for having a share of 0.
 - **Heavy days this week**: the number of days Monday–Sunday on which the
   person works inside a window of intensity ≥ 1.0 (today: Kontrollsone after
   12:00). Part of a shift counts as a whole day (D38). The day being planned is
@@ -66,7 +72,7 @@ question only matters between people tied on the first, and so on:
 | 2 | Would this put them **over the weekly cap** (3 heavy days)? | no |
 | 3 | Their place in the **swap and continuity** (see below) | lower |
 | 4 | Would this put them **over the weekly target** (1 heavy day)? | no |
-| 5 | **Ledger**: heavy work → fewest weighted hours first; light work → most first | as said |
+| 5 | **Share of belastningstimer per hour worked**: heavy work → lowest first; light work → highest first | as said |
 | 6 | A tie-breaker that changes every day but is reproducible (D116) | – |
 
 Place in the swap, question 3 (with uren ↔ Arbeidsbord):

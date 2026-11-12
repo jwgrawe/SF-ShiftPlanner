@@ -9,7 +9,11 @@ count exactly the same way:
 - an occurrence: a day on which someone works inside a window whose
   intensity is at or above the threshold (D51); part of a shift counts as
   a whole occurrence (D38);
-- the ledger: weighted hours over the last N days (the «utjevningsvindu»).
+- the ledger: weighted hours over the last N days (the «utjevningsvindu»),
+  shown in the app as «belastningstimer»;
+- the share: belastningstimer per hour worked in the window (D118). The
+  planner balances the share, so people with fewer shifts (part-time) carry
+  no more per hour than anyone else. The weekly cap stays in whole days.
 """
 from __future__ import annotations
 
@@ -69,6 +73,29 @@ def ledger(conn: sqlite3.Connection, first: dt.date, last: dt.date,
         a, b = _span(dt.date.fromisoformat(row["plan_date"]), row["start"], row["end"])
         total[row["employee_id"]] += load(wins, row["function_id"], a, b)[0]
     return dict(total)
+
+
+def worked(conn: sqlite3.Connection, first: dt.date, last: dt.date) -> dict[str, float]:
+    """employee -> hours placed in the plans from `first` to `last` (the same
+    source as the ledger, so the share compares like with like)."""
+    total: dict[str, float] = defaultdict(float)
+    for row in conn.execute(
+            "SELECT plan_date, employee_id, start, end FROM assignments WHERE plan_date BETWEEN ? AND ?",
+            (first.isoformat(), last.isoformat())):
+        a, b = _span(dt.date.fromisoformat(row["plan_date"]), row["start"], row["end"])
+        total[row["employee_id"]] += (b - a).total_seconds() / 3600
+    return dict(total)
+
+
+# How much a person's own share counts before they have worked much: the
+# share is pulled towards the group's average as if they had worked this many
+# hours at it (two shifts). Stops a newcomer or someone back from leave – few
+# hours, so a share of 0 – from being handed all the heavy work (D118).
+PRIOR_HOURS = 16.0
+
+
+def share(heavy: float, hours: float, average: float) -> float:
+    return (heavy + PRIOR_HOURS * average) / (hours + PRIOR_HOURS)
 
 
 def week_occurrences(conn: sqlite3.Connection, monday: dt.date, threshold: float,

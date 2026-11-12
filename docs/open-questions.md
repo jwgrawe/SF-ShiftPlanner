@@ -1,6 +1,6 @@
 # Open questions
 
-Current list as of 2026-11-12 (round 13: Avvik og tiltak built, fairness, board/admin separation). Q-numbers are stable across
+Current list as of 2026-11-12 (round 14: per-hour balancing, roster changes, board window, card login). Q-numbers are stable across
 rounds — resolved ones are recorded in [decisions.md](decisions.md) and
 listed at the bottom. Where an *interim rule* is stated, work proceeds on
 that assumption; the question is whether it's right.
@@ -27,16 +27,11 @@ tilrettelegging can be health information). Proposal: an admin-only editor under
 Administrasjon (per person: fritak from heavy work or from given functions, from/to
 dates, note), stored only in the database and logged.
 
-**Q51 🟡 Balance heavy work per hour worked?** Today the planner balances the absolute
-belastningstimer of the last 28 days, which makes part-timers look less loaded, so they
-get more than their share of heavy work. Recommendation: balance the share
-(belastningstimer ÷ hours worked); keep the weekly cap in absolute days. Also: rename the
-measure «belastningstimer» in the app. See [fairness.md](fairness.md).
-
-**Q52 🔴 Board and admin on one PC.** Recommended: the board in its own kiosk window on the
-big screen that can only ever show the board, PIN for everything else with auto-lock,
-plus a few habits. Decide: one shared admin PIN or one per manager, and the auto-lock
-time. See [access-and-board.md](access-and-board.md).
+**Q53 🔴 Login with the Buypass ID card** (one account per manager). Assessment and plan
+in [smart-card-login.md](smart-card-login.md): go-ahead recommended, with adjustments.
+Needed from the owner: (1) does each manager log into Windows on that PC with their own
+card, or is it a shared login? (2) who is the first owner (approves the others)? (3) is
+a card reader fitted? Then: a one-off `--test-kort` run on the PC.
 
 ## Resolved (all rounds)
 
@@ -58,6 +53,8 @@ Q41 (titles: hold out until classified, once → D87).
 Round 7: Q42 (surname first; the first word is the full surname, hyphens included —
 as implemented), Q43 (`DX`: manual times per occurrence → D95), Q44 (temps get a
 manager-defined standard set; new staff are assessed → D97).
+Round 14: Q51 (balance per hour worked → D118), Q52 (board window built → D120; one
+account per manager, via the ID card → Q53).
 Round 13: Q48 (contingency rules reviewed; choices built → D114/D115), Q50 (statistics:
 admin-only, serious findings and short-staffing first, anonymous totals three years → D117).
 Round 11: Q46 (Kontrollsone rotation, if app-managed, is with another function – most

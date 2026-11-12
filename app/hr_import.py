@@ -620,6 +620,8 @@ class Rebuild:
         conn.executemany(
             "INSERT OR REPLACE INTO roster_pending (date, employee_id, raw, reason, source, fixable) "
             "VALUES (?, ?, ?, ?, ?, ?)", pending)
+        self.apply_overrides(codes, rules)
+        pending = [p for p in pending if (p[1], p[0]) not in self.overridden]
 
         horizon = (self.today + dt.timedelta(days=LOOKAHEAD_DAYS)).isoformat()
         # Flagged as soon as found, however far ahead (S5): red for the next
@@ -652,6 +654,50 @@ class Rebuild:
                       f"Vikarer (i ukeplanen, ikke i turnusen): "
                       f"{', '.join(sorted(names.get(e, e) for e in not_in_plan))}. "
                       "Planlegges med standardkompetansen for vikarer, om de ikke har egen.")
+
+    def apply_overrides(self, codes, rules) -> None:
+        """Changes a manager recorded (D119) win over turnus and ukeplan: the
+        day's shift is replaced by another code, own times, or none."""
+        conn = self.conn
+        self.overridden: set[tuple[str, str]] = set()
+        for o in conn.execute("SELECT * FROM roster_overrides WHERE date >= ?",
+                              ((self.today - dt.timedelta(days=retention_days(conn))).isoformat(),)).fetchall():
+            eid, day = o["employee_id"], o["date"]
+            before = conn.execute(
+                """SELECT r.shift_code, COALESCE(r.start_override, s.start) AS start,
+                          COALESCE(r.end_override, s.end) AS end, r.title FROM roster r
+                   JOIN shift_codes s ON s.code = r.shift_code WHERE r.employee_id = ? AND r.date = ?""",
+                (eid, day)).fetchone()
+            pending = conn.execute("SELECT raw FROM roster_pending WHERE employee_id = ? AND date = ?",
+                                   (eid, day)).fetchone()
+            replaced = (f"{before['shift_code']} {before['start']}–{before['end']}" if before
+                        else f"«{pending['raw']}» (kunne ikke planlegges)" if pending else "ingen vakt")
+            conn.execute("UPDATE roster_overrides SET replaced = ? WHERE employee_id = ? AND date = ?",
+                         (replaced, eid, day))
+            conn.execute("DELETE FROM roster WHERE employee_id = ? AND date = ?", (eid, day))
+            conn.execute("DELETE FROM roster_pending WHERE employee_id = ? AND date = ?", (eid, day))
+            self.overridden.add((eid, day))
+            if o["kind"] == "fri":
+                continue
+            title = before["title"] if before else (conn.execute(
+                "SELECT title FROM roster WHERE employee_id = ? AND title IS NOT NULL "
+                "ORDER BY date DESC LIMIT 1", (eid,)).fetchone() or [None])[0]
+            rule = rules.get(title) if title else None
+            hold = rule if rule in ("aldri", "uavklart") else None
+            if o["kind"] == "tid":
+                code, start, end = "MAN", o["start"], o["end"]
+                category = suggest_category(start, end)
+            else:
+                code, start, end, category = o["code"], None, None, None
+                if code not in codes:
+                    continue                  # the code was removed since; the page says so
+                if codes[code]["kind"] == "ignoreres":
+                    hold = "kode"
+            conn.execute(
+                """INSERT INTO roster (date, employee_id, shift_code, hold, end_override, title, source,
+                       raw, start_override, category_override)
+                   VALUES (?, ?, ?, ?, ?, ?, 'manuell', ?, ?, ?)""",
+                (day, eid, code, hold, end, title, o["code"] or "", start, category))
 
     # -- competencies ----------------------------------------------------
     def competencies(self) -> None:
@@ -781,9 +827,14 @@ class Rebuild:
                        WHERE c.file_id = ?
                        GROUP BY COALESCE(r.person_id, r.full_name), c.export_date HAVING n > 1
                        ORDER BY c.export_date LIMIT 5""", (f["file_id"],)):
-                self.find("alert", "identitet",
+                settled = conn.execute(
+                    """SELECT 1 FROM roster_overrides o JOIN employees e USING (employee_id)
+                       WHERE e.full_name = ? AND o.date = ?""",
+                    (r["full_name"], r["export_date"])).fetchone()
+                self.find("info" if settled else "alert", "identitet",
                           f"«{r['full_name']}» har vakt på to rader {dt.date.fromisoformat(r['export_date']):%d.%m.%Y} "
-                          f"i {f['filename']} – feil i turnusen?")
+                          f"i {f['filename']} – feil i turnusen?"
+                          + (" Avklart under Endringer i vaktlisten." if settled else ""))
 
 
 def display_names(conn: sqlite3.Connection) -> None:
@@ -893,6 +944,7 @@ def purge(conn: sqlite3.Connection, today: dt.date | None = None) -> int:
                               ("absences", "date"), ("day_info", "plan_date")):
             conn.execute(f"DELETE FROM {table} WHERE {column} < ?", (cutoff,))
         conn.execute("DELETE FROM manual_shift_times WHERE export_date < ?", (cutoff,))
+        conn.execute("DELETE FROM roster_overrides WHERE date < ?", (cutoff,))
         conn.execute("DELETE FROM competency_imports WHERE status <> 'venter' AND uploaded_at < ?",
                      (cutoff,))
         applog.purge(conn, today)

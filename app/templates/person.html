@@ -9,10 +9,13 @@
   <strong>Tungt arbeid denne uken:</strong> {{ heavy_week }} økt{% if heavy_week != 1 %}er{% endif %}
   <span class="muted">(mål {{ heavy_target }}, grense {{ heavy_cap }})</span>
   {% if heavy_week > heavy_cap %}<span class="badge alert">over grensen</span>{% endif %}
-  · <strong>Tunge timer i perioden:</strong> {{ heavy_hours }} t
+  · <strong>Belastningstimer i perioden:</strong> {{ heavy_hours }}
+  {% if worked_hours %}<span class="muted">av {{ worked_hours|round|int }} timer på jobb
+    ({{ (heavy_hours / worked_hours * 100)|round|int }} %)</span>{% endif %}
   <div class="muted small" style="margin-top:0.3rem">
-    Perioden {{ first.strftime("%d.%m") }}–{{ last.strftime("%d.%m.%Y") }}. Tunge timer vektes
-    etter funksjonens intensitet, og natt regnes ikke som tungt.
+    Perioden {{ first.strftime("%d.%m") }}–{{ last.strftime("%d.%m.%Y") }}. Belastningstimer er ekstra
+    belastning utover vanlig arbeid: én time på Kontrollsone etter kl. 12 = 1, én time moderat tungt
+    arbeid = 0,5, vanlig arbeid og natt = 0. Planleggeren jevner ut andelen per time på jobb (D118).
   </div>
 </div>
 

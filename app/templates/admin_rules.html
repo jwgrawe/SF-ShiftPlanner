@@ -123,7 +123,8 @@ alt er planlagt, endres ikke før du lager forslag på nytt.</p>
 
   <h3>Hvor tungt hver funksjon er</h3>
   <p class="muted small">Endres foreløpig i <code>data/seed/function_intensity.csv</code> (start appen på nytt etterpå).
-  1,0 = tungt, 0,5 = moderat (D50).</p>
+  Tallet er ekstra belastning per time utover vanlig arbeid – «belastningstimer»: 1,0 = tungt, 0,5 = moderat,
+  vanlig arbeid og natt = 0 (D50).</p>
   <div class="tablewrap"><table>
     <tr><th>Funksjon</th><th>Tidsrom</th><th>Intensitet</th><th>Merknad</th></tr>
     {% for row in intensity %}
