@@ -17,23 +17,8 @@
   {% endfor %}
 </table></div>
 
-<h2>Intensitet (tungt arbeid)</h2>
-<div class="tablewrap"><table>
-  <tr><th>Funksjon</th><th>Tidsrom</th><th>Intensitet</th><th>Merknad</th></tr>
-  {% for row in intensity %}
-    <tr><td>{{ row.function_name }}</td><td>{{ row.start }}–{{ row.end }}</td>
-        <td>{% if row.intensity >= 1 %}tungt{% elif row.intensity > 0 %}moderat{% else %}normalt{% endif %} ({{ row.intensity }})</td>
-        <td class="muted">{{ row.notes }}</td></tr>
-  {% endfor %}
-</table></div>
-
-<h2>Planleggingsinnstillinger</h2>
-<div class="tablewrap"><table>
-  <tr><th>Innstilling</th><th>Verdi</th><th>Forklaring</th></tr>
-  {% for row in settings %}
-    <tr><td>{{ row.key }}</td><td>{{ row.value }}</td><td class="muted">{{ row.notes }}</td></tr>
-  {% endfor %}
-</table></div>
+<p class="small">Rullering, bytteregler og tallene for tungt arbeid endres under
+<a href="/admin/regler">Planregler</a>.</p>
 
 <h2>Preferanser (kun synlig her)</h2>
 <div class="tablewrap"><table>

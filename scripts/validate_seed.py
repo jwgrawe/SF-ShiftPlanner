@@ -48,6 +48,7 @@ def main() -> int:
     shift_codes = load("shift_codes.csv")
     rotation_rules = load("rotation_rules.csv")
     planner_settings = load("planner_settings.csv")
+    rotation_swaps = load("rotation_swaps.csv")
     employees = load("employees.csv")
     employee_competencies = load("employee_competencies.csv")
     preferences = load("employee_preferences.csv")
@@ -78,6 +79,10 @@ def main() -> int:
             errors.append(f"functions.csv: {row['function_id']}: bad active {row['active']!r}")
         if not row["short_name"].strip():
             errors.append(f"functions.csv: {row['function_id']}: short_name is empty")
+        if row.get("fill_priority") and not row["fill_priority"].isdigit():
+            errors.append(f"functions.csv: {row['function_id']}: fill_priority must be a whole number")
+        if row.get("fill_priority") and row["staffing_mode"] != "demand":
+            errors.append(f"functions.csv: {row['function_id']}: fill_priority only for demand functions")
 
     covered_functions: set[str] = set()
     for row in function_competencies:
@@ -168,6 +173,30 @@ def main() -> int:
         rule_categories.add(row["category"])
     for category in sorted(SHIFT_CATEGORIES - rule_categories):
         errors.append(f"rotation_rules.csv: category {category} has no row")
+
+    known_codes = {r["code"] for r in shift_codes}
+    for row in functions:
+        for code in filter(None, (row.get("lead_codes") or "").split(";")):
+            if code not in known_codes:
+                errors.append(f"functions.csv: {row['function_id']}: lead code {code!r} not in shift_codes.csv")
+    check_unique(rotation_swaps, "swap_id", "rotation_swaps.csv")
+    for row in rotation_swaps:
+        sides = []
+        for column in ("side_a", "side_b"):
+            tokens = [t.strip() for t in row[column].split(";") if t.strip()]
+            if not tokens:
+                errors.append(f"rotation_swaps.csv: {row['swap_id']}: {column} is empty")
+            for token in tokens:
+                if token.startswith("zone:") and token[5:] not in zone_ids:
+                    errors.append(f"rotation_swaps.csv: {row['swap_id']}: unknown zone {token!r}")
+                elif not token.startswith("zone:") and token not in function_ids:
+                    errors.append(f"rotation_swaps.csv: {row['swap_id']}: unknown function {token!r}")
+            sides.append({f["function_id"] for f in functions
+                          if f["function_id"] in tokens or f"zone:{f['zone_id']}" in tokens})
+        if len(sides) == 2 and sides[0] & sides[1]:
+            errors.append(f"rotation_swaps.csv: {row['swap_id']}: a function is on both sides")
+        if row["active"] not in {"yes", "no"}:
+            errors.append(f"rotation_swaps.csv: {row['swap_id']}: bad active {row['active']!r}")
 
     for row in employees:
         if row["works_at"] not in {"sf", "utpost_fast"}:

@@ -32,6 +32,29 @@ def rotation_times(conn: sqlite3.Connection) -> dict[str, dt.time | None]:
     }
 
 
+def expand_side(conn: sqlite3.Connection, side: str) -> set[str]:
+    """«zone:uren;ren_arbeidsbord» -> the active function ids it names."""
+    functions: set[str] = set()
+    for token in (t.strip() for t in (side or "").split(";")):
+        if token.startswith("zone:"):
+            functions |= {r[0] for r in conn.execute(
+                "SELECT function_id FROM functions WHERE zone_id = ? AND active = 'yes'",
+                (token[5:],))}
+        elif token:
+            functions |= {r[0] for r in conn.execute(
+                "SELECT function_id FROM functions WHERE function_id = ? AND active = 'yes'",
+                (token,))}
+    return functions
+
+
+def rotation_swaps(conn: sqlite3.Connection, active_only: bool = True) -> list[dict]:
+    """Who swaps with whom at the rotation point (D107): side A's people
+    move to side B, and side B's people are first in line for side A."""
+    rows = conn.execute("SELECT * FROM rotation_swaps ORDER BY rowid")
+    return [{**dict(r), "a": expand_side(conn, r["side_a"]), "b": expand_side(conn, r["side_b"])}
+            for r in rows if r["active"] or not active_only]
+
+
 def heavy_function_ids(conn: sqlite3.Connection) -> set[str]:
     """Functions with any intensity > 0 window — the scope of a heavy-work fritak."""
     return {

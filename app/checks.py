@@ -11,9 +11,52 @@ import datetime as dt
 import sqlite3
 from collections import defaultdict
 
-from app import domain, planner
+from app import domain, planner, service
 
-DK_FUNCTION = "ren_dk_ansvarsvakt"
+
+def rotation_misses(conn: sqlite3.Connection, plan_date: dt.date) -> list[dict]:
+    """People who should have gone across at the rotation point (D107) but
+    stayed on the same side – a light notice, since the swap is for their
+    sake. Reason: they can't work on the other side (competency, fritak or
+    preference), or there were too few on the other side to swap with."""
+    swaps = service.rotation_swaps(conn)
+    if not swaps:
+        return []
+    date_str = plan_date.isoformat()
+    names = {r["function_id"]: r["name"] for r in conn.execute("SELECT function_id, name FROM functions")}
+    people = {r["employee_id"]: r["display_name"] for r in conn.execute(
+        "SELECT employee_id, display_name FROM employees")}
+    eligibility = service.eligible_functions(conn, plan_date)
+    qualified: dict[str, set[str]] = {}
+    for r in conn.execute("SELECT employee_id, competency_id FROM employee_competencies "
+                          "WHERE status = 'qualified'"):
+        qualified.setdefault(r["employee_id"], set()).add(r["competency_id"])
+    accepts: dict[str, set[str]] = {}
+    for r in conn.execute("SELECT function_id, competency_id FROM function_competencies"):
+        accepts.setdefault(r["function_id"], set()).add(r["competency_id"])
+    rows = list(conn.execute(
+        "SELECT employee_id, function_id, start, end FROM assignments WHERE plan_date = ? "
+        "ORDER BY employee_id, start", (date_str,)))
+    grouped: dict[tuple[str, str, str], list[str]] = {}
+    for before, after in zip(rows, rows[1:]):
+        if before["employee_id"] != after["employee_id"] or before["end"] != after["start"]:
+            continue
+        for swap in swaps:
+            if before["function_id"] in swap["a"] and after["function_id"] in swap["a"]:
+                e = before["employee_id"]
+                other = " / ".join(sorted(names.get(f, f) for f in swap["b"]))
+                if swap["b"] & eligibility.get(e, set()):
+                    reason = f"for få på {other} å bytte med"
+                elif not any(accepts.get(f, set()) & qualified.get(e, set()) for f in swap["b"]):
+                    reason = f"mangler kompetanse for {other}"
+                else:
+                    reason = f"fritak eller preferanse hindrer {other}"
+                grouped.setdefault((after["start"], swap["name"], reason), []).append(
+                    people.get(e, e))
+                break
+    return [{"level": "info", "kind": "no_rotation", "date": plan_date,
+             "text": f"Byttet ikke kl. {at} ({swap_name}): {', '.join(sorted(who))} – {reason}."}
+            for (at, swap_name, reason), who in sorted(grouped.items())]
 
 
 def _settings(conn: sqlite3.Connection) -> dict[str, float]:
@@ -136,6 +179,8 @@ def day_checks(conn: sqlite3.Connection, plan_date: dt.date) -> list[dict]:
     zone_names = {row["zone_id"]: row["name"] for row in conn.execute(
         "SELECT zone_id, name FROM zones")}
     coverage = _coverage(conn, plan_date)
+    lead_functions = {r[0] for r in conn.execute(
+        "SELECT function_id FROM functions WHERE COALESCE(lead_codes, '') <> ''")}
 
     for group in _demand_groups(conn, day_type):
         if group["row_type"] == "zone_total":
@@ -151,12 +196,14 @@ def day_checks(conn: sqlite3.Connection, plan_date: dt.date) -> list[dict]:
         ]
         if not missing:
             continue
-        is_dk = DK_FUNCTION in function_ids
+        # A function with lead codes (DK/DKK → DK/ansvarsvakt) is the one
+        # that must never be empty (D41/D57/D109).
+        is_lead = bool(set(function_ids) & lead_functions)
         findings.append({
-            "level": "alert" if is_dk else "warn",
+            "level": "alert" if is_lead else "warn",
             "kind": "shortfall", "date": plan_date,
-            "text": (f"Ingen DK/ansvarsvakt på vakt kl. {_hour_ranges(missing)}."
-                     if is_dk else
+            "text": (f"Ingen på {label} kl. {_hour_ranges(missing)}."
+                     if is_lead else
                      f"For få på {label} kl. {_hour_ranges(missing)}."),
         })
 
@@ -230,6 +277,8 @@ def day_checks(conn: sqlite3.Connection, plan_date: dt.date) -> list[dict]:
         findings.append({"level": "warn", "kind": "heavy_cap", "date": plan_date,
                          "text": f"{name} har {count} økter med tungt arbeid denne uken "
                                  f"(grensen er {cap})."})
+
+    findings.extend(rotation_misses(conn, plan_date))
 
     order = {"alert": 0, "warn": 1, "info": 2}
     findings.sort(key=lambda f: order[f["level"]])

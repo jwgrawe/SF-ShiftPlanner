@@ -115,9 +115,9 @@ Two distinct mechanisms, formerly conflated:
 
 1. **The zone swap**: once per shift, at the category's rotation time,
    employees switch between **uren sone and ren sone** (competence
-   permitting) to relieve homogeneous, repetitive work. Exact scope — whole
-   crews or subsets, which ren functions participate, steril's role — is the
-   top open question (Q18).
+   permitting) to relieve homogeneous, repetitive work. Scope settled in
+   round 10 (Q18 → D107): all of uren sone swaps with Arbeidsbord; steril
+   and Kontrollsone don't rotate; rules are data, edited under Planregler.
 2. **The heavy-exposure rule**, now feasible via **two-tier intensity**
    (D50/D51): Kontrollsone (after 12:00) carries full intensity **1.0** and
    is the only work counted by the weekly occurrence rule — soft target 1
@@ -284,9 +284,8 @@ rated (usefulness × effort) and sorted by recommended order:
 
 ## 9. Risks
 
-- **Zone-swap scope** (Q18) is the last blocking rotation question — the
-  exposure rule is settled and feasible (D50/D51). M1/M2 don't depend on it;
-  M3 does.
+- ~~**Zone-swap scope** (Q18)~~ — settled in round 10 (D107) and built into
+  the planner.
 - **The roster sample** (Q1) is still the critical path for M2/M3.
 - **Interim eligibility assumptions** (D42, Q24): surfaced in the UI as
   "antatt kvalifisert via produksjon-kompetanse" so wrong assumptions get

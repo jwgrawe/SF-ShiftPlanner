@@ -1,6 +1,6 @@
 # Open questions
 
-Current list as of 2026-11-10 (round 9: PersonID in the turnus, shift-code list, per-shift times). Q-numbers are stable across
+Current list as of 2026-11-12 (round 10: the zone swap, planning rules in the app). Q-numbers are stable across
 rounds — resolved ones are recorded in [decisions.md](decisions.md) and
 listed at the bottom. Where an *interim rule* is stated, work proceeds on
 that assumption; the question is whether it's right.
@@ -19,15 +19,15 @@ already-filled competency list (names abbreviated) — it no longer needs hand-e
 match the exports: the import's link step suggests the right person per name (D98).
 After that, the managers fill the gaps via the generated form or directly in the app.
 
-**Q18 🔴 Scope of the zone swap.** *(Noted for follow-up by the owner.)*
-At the rotation point (11:00 / 18:00, D35), who actually swaps? (a) the whole uren
-crew with the ren swap pool, or only some of them; (b) is the ren-side pool only
-Arbeidsbord, or also Kontrollsone, Sterrad and Poliklinikker/løspakk; (c) do
-Kontrollsone and Gangen rotate *within* their zone instead; (d) does steril take part at
-all? *Interim (what the planner does today):* uren ↔ ren swap is driven by the
-exposure rule (D50/D51) – the person on Kontrollsone in the first half is moved off it
-in the second, and heavy uren work is spread – steril stays put. *(Night is settled:
-night hours are not heavy (D50), so no night rotation and no night exposure accrual.)*
+**Q46 🟢 Kontrollsone rotation, if it is to be app-managed.** Today the two people on
+Kontrollsone take turns themselves. If the app is to manage it: do they swap *with
+someone outside* Kontrollsone at the rotation point (e.g. Arbeidsbord – a ready rule,
+switched off, under Planregler), or do they *trade places between two tasks inside*
+Kontrollsone? The first needs only a switch; the second needs Kontrollsone split into
+two functions in the data first (D107).
+
+**Q47 🟢 Other departments.** Which departments might use the app, and do they export
+from the same HR system? See [generic.md](generic.md).
 
 **Q20 🟡 Sterrad / Poliklinikker demand split.** The competency side is settled –
 separate columns from round 9 (D105). The **hourly demand** still exists only combined
@@ -65,6 +65,8 @@ Q41 (titles: hold out until classified, once → D87).
 Round 7: Q42 (surname first; the first word is the full surname, hyphens included —
 as implemented), Q43 (`DX`: manual times per occurrence → D95), Q44 (temps get a
 manager-defined standard set; new staff are assessed → D97).
+Round 10: Q18 (the zone swap: all of uren sone ↔ Arbeidsbord; Kontrollsone takes turns
+by itself; steril doesn't rotate; who can't work at Arbeidsbord stays → D107).
 Round 9: Q19 (exposure numbers confirmed, tunable → D106), Q22 (reconfirmed),
 the turnus PersonID standard (D102), shift codes `DMT`/`DMK` ignored, `D4`, `M`, `D, A`
 (D103), Q40 partly (competency lists can be CSV and carry PersonID → D105).

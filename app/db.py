@@ -68,10 +68,18 @@ CREATE TABLE IF NOT EXISTS shift_codes (
     code TEXT PRIMARY KEY, start TEXT NOT NULL, end TEXT NOT NULL,
     crosses_midnight TEXT NOT NULL, category TEXT NOT NULL, utpost_code TEXT NOT NULL,
     duration_hours REAL, comment TEXT);
+-- Planning rules (D108): seeded from data/seed/, then owned by the app –
+-- edited under Administrasjon → Planregler; an edited row keeps its value
+-- when the seed changes (edited = 1).
 CREATE TABLE IF NOT EXISTS rotation_rules (
     category TEXT PRIMARY KEY, rotation_time TEXT, notes TEXT);
 CREATE TABLE IF NOT EXISTS planner_settings (
     key TEXT PRIMARY KEY, value REAL NOT NULL, notes TEXT);
+-- Who swaps with whom at the rotation point (D107). A side is a list of
+-- function ids and/or «zone:<zone_id>», separated by «;».
+CREATE TABLE IF NOT EXISTS rotation_swaps (
+    swap_id TEXT PRIMARY KEY, name TEXT NOT NULL, side_a TEXT NOT NULL, side_b TEXT NOT NULL,
+    active INTEGER NOT NULL DEFAULT 1, notes TEXT, edited INTEGER NOT NULL DEFAULT 0);
 CREATE TABLE IF NOT EXISTS opening_hours (
     period_type TEXT, shift_type TEXT, sort_order INTEGER, weekday TEXT,
     weekday_num INTEGER, start TEXT, end TEXT);
@@ -209,8 +217,8 @@ CREATE TABLE IF NOT EXISTS roster_pending (
 MASTER_TABLES = [
     "function_competencies", "function_intensity", "staffing_demand",
     "employee_competencies", "employee_preferences", "employee_restrictions",
-    "weekday_rules", "worktable_types", "opening_hours", "rotation_rules",
-    "planner_settings", "functions", "competency_types",
+    "weekday_rules", "worktable_types", "opening_hours",
+    "functions", "competency_types",
     "employees", "zones",
 ]
 # In real mode people come from the imports, not from the seed: these are
@@ -236,6 +244,12 @@ def init_schema(conn: sqlite3.Connection) -> None:
     conn.executescript(SCHEMA)
     # Lightweight migrations for databases created by earlier versions.
     _ensure_column(conn, "functions", "short_name", "TEXT NOT NULL DEFAULT ''")
+    # Generic planning (D109): fill order and the shift codes that lead to a
+    # function (DK/DKK → DK/ansvarsvakt) live in data, not in code.
+    _ensure_column(conn, "functions", "fill_priority", "INTEGER")
+    _ensure_column(conn, "functions", "lead_codes", "TEXT")
+    for table in ("rotation_rules", "planner_settings"):
+        _ensure_column(conn, table, "edited", "INTEGER NOT NULL DEFAULT 0")
     _ensure_column(conn, "plan_days", "manually_edited", "INTEGER NOT NULL DEFAULT 0")
     # Real roster (D73/D87): who/what decided a day, a shortened end (F3), and
     # why a rostered person is held out of placement (title rules).

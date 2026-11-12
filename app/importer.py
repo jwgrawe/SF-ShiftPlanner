@@ -49,9 +49,10 @@ def import_seed(conn: sqlite3.Connection, people: bool = True) -> dict[str, int]
     counts["functions"] = insert(
         conn, "functions",
         ["function_id", "zone_id", "name", "short_name", "staffing_mode", "active",
-         "sort_order", "notes"],
+         "sort_order", "fill_priority", "lead_codes", "notes"],
         [(r["function_id"], r["zone_id"], r["name"], r["short_name"], r["staffing_mode"],
-          r["active"], int(r["sort_order"]), r["notes"]) for r in read_csv("functions.csv")],
+          r["active"], int(r["sort_order"]), int(r["fill_priority"]) if r.get("fill_priority") else None,
+          r.get("lead_codes") or None, r["notes"]) for r in read_csv("functions.csv")],
     )
     counts["competency_types"] = insert(
         conn, "competency_types", ["competency_id", "name", "source_column", "notes"],
@@ -84,15 +85,7 @@ def import_seed(conn: sqlite3.Connection, people: bool = True) -> dict[str, int]
     )
 
     counts["shift_codes"] = seed_shift_codes(conn)
-    counts["rotation_rules"] = insert(
-        conn, "rotation_rules", ["category", "rotation_time", "notes"],
-        [(r["category"], r["rotation_time"] or None, r["notes"])
-         for r in read_csv("rotation_rules.csv")],
-    )
-    counts["planner_settings"] = insert(
-        conn, "planner_settings", ["key", "value", "notes"],
-        [(r["key"], float(r["value"]), r["notes"]) for r in read_csv("planner_settings.csv")],
-    )
+    counts.update(seed_rules(conn))
     counts["opening_hours"] = insert(
         conn, "opening_hours",
         ["period_type", "shift_type", "sort_order", "weekday", "weekday_num", "start", "end"],
@@ -160,6 +153,38 @@ def seed_shift_codes(conn: sqlite3.Connection) -> int:
                        utpost_code = ?, comment = ? WHERE code = ? AND deleted_at IS NULL""",
                 (*values, r["code"]))
     return len(rows)
+
+
+def seed_rules(conn: sqlite3.Connection) -> dict[str, int]:
+    """Planning rules (D108) start from the seed and are then the app's: a
+    missing row is added, a row nobody has edited follows the seed, an
+    edited row is left alone."""
+    rotation = read_csv("rotation_rules.csv")
+    for r in rotation:
+        conn.execute(
+            """INSERT INTO rotation_rules (category, rotation_time, notes) VALUES (?, ?, ?)
+               ON CONFLICT(category) DO UPDATE SET rotation_time = excluded.rotation_time,
+                   notes = excluded.notes WHERE rotation_rules.edited = 0""",
+            (r["category"], r["rotation_time"] or None, r["notes"]))
+    settings = read_csv("planner_settings.csv")
+    for r in settings:
+        conn.execute(
+            """INSERT INTO planner_settings (key, value, notes) VALUES (?, ?, ?)
+               ON CONFLICT(key) DO UPDATE SET value = excluded.value, notes = excluded.notes
+               WHERE planner_settings.edited = 0""",
+            (r["key"], float(r["value"]), r["notes"]))
+    swaps = read_csv("rotation_swaps.csv")
+    for r in swaps:
+        conn.execute(
+            """INSERT INTO rotation_swaps (swap_id, name, side_a, side_b, active, notes)
+               VALUES (?, ?, ?, ?, ?, ?)
+               ON CONFLICT(swap_id) DO UPDATE SET name = excluded.name, side_a = excluded.side_a,
+                   side_b = excluded.side_b, active = excluded.active, notes = excluded.notes
+               WHERE rotation_swaps.edited = 0""",
+            (r["swap_id"], r["name"], r["side_a"], r["side_b"],
+             1 if r["active"].strip().lower() in ("yes", "ja", "1") else 0, r["notes"]))
+    return {"rotation_rules": len(rotation), "planner_settings": len(settings),
+            "rotation_swaps": len(swaps)}
 
 
 def seed_positions(conn: sqlite3.Connection) -> None:

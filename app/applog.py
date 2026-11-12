@@ -16,6 +16,7 @@ AREAS = {
     "kompetanse": "Kompetanse",
     "stilling": "Stillinger",
     "vaktkode": "Vaktkoder",
+    "regler": "Planregler",
     "plan": "Plan",
     "fravaer": "Fravær",
     "innstilling": "Innstillinger",

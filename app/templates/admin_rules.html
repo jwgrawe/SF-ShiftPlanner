@@ -1,0 +1,155 @@
+{% extends "admin_base.html" %}
+{% from "_macros.html" import log_panel %}
+{% block admin_content %}
+<p class="intro small">Reglene planleggeren følger. Endringer logges og gjelder nye forslag – en dag som
+alt er planlagt, endres ikke før du lager forslag på nytt.</p>
+
+{# ------------------------------------------------------------ swaps #}
+<section id="bytte" class="pr-section">
+  <h2>Hvem bytter ved rulleringen</h2>
+  <p class="small">Ved rulleringspunktet går alle på <strong>side A</strong> over til <strong>side B</strong>, og de
+  som stod på side B, tas først inn på side A. Den som ikke kan stå på side B (kompetanse, fritak eller
+  preferanse), blir stående – det vises som en lett merknad i dagsplanen, slik at dere ser det.
+  Funksjoner utenfor reglene beholder samme person etter rulleringen så lenge de trengs.</p>
+
+  {% macro side_picker(name, chosen) %}
+    <div class="pr-side">
+      {% for zone in zones %}
+        <div class="pr-zone">
+          <label class="pr-zonehead"><input type="checkbox" name="{{ name }}" value="zone:{{ zone.zone_id }}"
+            {% if "zone:" ~ zone.zone_id in chosen %}checked{% endif %} class="pr-wholezone">
+            <span class="badge {{ zone.zone_id }}">Hele {{ zone.name|lower }}</span></label>
+          {% for fn in functions if fn.zone_id == zone.zone_id %}
+            <label class="pr-fn"><input type="checkbox" name="{{ name }}" value="{{ fn.function_id }}"
+              {% if fn.function_id in chosen %}checked{% endif %}> {{ fn.name }}</label>
+          {% endfor %}
+        </div>
+      {% endfor %}
+    </div>
+  {% endmacro %}
+
+  {% for swap in swaps %}
+    <article class="pr-swap {% if not swap.active %}off{% endif %}">
+      <header>
+        <div>
+          <strong>{{ swap.name }}</strong>
+          {% if swap.active %}<span class="badge published">i bruk</span>{% else %}<span class="badge soft">av</span>{% endif %}
+          {% if swap.edited and swap.standard %}<span class="badge edited">endret her</span>{% endif %}
+        </div>
+        <div class="pr-flow"><span>{{ swap.a_label }}</span> <span aria-hidden="true">⇄</span>
+          <span>{{ swap.b_label }}</span></div>
+        {% if swap.notes %}<div class="muted small">{{ swap.notes }}</div>{% endif %}
+      </header>
+      <details>
+        <summary class="btn secondary small">Endre</summary>
+        <form method="post" action="/admin/regler/bytte" class="pr-form">
+          <input type="hidden" name="swap_id" value="{{ swap.swap_id }}">
+          <label class="vk-field"><span>Navn</span><input type="text" name="name" value="{{ swap.name }}" required maxlength="80"></label>
+          <div class="pr-sides">
+            <fieldset><legend>Side A – går over</legend>{{ side_picker("side_a", swap.a_tokens) }}</fieldset>
+            <fieldset><legend>Side B – tar plassene</legend>{{ side_picker("side_b", swap.b_tokens) }}</fieldset>
+          </div>
+          <label class="vk-field"><span>Merknad</span><input type="text" name="notes" value="{{ swap.notes or '' }}" maxlength="300"></label>
+          <label class="vk-check"><input type="checkbox" name="active" value="1" {% if swap.active %}checked{% endif %}> I bruk</label>
+          <div class="pr-actions">
+            <button class="btn" type="submit">Lagre regelen</button>
+            {% if not swap.standard %}
+              <button class="btn secondary small danger" type="submit" formaction="/admin/regler/bytte/fjern" formnovalidate
+                      onclick="return confirm('Fjerne regelen «{{ swap.name }}»?');">Fjern</button>
+            {% endif %}
+          </div>
+        </form>
+      </details>
+      <form method="post" action="/admin/regler/bytte" class="pr-toggle">
+        <input type="hidden" name="swap_id" value="{{ swap.swap_id }}">
+        <input type="hidden" name="name" value="{{ swap.name }}">
+        <input type="hidden" name="notes" value="{{ swap.notes or '' }}">
+        {% for t in swap.a_tokens %}<input type="hidden" name="side_a" value="{{ t }}">{% endfor %}
+        {% for t in swap.b_tokens %}<input type="hidden" name="side_b" value="{{ t }}">{% endfor %}
+        {% if not swap.active %}<input type="hidden" name="active" value="1">{% endif %}
+        <button class="btn secondary small" type="submit">{{ "Slå av" if swap.active else "Slå på" }}</button>
+      </form>
+    </article>
+  {% endfor %}
+
+  <details class="pr-new">
+    <summary class="btn secondary small">+ Ny bytteregel</summary>
+    <form method="post" action="/admin/regler/bytte" class="pr-form">
+      <label class="vk-field"><span>Navn</span><input type="text" name="name" required maxlength="80" placeholder="F.eks. Kontrollsone ↔ Sterrad"></label>
+      <div class="pr-sides">
+        <fieldset><legend>Side A – går over</legend>{{ side_picker("side_a", []) }}</fieldset>
+        <fieldset><legend>Side B – tar plassene</legend>{{ side_picker("side_b", []) }}</fieldset>
+      </div>
+      <label class="vk-field"><span>Merknad</span><input type="text" name="notes" maxlength="300"></label>
+      <label class="vk-check"><input type="checkbox" name="active" value="1" checked> I bruk</label>
+      <button class="btn" type="submit">Legg til</button>
+    </form>
+  </details>
+</section>
+
+{# ------------------------------------------------------------ times #}
+<section id="tidspunkt" class="pr-section">
+  <h2>Når det rulleres</h2>
+  <p class="small">Rulleringspunktet per vaktkategori. Tomt = ingen rullering. Kategorien til hver vaktkode
+  står under <a href="/admin/vaktkoder">Vaktkoder</a>.</p>
+  <form method="post" action="/admin/regler/rullering">
+    <div class="tablewrap"><table>
+      <tr><th style="width:12rem">Vaktkategori</th><th style="width:9rem">Rullerer kl.</th><th>Merknad</th></tr>
+      {% for r in rotation %}
+        <tr><td>{{ r.label }}{% if r.edited %} <span class="badge edited">endret her</span>{% endif %}</td>
+            <td><input type="text" class="clock" name="time_{{ r.category }}" value="{{ r.rotation_time or '' }}"
+                       inputmode="numeric" placeholder="ingen" aria-label="Rulleringstidspunkt {{ r.label }}" style="width:5.5rem"></td>
+            <td class="muted small">{{ r.notes }}</td></tr>
+      {% endfor %}
+    </table></div>
+    <button class="btn" type="submit">Lagre tidspunktene</button>
+  </form>
+</section>
+
+{# ------------------------------------------------------------ heavy work #}
+<section id="tungt" class="pr-section">
+  <h2>Tungt arbeid</h2>
+  <form method="post" action="/admin/regler/innstillinger" class="pr-settings">
+    {% for s in settings %}
+      <div class="pr-setting">
+        <label for="s-{{ s.key }}"><strong>{{ s.label }}</strong>{% if s.edited %} <span class="badge edited">endret her</span>{% endif %}</label>
+        <input id="s-{{ s.key }}" type="number" name="{{ s.key }}" value="{{ s.value }}" step="{{ s.step }}"
+               min="{{ s.min }}" max="{{ s.max }}" required>
+        <p class="muted small">{{ s.help }}</p>
+      </div>
+    {% endfor %}
+    <button class="btn" type="submit">Lagre</button>
+  </form>
+
+  <h3>Hvor tungt hver funksjon er</h3>
+  <p class="muted small">Endres foreløpig i <code>data/seed/function_intensity.csv</code> (start appen på nytt etterpå).
+  1,0 = tungt, 0,5 = moderat (D50).</p>
+  <div class="tablewrap"><table>
+    <tr><th>Funksjon</th><th>Tidsrom</th><th>Intensitet</th><th>Merknad</th></tr>
+    {% for row in intensity %}
+      <tr><td>{{ row.function_name }}</td><td>{{ row.start }}–{{ row.end }}</td>
+          <td>{{ row.intensity }}</td><td class="muted small">{{ row.notes }}</td></tr>
+    {% endfor %}
+  </table></div>
+</section>
+
+<form method="post" action="/admin/regler/standard" class="pr-reset"
+      onsubmit="return confirm('Sette alle planregler tilbake til standard? Egne bytteregler fjernes.');">
+  <button class="btn secondary small" type="submit">Tilbake til standard</button>
+  <span class="muted small">Setter tidspunkt, bytteregler og tallene over tilbake til det som følger med appen.</span>
+</form>
+
+<script src="/static/clock.js?v={{ static_version }}"></script>
+<script>
+  document.querySelectorAll("input.clock").forEach(function (i) { Clock.attach(i); });
+  // «Hele sonen» covers its functions: tick them along, so the picture is honest.
+  document.querySelectorAll(".pr-zone").forEach(function (zone) {
+    var whole = zone.querySelector(".pr-wholezone"), fns = zone.querySelectorAll(".pr-fn input");
+    function sync() { fns.forEach(function (f) { f.disabled = whole.checked; if (whole.checked) f.checked = true; }); }
+    whole.addEventListener("change", function () { if (!whole.checked) fns.forEach(function (f) { f.checked = false; }); sync(); });
+    sync();
+  });
+</script>
+
+{{ log_panel(log, "Logg – planregler") }}
+{% endblock %}

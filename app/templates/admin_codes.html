@@ -159,14 +159,8 @@ uten stjernen, og <code>M</code> (overtid) leses aldri som en vakt.
 </details>
 {% endif %}
 
-<h2>Rullering per vaktkategori</h2>
-<div class="tablewrap"><table>
-  <tr><th>Vaktkategori</th><th>Rulleringstidspunkt</th><th>Merknad</th></tr>
-  {% for rule in rotation_rules %}
-    <tr><td>{{ category_labels.get(rule.category, rule.category) }}</td><td>{{ rule.rotation_time or "ingen" }}</td>
-        <td class="muted">{{ rule.notes }}</td></tr>
-  {% endfor %}
-</table></div>
+<p class="muted small">Kategorien styrer når vakten rullerer – tidspunktene og hvem som bytter med hvem,
+settes under <a href="/admin/regler">Planregler</a>.</p>
 
 {# ------------------------------------------------------------ editor #}
 <dialog class="modal vk-dialog" id="vk-dialog" aria-labelledby="vk-dialog-h">

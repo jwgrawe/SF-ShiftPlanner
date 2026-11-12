@@ -25,7 +25,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from app import absences as absences_mod
-from app import applog, checks, competency, db, domain, hr_import, planner, service, shift_codes
+from app import applog, checks, competency, db, domain, hr_import, planner, rules, service, shift_codes
 from app.hr_export import Rejected
 
 try:
@@ -613,7 +613,6 @@ def admin_codes(request: Request):
         model.update({
             "kinds": shift_codes.KINDS,
             "kind_help": shift_codes.KIND_HELP,
-            "rotation_rules": list(conn.execute("SELECT * FROM rotation_rules")),
             "categories": service.SHIFT_CATEGORY_ORDER,
             "category_labels": service.SHIFT_CATEGORY_LABELS,
             "log": applog.entries(conn, "vaktkode"),
@@ -687,6 +686,60 @@ def admin_codes_csv():
                     headers={"Content-Disposition": f'attachment; filename="Vaktkoder_{stamp}.csv"'})
 
 
+@app.get("/admin/regler", response_class=HTMLResponse)
+def admin_rules(request: Request):
+    conn = get_conn()
+    try:
+        model = rules.overview(conn)
+        model["log"] = applog.entries(conn, "regler")
+        return admin_page(request, conn, "regler", "admin_rules.html", model)
+    finally:
+        conn.close()
+
+
+def _rules_action(action, anchor: str = "") -> RedirectResponse:
+    conn = get_conn()
+    try:
+        try:
+            message = action(conn)
+        except rules.Invalid as error:
+            return back(f"/admin/regler{anchor}", f"Ikke lagret: {error}")
+    finally:
+        conn.close()
+    if message != "Ingen endringer.":
+        message += " Gjelder nye forslag – lag forslag på nytt for dager som alt er planlagt."
+    return back(f"/admin/regler{anchor}", message)
+
+
+@app.post("/admin/regler/bytte")
+async def admin_rules_swap(request: Request):
+    form = await request.form()
+    return _rules_action(lambda conn: rules.save_swap(conn, form), "#bytte")
+
+
+@app.post("/admin/regler/bytte/fjern")
+async def admin_rules_swap_delete(request: Request):
+    swap_id = str((await request.form()).get("swap_id", ""))
+    return _rules_action(lambda conn: rules.delete_swap(conn, swap_id), "#bytte")
+
+
+@app.post("/admin/regler/rullering")
+async def admin_rules_rotation(request: Request):
+    form = await request.form()
+    return _rules_action(lambda conn: rules.save_rotation(conn, form), "#tidspunkt")
+
+
+@app.post("/admin/regler/innstillinger")
+async def admin_rules_settings(request: Request):
+    form = await request.form()
+    return _rules_action(lambda conn: rules.save_settings(conn, form), "#tungt")
+
+
+@app.post("/admin/regler/standard")
+async def admin_rules_reset(request: Request):
+    return _rules_action(rules.reset)
+
+
 @app.get("/admin/grunndata", response_class=HTMLResponse)
 def admin_master(request: Request):
     conn = get_conn()
@@ -695,10 +748,6 @@ def admin_master(request: Request):
             "functions": list(conn.execute(
                 """SELECT f.*, z.name AS zone_name FROM functions f
                    JOIN zones z ON z.zone_id = f.zone_id ORDER BY f.sort_order""")),
-            "intensity": list(conn.execute(
-                """SELECT i.*, f.name AS function_name FROM function_intensity i
-                   JOIN functions f ON f.function_id = i.function_id ORDER BY f.sort_order""")),
-            "settings": list(conn.execute("SELECT * FROM planner_settings ORDER BY key")),
             "preferences": list(conn.execute(
                 """SELECT p.employee_id, e.display_name, f.name AS function_name, p.note
                    FROM employee_preferences p

@@ -1,0 +1,3 @@
+swap_id,name,side_a,side_b,active,notes
+uren_arbeidsbord,Uren sone ↔ Arbeidsbord,zone:uren,ren_arbeidsbord,yes,"Q18: alle i uren sone bytter med dem på arbeidsbord ved rulleringspunktet. Den som ikke kan stå på arbeidsbord (kompetanse/fritak), blir i uren sone"
+kontrollsone_arbeidsbord,Kontrollsone ↔ Arbeidsbord,ren_kontrollsone,ren_arbeidsbord,no,"Klar til bruk hvis appen skal styre rulleringen i kontrollsonen (Q18c). I dag bytter de to i kontrollsonen selv"

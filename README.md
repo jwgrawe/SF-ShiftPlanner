@@ -32,6 +32,8 @@ display.
   and PersonID matching, download a fill-in form, the temps' standard set),
   *Vaktkoder* (the app's shift-code list: add, change, ignore or remove
   codes; unknown codes and deviations from the turnus are flagged),
+  *Planregler* (who swaps with whom at the rotation point, when each shift
+  category rotates, and the heavy-work numbers),
   *Grunndata* (master data, preferences and fritak — only here).
 
 Two modes (D89): **`python run.py`** is the real planner — the roster comes
@@ -113,7 +115,8 @@ Tips for the hospital PC:
 |---|---|
 | [docs/assessment.md](docs/assessment.md) | Proposed architecture, eligibility model, rotation framework, planning engine, roadmap |
 | [docs/decisions.md](docs/decisions.md) | **Decision log** — everything settled, as referenceable D-numbers (superseded ones struck through) |
-| [docs/open-questions.md](docs/open-questions.md) | **Open questions** — stable Q-numbers; currently Q18–Q20, Q27, Q40 |
+| [docs/open-questions.md](docs/open-questions.md) | **Open questions** — stable Q-numbers; currently Q20, Q27, Q40, Q45–Q47 |
+| [docs/generic.md](docs/generic.md) | Can other departments use the app? What is already generic, what isn't, and a suggested order |
 | [docs/source-data-findings.md](docs/source-data-findings.md) | What the source workbooks contain, how they were restructured, and how each flag got resolved |
 
 ## Repository layout
@@ -154,13 +157,14 @@ run.py         Canonical launch: python run.py, from any folder
 | File | Contents |
 |---|---|
 | `zones.csv` | The three zones + utposter |
-| `functions.csv` | 14 functions with zone, staffing mode (`demand` / `remainder` / `adhoc_zone`) and `active` flag (utposter parked, D39) |
+| `functions.csv` | 14 functions with zone, staffing mode (`demand` / `remainder` / `adhoc_zone`), `active` flag (utposter parked, D39), `fill_priority` (which demand function the planner fills first) and `lead_codes` (shift codes that lead to the function: DK/DKK → DK/ansvarsvakt) — D109 |
 | `competency_types.csv` | The competency catalog — decoupled from functions (D40), mirroring the competency sheet's columns |
 | `function_competencies.csv` | Which competencies qualify for which function, with priority (handles DK/ansvarsvakt merge, uren fallbacks, the Sterrad split) |
 | `function_intensity.csv` | Intensity windows per function and time of day — two tiers today: Kontrollsone 1.0, other heavy work 0.5; nights carry none (D50) |
-| `planner_settings.csv` | Admin-adjustable planner parameters: occurrence threshold/target/cap, ledger window (D51) |
+| `planner_settings.csv` | Starting values for the heavy-work numbers: occurrence threshold/target/cap, ledger window (D51). Edited in the app under Administrasjon → Planregler (D108) |
 | `staffing_demand.csv` | Required head-count per function/zone × hour (h00–h23), weekdays |
-| `rotation_rules.csv` | Rotation time per shift category (11:00 / 16:00 / 18:00 / none) — configuration, not code (D35) |
+| `rotation_rules.csv` | Starting rotation time per shift category (11:00 / 16:00 / 18:00 / none, D35); edited under Planregler |
+| `rotation_swaps.csv` | Who swaps with whom at the rotation point (D107): uren sone ↔ Arbeidsbord (on), Kontrollsone ↔ Arbeidsbord (ready, off); edited under Planregler |
 | `shift_codes.csv` | The starting shift-code list (26 codes): kind (`vanlig` / `egen_tid` for DX/AX / `ignoreres` for DMT/DMK), times, category and the U-code flag that keeps utpost days out of SF planning (D55). The app's own list (Administrasjon → Vaktkoder, D103) starts from it; a CSV downloaded there can replace it |
 | `opening_hours.csv` | Opening hours / period types per weekday |
 | `weekday_rules.csv` | Per-weekday deviations (utposter — currently parked), structured from free text |
