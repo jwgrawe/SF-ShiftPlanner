@@ -14,9 +14,12 @@ Output: data/seed/employees.csv
 """
 from __future__ import annotations
 
-import csv
 import random
+import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from app import csvfile  # noqa: E402  (semicolon + BOM, D112)
 
 SEED = 42
 N_EMPLOYEES = 69
@@ -79,15 +82,11 @@ def main() -> None:
     # the roster: days with a U-prefixed shift code are outpost days (D55);
     # this column is only a manual fallback/override until the roster import
     # exists. Everyone starts as "sf".
-    with open(out_path, "w", newline="", encoding="utf-8") as fh:
-        writer = csv.writer(fh)
-        writer.writerow(
-            ["employee_id", "source_label", "first_name", "last_name", "display_name", "works_at"]
-        )
-        for i, (first, last) in enumerate(names):
-            writer.writerow(
-                [f"E{i + 1:03d}", f"Employee {i + 1}", first, last, display(i), "sf"]
-            )
+    csvfile.write(
+        out_path,
+        ["employee_id", "source_label", "first_name", "last_name", "display_name", "works_at"],
+        [[f"E{i + 1:03d}", f"Employee {i + 1}", first, last, display(i), "sf"]
+         for i, (first, last) in enumerate(names)])
 
     print(f"Wrote {N_EMPLOYEES} employees to {out_path}")
 

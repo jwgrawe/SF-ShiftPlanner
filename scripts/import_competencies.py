@@ -23,11 +23,13 @@ Usage:  python scripts/import_competencies.py
 """
 from __future__ import annotations
 
-import csv
 import sys
 from pathlib import Path
 
 from openpyxl import load_workbook
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from app import csvfile  # noqa: E402  (semicolon + BOM, D112)
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SOURCE = REPO_ROOT / "data" / "source" / "Kompetanse_Anonymisert.xlsx"
@@ -40,9 +42,8 @@ STATUS = {"x": "qualified", "ja": "qualified", "?": "uncertain", "ukjent": "unce
 def load_column_mapping() -> dict[str, list[str]]:
     """source_column -> [competency_id, ...] from competency_types.csv."""
     mapping: dict[str, list[str]] = {}
-    with open(SEED_DIR / "competency_types.csv", newline="", encoding="utf-8") as fh:
-        for row in csv.DictReader(fh):
-            mapping.setdefault(row["source_column"], []).append(row["competency_id"])
+    for row in csvfile.read(SEED_DIR / "competency_types.csv"):
+        mapping.setdefault(row["source_column"], []).append(row["competency_id"])
     # Legacy combined column (before R9): sets both split competencies.
     mapping.setdefault("Sterrad + poliklinikker/løspakk",
                        mapping.get("Sterrad", []) + mapping.get("Poliklinikker/løspakk", []))
@@ -92,10 +93,7 @@ def main() -> int:
                 rows.append((employee_id, competency_id, status))
 
     rows.sort()
-    with open(OUT, "w", newline="", encoding="utf-8") as fh:
-        writer = csv.writer(fh)
-        writer.writerow(["employee_id", "competency_id", "status"])
-        writer.writerows(rows)
+    csvfile.write(OUT, ["employee_id", "competency_id", "status"], rows)
 
     for warning in warnings:
         print(f"WARNING: {warning}")

@@ -1,27 +1,27 @@
-code,kind,start,end,crosses_midnight,category,utpost_code,duration_hours,comment
-A,vanlig,14:00,22:00,no,senvakt,no,8.0,
-A1,vanlig,13:30,21:00,no,senvakt,no,7.5,Tidspunkt normalisert fra '13.30'/'21.00' i kilden
-A2,vanlig,15:00,22:00,no,senvakt,no,7.0,
-A4,vanlig,14:30,22:00,no,senvakt,no,7.5,
-AX,egen_tid,,,no,,no,,Vikar med ad hoc-tid uten egen kode – tid angis per vakt (D95)
-D,vanlig,07:00,15:00,no,tidligvakt,no,8.0,
-D1,vanlig,07:00,14:00,no,tidligvakt,no,7.0,
-D2,vanlig,08:00,15:00,no,tidligvakt,no,7.0,
-D4,vanlig,08:00,15:00,no,tidligvakt,no,7.0,Fra vikarenheten; samme tid som D2 – beholdes inntil videre (R9)
-DK,vanlig,07:00,15:00,no,tidligvakt,no,8.0,Driftskoordinator – prioriteres til funksjonen DK/ansvarsvakt (D41)
-DKK,vanlig,07:00,14:00,no,tidligvakt,no,7.0,Driftskoordinator – prioriteres til funksjonen DK/ansvarsvakt (D41)
-DMK,ignoreres,,,no,,no,,Ignoreres i planleggingen (R9)
-DMT,ignoreres,,,no,,no,,Ignoreres i planleggingen (R9)
-DX,egen_tid,,,no,,no,,Vikar med ad hoc-tid uten egen kode – tid angis per vakt (D95)
-H1,vanlig,08:00,16:00,no,helgevakt,no,8.0,Helg-/helligdagsvakt (D36)
-H2,vanlig,10:00,18:00,no,helgevakt,no,8.0,Helg-/helligdagsvakt (D36)
-ME,vanlig,12:00,20:00,no,mellomvakt,no,8.0,Mellomvakt – rullerer kl. 16:00 (D35)
-N,vanlig,22:00,07:00,yes,nattevakt,no,9.0,
-NA,vanlig,21:45,07:15,yes,nattevakt,no,9.5,
-U10,vanlig,10:00,17:00,no,tidligvakt,yes,7.0,Utpostkode – dager med U-kode holdes utenfor SF-planleggingen (D55)
-U16,vanlig,09:00,16:00,no,tidligvakt,yes,7.0,Utpostkode (D55)
-U17,vanlig,09:00,17:00,no,tidligvakt,yes,8.0,Utpostkode (D55)
-U8,vanlig,08:00,17:00,no,tidligvakt,yes,9.0,Utpostkode (D55)
-U9,vanlig,09:00,18:00,no,tidligvakt,yes,9.0,Utpostkode (D55)
-UKB,vanlig,08:00,15:30,no,tidligvakt,yes,7.5,Utpostkode (D55)
-UME,vanlig,12:00,20:00,no,mellomvakt,yes,8.0,"Utpostkode, mellomvakt – rullerer kl. 16:00 (D35)"
+﻿code;kind;start;end;crosses_midnight;category;utpost_code;duration_hours;comment
+A;vanlig;14:00;22:00;no;senvakt;no;8.0;
+A1;vanlig;13:30;21:00;no;senvakt;no;7.5;Tidspunkt normalisert fra '13.30'/'21.00' i kilden
+A2;vanlig;15:00;22:00;no;senvakt;no;7.0;
+A4;vanlig;14:30;22:00;no;senvakt;no;7.5;
+AX;egen_tid;;;no;;no;;Vikar med ad hoc-tid uten egen kode – tid angis per vakt (D95)
+D;vanlig;07:00;15:00;no;tidligvakt;no;8.0;
+D1;vanlig;07:00;14:00;no;tidligvakt;no;7.0;
+D2;vanlig;08:00;15:00;no;tidligvakt;no;7.0;
+D4;vanlig;08:00;15:00;no;tidligvakt;no;7.0;"Fra vikarenheten; samme tid som D2 – beholdes inntil videre (R9)"
+DK;vanlig;07:00;15:00;no;tidligvakt;no;8.0;Driftskoordinator – prioriteres til funksjonen DK/ansvarsvakt (D41)
+DKK;vanlig;07:00;14:00;no;tidligvakt;no;7.0;Driftskoordinator – prioriteres til funksjonen DK/ansvarsvakt (D41)
+DMK;ignoreres;;;no;;no;;Ignoreres i planleggingen (R9)
+DMT;ignoreres;;;no;;no;;Ignoreres i planleggingen (R9)
+DX;egen_tid;;;no;;no;;Vikar med ad hoc-tid uten egen kode – tid angis per vakt (D95)
+H1;vanlig;08:00;16:00;no;helgevakt;no;8.0;Helg-/helligdagsvakt (D36)
+H2;vanlig;10:00;18:00;no;helgevakt;no;8.0;Helg-/helligdagsvakt (D36)
+ME;vanlig;12:00;20:00;no;mellomvakt;no;8.0;Mellomvakt – rullerer kl. 16:00 (D35)
+N;vanlig;22:00;07:00;yes;nattevakt;no;9.0;
+NA;vanlig;21:45;07:15;yes;nattevakt;no;9.5;
+U10;vanlig;10:00;17:00;no;tidligvakt;yes;7.0;Utpostkode – dager med U-kode holdes utenfor SF-planleggingen (D55)
+U16;vanlig;09:00;16:00;no;tidligvakt;yes;7.0;Utpostkode (D55)
+U17;vanlig;09:00;17:00;no;tidligvakt;yes;8.0;Utpostkode (D55)
+U8;vanlig;08:00;17:00;no;tidligvakt;yes;9.0;Utpostkode (D55)
+U9;vanlig;09:00;18:00;no;tidligvakt;yes;9.0;Utpostkode (D55)
+UKB;vanlig;08:00;15:30;no;tidligvakt;yes;7.5;Utpostkode (D55)
+UME;vanlig;12:00;20:00;no;mellomvakt;yes;8.0;Utpostkode, mellomvakt – rullerer kl. 16:00 (D35)

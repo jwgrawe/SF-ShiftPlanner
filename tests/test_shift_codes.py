@@ -111,15 +111,39 @@ class ManagerTest(RealModeBase):
         self.assertIsNotNone(self.conn.execute("SELECT 1 FROM shift_codes WHERE code = 'D4'").fetchone())
 
     def test_csv_export_reads_back_as_a_seed(self):
-        import csv
-        import io
-        text = shift_codes.export_csv(self.conn).decode("utf-8-sig")
-        rows = {r["code"]: r for r in csv.DictReader(io.StringIO(text))}
-        self.assertEqual(list(next(csv.reader(io.StringIO(text)))), shift_codes.CSV_COLUMNS)
+        from app import csvfile
+        raw = shift_codes.export_csv(self.conn)
+        self.assertTrue(raw.startswith(b"\xef\xbb\xbf"))                 # Excel: UTF-8
+        self.assertTrue(raw.decode("utf-8-sig").startswith(";".join(shift_codes.CSV_COLUMNS)))
+        rows = {r["code"]: r for r in csvfile.parse(csvfile.decode(raw))}
         self.assertEqual((rows["D"]["start"], rows["D"]["kind"]), ("07:00", "vanlig"))
         self.assertEqual((rows["DMT"]["kind"], rows["DMT"]["start"]), ("ignoreres", ""))
         self.assertNotIn("MAN", rows)
 
+
+class CsvFileTest(unittest.TestCase):
+    """Seed files open in columns in a Norwegian Excel, and whatever Excel
+    saves back still reads (D112)."""
+
+    def test_reads_what_excel_may_write(self):
+        from app import csvfile
+        expected = [{"kode": "D", "merknad": "fritatt fra én funksjon; i en periode"}]
+        variants = {
+            "semikolon + BOM": "\ufeffkode;merknad\r\nD;\"fritatt fra én funksjon; i en periode\"\r\n".encode("utf-8"),
+            "Windows-1252": "kode;merknad\r\nD;\"fritatt fra én funksjon; i en periode\"\r\n".encode("cp1252"),
+            "komma": "kode,merknad\nD,\"fritatt fra én funksjon; i en periode\"\n".encode("utf-8"),
+            "sep-linje": "sep=;\r\nkode;merknad\r\nD;\"fritatt fra én funksjon; i en periode\"\r\n".encode("utf-8"),
+        }
+        for name, raw in variants.items():
+            self.assertEqual(csvfile.parse(csvfile.decode(raw)), expected, name)
+
+    def test_every_seed_file_is_excel_friendly(self):
+        from app import csvfile, importer
+        for path in importer.SEED_DIR.glob("*.csv"):
+            raw = path.read_bytes()
+            self.assertTrue(raw.startswith(b"\xef\xbb\xbf"), path.name)
+            self.assertIn(";", raw.decode("utf-8-sig").splitlines()[0], path.name)
+            self.assertTrue(csvfile.read(path), path.name)
 
 if __name__ == "__main__":
     unittest.main()

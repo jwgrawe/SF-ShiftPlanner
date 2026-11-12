@@ -6,10 +6,12 @@ Exits non-zero if a check fails.
 """
 from __future__ import annotations
 
-import csv
 import re
 import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from app import csvfile  # noqa: E402  (semicolon + BOM, D112)
 
 SEED_DIR = Path(__file__).resolve().parent.parent / "data" / "seed"
 
@@ -25,8 +27,7 @@ def load(name: str) -> list[dict]:
     if not path.exists():
         errors.append(f"{name}: file missing")
         return []
-    with open(path, newline="", encoding="utf-8") as fh:
-        return list(csv.DictReader(fh))
+    return csvfile.read(path)
 
 
 def check_unique(rows: list[dict], key: str, name: str) -> None:

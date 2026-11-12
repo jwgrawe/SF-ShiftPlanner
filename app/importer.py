@@ -12,18 +12,16 @@ seed files.
 from __future__ import annotations
 
 import argparse
-import csv
 import sqlite3
 from pathlib import Path
 
-from app import db
+from app import csvfile, db
 
 SEED_DIR = db.REPO_ROOT / "data" / "seed"
 
 
 def read_csv(name: str) -> list[dict]:
-    with open(SEED_DIR / name, newline="", encoding="utf-8-sig") as fh:  # BOM tolerated
-        return list(csv.DictReader(fh))
+    return csvfile.read(SEED_DIR / name)   # «;» or «,», UTF-8 or Windows-1252 (D112)
 
 
 def insert(conn: sqlite3.Connection, table: str, columns: list[str], rows: list[tuple]) -> int:

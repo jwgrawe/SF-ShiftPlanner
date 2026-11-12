@@ -115,8 +115,9 @@ Tips for the hospital PC:
 |---|---|
 | [docs/assessment.md](docs/assessment.md) | Proposed architecture, eligibility model, rotation framework, planning engine, roadmap |
 | [docs/decisions.md](docs/decisions.md) | **Decision log** — everything settled, as referenceable D-numbers (superseded ones struck through) |
-| [docs/open-questions.md](docs/open-questions.md) | **Open questions** — stable Q-numbers; currently Q20, Q27, Q40, Q45, Q48 |
+| [docs/open-questions.md](docs/open-questions.md) | **Open questions** — stable Q-numbers; currently Q20, Q27, Q40, Q45, Q48–Q50 |
 | [docs/generic.md](docs/generic.md) | Can other departments use the app? What is already generic, what isn't, and a suggested order |
+| [docs/how-the-planner-works.md](docs/how-the-planner-works.md) | How a suggestion is made: heavy-work counting, the ledger, the weekly cap and target, the order of preference |
 | [docs/contingency-rules.md](docs/contingency-rules.md) | Plan: every «when X, the app does Y» rule, which become settings and which stay fixed |
 | [docs/source-data-findings.md](docs/source-data-findings.md) | What the source workbooks contain, how they were restructured, and how each flag got resolved |
 
@@ -178,6 +179,13 @@ run.py         Canonical launch: python run.py, from any folder
 
 All assumptions are marked in `notes` columns with D/Q references — nothing
 was silently guessed.
+
+The files are semicolon-separated UTF-8 with a byte-order mark, so a Norwegian
+Excel opens them in columns with æøå intact (D112). They are the **factory
+defaults**: the app's live values are in the database, changed in the app
+(D113). Look at them in Excel, but don't save from Excel or edit them on the
+hospital PC — and never put real people's data in them (the repository is
+public).
 
 ```bash
 # regenerate fictional identities (deterministic, seed=42)

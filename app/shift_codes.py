@@ -12,13 +12,11 @@ Three kinds of code:
 """
 from __future__ import annotations
 
-import csv
 import datetime as dt
-import io
 import re
 import sqlite3
 
-from . import applog, db, domain, hr_import
+from . import applog, csvfile, db, domain, hr_import
 
 KINDS = {
     "vanlig": "Fast tid",
@@ -258,12 +256,10 @@ def restore(conn: sqlite3.Connection, code: str) -> str:
 def export_csv(conn: sqlite3.Connection) -> bytes:
     """The list in the seed's format – a backup, and a file that can replace
     data/seed/shift_codes.csv if this list should become the standard."""
-    out = io.StringIO()
-    writer = csv.writer(out, lineterminator="\r\n")
-    writer.writerow(CSV_COLUMNS)
+    rows = []
     for r in conn.execute("SELECT * FROM shift_codes WHERE code <> 'MAN' ORDER BY code"):
         timed = r["kind"] == "vanlig"
-        writer.writerow([r["code"], r["kind"], r["start"] if timed else "", r["end"] if timed else "",
-                         r["crosses_midnight"], r["category"] if timed else "", r["utpost_code"],
-                         r["duration_hours"] if timed else "", r["comment"]])
-    return ("﻿" + out.getvalue()).encode("utf-8")
+        rows.append([r["code"], r["kind"], r["start"] if timed else "", r["end"] if timed else "",
+                     r["crosses_midnight"], r["category"] if timed else "", r["utpost_code"],
+                     r["duration_hours"] if timed else "", r["comment"]])
+    return csvfile.dumps(CSV_COLUMNS, rows)   # opens in columns in Excel (D112)

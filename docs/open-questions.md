@@ -1,6 +1,6 @@
 # Open questions
 
-Current list as of 2026-11-12 (round 11: heavy-work balancing, contingency rules planned). Q-numbers are stable across
+Current list as of 2026-11-12 (round 12: CSV format, storage, statistics). Q-numbers are stable across
 rounds — resolved ones are recorded in [decisions.md](decisions.md) and
 listed at the bottom. Where an *interim rule* is stated, work proceeds on
 that assumption; the question is whether it's right.
@@ -18,6 +18,18 @@ below.
 already-filled competency list (names abbreviated) — it no longer needs hand-editing to
 match the exports: the import's link step suggests the right person per name (D98).
 After that, the managers fill the gaps via the generated form or directly in the app.
+
+**Q49 🔴 Real fritak and preferences.** In real mode there is no way yet to enter
+fritak (incl. tilrettelegging) or preferences for real staff: the rows in
+`data/seed/employee_restrictions.csv` / `employee_preferences.csv` are fictional demo
+data, ignored in real mode — and real ones must never go there (public repository;
+tilrettelegging can be health information). Proposal: an admin-only editor under
+Administrasjon (per person: fritak from heavy work or from given functions, from/to
+dates, note), stored only in the database and logged.
+
+**Q50 🟡 Statistics page.** Which figures matter most (heavy days over the cap/target,
+heavy-hour spread, shortfall hours per function, «Rullerer ikke», DX/AX use), who may
+see per-person figures, and how long anonymous weekly totals should be kept?
 
 **Q48 🟡 Contingency rules.** Review the inventory in
 [contingency-rules.md](contingency-rules.md): is any of today's behaviour wrong for you,

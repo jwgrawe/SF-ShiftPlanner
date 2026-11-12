@@ -1,13 +1,13 @@
-row_type,zone_id,function_id,category,day_type,h00,h01,h02,h03,h04,h05,h06,h07,h08,h09,h10,h11,h12,h13,h14,h15,h16,h17,h18,h19,h20,h21,h22,h23,notes
-zone_total,uren,,normal,weekday,2,2,2,1,1,1,1,3,3,3,3,5,5,5,6,6,6,6,5,5,5,2,2,2,"h00 interpolert – bekreftet OK (D12)"
-function,uren,uren_daglige_rutiner,normal,weekday,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-function,uren,uren_manuell_rengjoring,normal,weekday,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,
-function,uren,uren_gangen,normal,weekday,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,
-function,ren,ren_dk_ansvarsvakt,normal,weekday,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,"Sammenslått av Driftskoordinator (07–15) og Ansvarsvakt (15–07) – én ansvarlig hele døgnet (D41). Alle vakter skal ha DK/ansvarsvakt (D57)"
-function,ren,ren_dk_ansvarsvakt,normal,weekend_holiday,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,"Også helg/helligdag (08–18) skal ha én DK/ansvarsvakt (D57); resten av helgebemanningen er ad hoc (D21)"
-function,ren,ren_kontrollsone,normal,weekday,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2,2,2,2,2,2,2,1,1,1,"h00 interpolert – bekreftet OK (D12)"
-function_group,ren,ren_sterrad;ren_poliklinikker_lospakk,normal,weekday,0,0,0,0,0,0,0,2,2,2,2,1,1,1,1,1,1,1,2,2,1,1,0,0,"Samlet behov for Sterrad + Poliklinikker/løspakk – fordeling mellom de to funksjonene er uavklart (Q20)"
-zone_total,steril,,normal,weekday,1,1,1,1,1,1,1,1,1,1,1,2,2,2,2,2,2,2,2,2,2,1,1,1,"h00 interpolert – bekreftet OK (D12)"
-zone_total,utpost,,rullering_fra_sf,weekday,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,"UTENFOR OMFANG inntil videre (D39). Tallene i kilden var uansett uavklarte – bemanning av utposter er ikke ferdig besluttet i avdelingen"
-function,utpost,utpost_gastrolab,fast,weekday,0,0,0,0,0,0,0,0,0,1,2,2,3,3,3,3,3,2,1,1,0,0,0,0,"UTENFOR OMFANG inntil videre (D39). Beholdes som referanse til reaktivering"
-total_on_duty,,,normal,weekday,7,7,7,7,7,7,7,16,16,16,16,16,17,17,17,16,16,16,16,16,15,15,7,7,"Antakelse i kilden. I appen skal dette komme fra faktisk vaktliste, ikke konfigurasjon. h00 interpolert (D12)"
+﻿row_type;zone_id;function_id;category;day_type;h00;h01;h02;h03;h04;h05;h06;h07;h08;h09;h10;h11;h12;h13;h14;h15;h16;h17;h18;h19;h20;h21;h22;h23;notes
+zone_total;uren;;normal;weekday;2;2;2;1;1;1;1;3;3;3;3;5;5;5;6;6;6;6;5;5;5;2;2;2;h00 interpolert – bekreftet OK (D12)
+function;uren;uren_daglige_rutiner;normal;weekday;0;0;0;0;0;0;0;1;1;0;0;0;0;0;0;0;0;0;0;0;0;0;0;0;
+function;uren;uren_manuell_rengjoring;normal;weekday;0;0;0;0;0;0;0;1;1;1;1;1;1;1;1;1;1;1;1;1;1;1;0;0;
+function;uren;uren_gangen;normal;weekday;0;0;0;0;0;0;0;1;1;1;1;1;1;1;1;1;1;1;1;1;1;1;0;0;
+function;ren;ren_dk_ansvarsvakt;normal;weekday;1;1;1;1;1;1;1;1;1;1;1;1;1;1;1;1;1;1;1;1;1;1;1;1;Sammenslått av Driftskoordinator (07–15) og Ansvarsvakt (15–07) – én ansvarlig hele døgnet (D41). Alle vakter skal ha DK/ansvarsvakt (D57)
+function;ren;ren_dk_ansvarsvakt;normal;weekend_holiday;0;0;0;0;0;0;0;0;1;1;1;1;1;1;1;1;1;1;0;0;0;0;0;0;"Også helg/helligdag (08–18) skal ha én DK/ansvarsvakt (D57); resten av helgebemanningen er ad hoc (D21)"
+function;ren;ren_kontrollsone;normal;weekday;1;1;1;1;1;1;1;1;1;1;1;1;1;1;2;2;2;2;2;2;2;1;1;1;h00 interpolert – bekreftet OK (D12)
+function_group;ren;"ren_sterrad;ren_poliklinikker_lospakk";normal;weekday;0;0;0;0;0;0;0;2;2;2;2;1;1;1;1;1;1;1;2;2;1;1;0;0;Samlet behov for Sterrad + Poliklinikker/løspakk – fordeling mellom de to funksjonene er uavklart (Q20)
+zone_total;steril;;normal;weekday;1;1;1;1;1;1;1;1;1;1;1;2;2;2;2;2;2;2;2;2;2;1;1;1;h00 interpolert – bekreftet OK (D12)
+zone_total;utpost;;rullering_fra_sf;weekday;0;0;0;0;0;0;0;0;0;0;1;1;0;0;0;0;0;0;0;0;0;0;0;0;UTENFOR OMFANG inntil videre (D39). Tallene i kilden var uansett uavklarte – bemanning av utposter er ikke ferdig besluttet i avdelingen
+function;utpost;utpost_gastrolab;fast;weekday;0;0;0;0;0;0;0;0;0;1;2;2;3;3;3;3;3;2;1;1;0;0;0;0;UTENFOR OMFANG inntil videre (D39). Beholdes som referanse til reaktivering
+total_on_duty;;;normal;weekday;7;7;7;7;7;7;7;16;16;16;16;16;17;17;17;16;16;16;16;16;15;15;7;7;Antakelse i kilden. I appen skal dette komme fra faktisk vaktliste, ikke konfigurasjon. h00 interpolert (D12)
