@@ -11,7 +11,7 @@ import datetime as dt
 import sqlite3
 from collections import defaultdict
 
-from app import domain, planner, service
+from app import domain, exposure, planner, service
 
 
 def rotation_misses(conn: sqlite3.Connection, plan_date: dt.date) -> list[dict]:
@@ -55,7 +55,7 @@ def rotation_misses(conn: sqlite3.Connection, plan_date: dt.date) -> list[dict]:
                     people.get(e, e))
                 break
     return [{"level": "info", "kind": "no_rotation", "date": plan_date,
-             "text": f"Byttet ikke kl. {at} ({swap_name}): {', '.join(sorted(who))} – {reason}."}
+             "text": f"Rullerer ikke kl. {at} ({swap_name}): {', '.join(sorted(who))} – {reason}."}
             for (at, swap_name, reason), who in sorted(grouped.items())]
 
 
@@ -116,38 +116,7 @@ def _hour_ranges(hours: list[int]) -> str:
 def week_heavy_counts(conn: sqlite3.Connection, monday: dt.date) -> dict[str, int]:
     """Full-intensity occurrences per employee in the week starting `monday`
     (D51). One occurrence per day touched; partial shifts count fully (D38)."""
-    threshold = _settings(conn).get("heavy_occurrence_intensity_threshold", 1.0)
-    windows = [
-        (row["function_id"], domain.parse_time(row["start"]),
-         domain.parse_time(row["end"]) if row["end"] != "24:00" else dt.time(23, 59, 59))
-        for row in conn.execute(
-            "SELECT function_id, start, end FROM function_intensity WHERE intensity >= ?",
-            (threshold,),
-        )
-    ]
-    if not windows:
-        return {}
-    days: dict[str, set[str]] = defaultdict(set)
-    for row in conn.execute(
-        """SELECT plan_date, employee_id, function_id, start, end FROM assignments
-           WHERE plan_date BETWEEN ? AND ?""",
-        (monday.isoformat(), (monday + dt.timedelta(days=6)).isoformat()),
-    ):
-        plan_date = dt.date.fromisoformat(row["plan_date"])
-        a_start = dt.datetime.combine(plan_date, domain.parse_time(row["start"]))
-        a_end = dt.datetime.combine(plan_date, domain.parse_time(row["end"]))
-        if a_end <= a_start:
-            a_end += dt.timedelta(days=1)
-        for function_id, w_start, w_end in windows:
-            if function_id != row["function_id"]:
-                continue
-            for day_offset in (0, 1):
-                base = plan_date + dt.timedelta(days=day_offset)
-                overlap_start = max(a_start, dt.datetime.combine(base, w_start))
-                overlap_end = min(a_end, dt.datetime.combine(base, w_end))
-                if overlap_start < overlap_end:
-                    days[row["employee_id"]].add(row["plan_date"])
-    return {employee_id: len(dates) for employee_id, dates in days.items()}
+    return exposure.week_occurrences(conn, monday, exposure.settings(conn)["threshold"])
 
 
 def day_checks(conn: sqlite3.Connection, plan_date: dt.date) -> list[dict]:
@@ -290,32 +259,4 @@ def intensity_hours(
 ) -> float:
     """Weighted heavy-exposure hours (D52): sum of intensity × hours actually
     spent in each function's intensity windows."""
-    windows = [
-        (row["function_id"], domain.parse_time(row["start"]),
-         domain.parse_time(row["end"]) if row["end"] != "24:00" else dt.time(23, 59, 59),
-         row["intensity"])
-        for row in conn.execute(
-            "SELECT function_id, start, end, intensity FROM function_intensity WHERE intensity > 0")
-    ]
-    total = 0.0
-    for row in conn.execute(
-        """SELECT plan_date, function_id, start, end FROM assignments
-           WHERE employee_id = ? AND plan_date BETWEEN ? AND ?""",
-        (employee_id, first.isoformat(), last.isoformat()),
-    ):
-        plan_date = dt.date.fromisoformat(row["plan_date"])
-        a_start = dt.datetime.combine(plan_date, domain.parse_time(row["start"]))
-        a_end = dt.datetime.combine(plan_date, domain.parse_time(row["end"]))
-        if a_end <= a_start:
-            a_end += dt.timedelta(days=1)
-        for function_id, w_start, w_end, intensity in windows:
-            if function_id != row["function_id"]:
-                continue
-            for day_offset in (0, 1):
-                base = plan_date + dt.timedelta(days=day_offset)
-                overlap_start = max(a_start, dt.datetime.combine(base, w_start))
-                overlap_end = min(a_end, dt.datetime.combine(base, w_end))
-                if overlap_start < overlap_end:
-                    hours = (overlap_end - overlap_start).total_seconds() / 3600
-                    total += hours * intensity
-    return round(total, 1)
+    return round(exposure.ledger(conn, first, last).get(employee_id, 0.0), 1)

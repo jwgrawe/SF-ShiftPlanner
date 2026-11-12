@@ -11,6 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from app import checks, db, importer, planner  # noqa: E402
 
+HEAVY = {"uren_produksjon", "steril_produksjon", "ren_kontrollsone"}
 DAY = dt.date(2026, 11, 17)           # a Tuesday: rotation at 11:00 for D shifts
 ALL = ["produksjon_uren", "arbeidsbord", "kontrollsone", "sterrad", "poliklinikker_lospakk",
        "produksjon_steril", "ansvarsvakt", "driftskoordinator"]
@@ -120,6 +121,79 @@ class SwapTest(Base):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ExposureTest(Base):
+    """The utjevningsvindu and the weekly rule steer who gets heavy work (D110)."""
+
+    def history(self, eid, day, function_id, start="07:00", end="15:00"):
+        with self.conn:
+            self.conn.execute("INSERT OR IGNORE INTO plan_days (plan_date, status) VALUES (?, 'published')",
+                              (day.isoformat(),))
+            self.conn.execute("INSERT INTO assignments (plan_date, employee_id, function_id, start, end, "
+                              "locked, source) VALUES (?, ?, ?, ?, ?, 0, 'forslag')",
+                              (day.isoformat(), eid, function_id, start, end))
+
+    def at(self, start):
+        return {r["employee_id"]: r["function_id"] for r in self.conn.execute(
+            "SELECT * FROM assignments WHERE plan_date = ? AND start = ?", (DAY.isoformat(), start))}
+
+    def test_heavy_work_goes_to_the_least_exposed_within_the_window(self):
+        recent = {f"P{i:02d}" for i in range(2, 9)}            # heavy work 5 days ago: counts
+        for eid in recent:
+            self.history(eid, DAY - dt.timedelta(days=5), "uren_produksjon")
+        for i in range(9, 17):                                 # 40 days ago: outside the window
+            self.history(f"P{i:02d}", DAY - dt.timedelta(days=40), "uren_produksjon")
+        planner.suggest_day(self.conn, DAY)
+        morning = self.at("07:00")
+        # Heavy in the data: Produksjon uren/steril from 07, Kontrollsone from 12
+        # (counted to the end of the shift, since it continues).
+        heavy = {e for e, f in morning.items() if f in HEAVY}
+        self.assertGreaterEqual(len(heavy), 3)
+        self.assertFalse(heavy & recent, morning)
+
+    def test_the_window_length_is_the_setting(self):
+        for i in range(9, 17):
+            self.history(f"P{i:02d}", DAY - dt.timedelta(days=40), "uren_produksjon")
+        with self.conn:
+            self.conn.execute("UPDATE planner_settings SET value = 60 WHERE key = 'intensity_ledger_window_days'")
+        planner.suggest_day(self.conn, DAY)
+        heavy = {e for e, f in self.at("07:00").items() if f in HEAVY}
+        self.assertGreaterEqual(len(heavy), 3)
+        # P14 can't take Arbeidsbord, so works in uren whatever his history.
+        self.assertFalse(heavy & {f"P{i:02d}" for i in range(9, 17) if i != 14})
+
+    def kontrollsone_week(self, eids, days=(-1, 1, 2)):
+        for eid in eids:
+            for offset in days:
+                self.history(eid, DAY + dt.timedelta(days=offset), "ren_kontrollsone", "12:00", "15:00")
+
+    def kontrollsone_after_rotation(self):
+        return {e for e, f in self.at("11:00").items() if f == "ren_kontrollsone"}   # 2 from 14:00
+
+    def test_the_weekly_cap_keeps_people_off_full_intensity_work(self):
+        self.kontrollsone_week([f"P{i:02d}" for i in range(2, 15)])        # 3 this week: at the cap
+        planner.suggest_day(self.conn, DAY)
+        self.assertEqual(self.kontrollsone_after_rotation(), {"P15", "P16"})
+        self.assertFalse([f for f in checks.day_checks(self.conn, DAY) if f["kind"] == "heavy_cap"])
+
+    def test_the_weekly_target_prefers_those_without_a_heavy_day(self):
+        # Kontrollsone 07–11 is light but continues into its heavy afternoon,
+        # so the morning pick already looks ahead: someone without a heavy
+        # day this week. (The target is soft: the swap and «steril doesn't
+        # rotate» come first; only the cap is hard.)
+        self.kontrollsone_week([f"P{i:02d}" for i in range(2, 15)], days=(-1,))   # 1 = the target
+        planner.suggest_day(self.conn, DAY)
+        morning = [e for e, f in self.at("07:00").items() if f == "ren_kontrollsone"]
+        self.assertEqual(len(morning), 1)
+        self.assertIn(morning[0], {"P15", "P16"})
+        self.assertIn(morning[0], self.kontrollsone_after_rotation())
+
+    def test_when_everyone_is_at_the_cap_the_work_is_still_covered_and_warned(self):
+        self.kontrollsone_week([f"P{i:02d}" for i in range(1, 17)])
+        planner.suggest_day(self.conn, DAY)
+        self.assertEqual(len(self.kontrollsone_after_rotation()), 2)
+        self.assertTrue([f for f in checks.day_checks(self.conn, DAY) if f["kind"] == "heavy_cap"])
 
 
 class RulesPageTest(Base):

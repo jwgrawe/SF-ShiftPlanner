@@ -50,7 +50,9 @@ access, D25). Not worth it until there is more than one department using it.
    pattern exists).
 3. A template seed and a one-page «ny avdeling» guide, tried on a second unit.
 
-## Open question for the owner
+## Answered (round 11)
 
-Which departments are realistic candidates, and do they export from the same
-HR system (Ressursstyring)? If so, the import side carries over unchanged.
+Other departments export from the same HR system, so the import side carries over
+unchanged. What is theirs: the rules and settings (heavy-work numbers, rotation),
+functions/stations, zones, demand, competencies and shift codes. Everything else is
+treated as shared and generic. Contingency rules (D111) follow the same split.

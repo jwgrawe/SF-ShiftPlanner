@@ -25,7 +25,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from app import absences as absences_mod
-from app import applog, checks, competency, db, domain, hr_import, planner, rules, service, shift_codes
+from app import applog, checks, competency, db, domain, exposure, hr_import, planner, rules, service, shift_codes
 from app.hr_export import Rejected
 
 try:
@@ -777,6 +777,11 @@ async def admin_settings(request: Request):
             service.set_setting(conn, "display_theme", theme)
             applog.write(conn, "innstilling", f"Tavlens fargevisning satt til «{theme}».")
         retention = str(form.get("retention_days", "")).strip()
+        window = exposure.settings(conn)["window_days"]
+        if retention.isdigit() and 14 <= int(retention) <= 730 and int(retention) <= window:
+            # The «utjevningsvindu» counts past plans, so they must still exist (D110).
+            return back("/admin", f"Ikke lagret: data må beholdes lenger enn utjevningsvinduet "
+                                  f"({window} dager, under Planregler).")
         if (retention.isdigit() and 14 <= int(retention) <= 730
                 and int(retention) != hr_import.retention_days(conn)):
             service.set_setting(conn, "retention_days", retention)

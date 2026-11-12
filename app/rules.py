@@ -18,20 +18,21 @@ SETTINGS = {
     # key: (label, help, kind, min, max)
     "heavy_occurrence_hard_cap_per_week": (
         "Grense for tunge økter per uke",
-        "Hard grense per ansatt. Går en plan over, varsles det i dagens kontroller (D51/D53).",
+        "Hard grense per ansatt. Planleggeren går bare over når ingen andre kan ta "
+        "arbeidet – og da varsles det i dagens kontroller (D51/D53).",
         int, 0, 7),
     "heavy_occurrence_target_per_week": (
         "Mål for tunge økter per uke",
-        "Mykt mål per ansatt. Vises på personsiden; planleggeren styrer etter det fra neste "
-        "versjon (M3).", int, 0, 7),
+        "Mykt mål per ansatt: planleggeren velger helst noen under målet, men rullering og "
+        "faste plasser går foran.", int, 0, 7),
     "heavy_occurrence_intensity_threshold": (
         "Hva som teller som en tung økt",
         "Intensitet fra og med denne verdien. 1,0 = bare full intensitet (i dag Kontrollsone "
         "etter kl. 12); 0,5 tar med de moderat tunge funksjonene.", float, 0.1, 1.0),
     "intensity_ledger_window_days": (
         "Utjevningsvindu (dager)",
-        "Hvor mange dager bakover tunge timer telles når belastningen jevnes ut. Brukes av "
-        "planleggeren fra neste versjon (M3).", int, 7, 90),
+        "Hvor mange dager bakover tunge timer telles. Tungt arbeid går til den med færrest "
+        "tunge timer i vinduet, lett arbeid til den med flest.", int, 7, 90),
 }
 CATEGORY_LABELS = service.SHIFT_CATEGORY_LABELS
 
@@ -188,6 +189,11 @@ def save_settings(conn: sqlite3.Connection, form) -> str:
                 raise Invalid(f"{label}: «{raw}» er ikke et tall.") from None
             if not low <= value <= high:
                 raise Invalid(f"{label}: må være mellom {low} og {high}.")
+            if key == "intensity_ledger_window_days":
+                from .hr_import import retention_days
+                if value >= retention_days(conn):
+                    raise Invalid(f"{label}: må være kortere enn hvor lenge data beholdes "
+                                  f"({retention_days(conn)} dager, under Innstillinger).")
             row = conn.execute("SELECT value FROM planner_settings WHERE key = ?", (key,)).fetchone()
             if row is not None and float(row["value"]) != float(value):
                 conn.execute("UPDATE planner_settings SET value = ?, edited = 1 WHERE key = ?",

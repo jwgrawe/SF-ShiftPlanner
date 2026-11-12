@@ -1,7 +1,8 @@
-"""Plan suggestion, v1: an hour-by-hour filler with the zone swap.
+"""Plan suggestion, v2: an hour-by-hour filler with the zone swap and
+heavy-work balancing.
 
-Not yet the full M3 engine — no weekly heavy-exposure balancing or
-intensity ledger in the choice of people. It does respect:
+Day by day, in order, so each day sees the days planned before it. It
+respects:
 
 - the eligibility formula (competency + preferences + restrictions + works_at),
 - roster presence per block (shift codes cut at each category's rotation time),
@@ -15,7 +16,15 @@ intensity ledger in the choice of people. It does respect:
   stays where they were; checks.py points it out,
 - continuity: someone on a function outside the swap keeps it after the
   rotation point while it is still needed (Kontrollsone, Sterrad, DK, steril),
+- heavy work (D110): the weekly cap on full-intensity days is hard – broken
+  only when nobody else can do it, and then warned (D53); the weekly target
+  is soft; within that, heavy work goes to whoever has the fewest weighted
+  heavy hours in the «utjevningsvindu» (default 28 days), light work to the
+  most exposed,
 - locked assignments: regeneration plans around them and never touches them (D22).
+
+Order of preference when picking someone: the lead code, the weekly cap, the
+swap and continuity (structure), the weekly target, then the balance.
 
 Nothing department-specific is written here (D109): fill order, lead codes,
 zone remainders and swap rules all come from the data.
@@ -26,7 +35,7 @@ import datetime as dt
 import sqlite3
 from collections import defaultdict
 
-from app import domain, service
+from app import domain, exposure, service
 
 def segment_hours(segment: domain.Segment) -> list[int]:
     hours, cursor = [], segment.start
@@ -146,6 +155,9 @@ def suggest_day(conn: sqlite3.Connection, date: dt.date, source: str = "forslag"
     rotations = service.rotation_times(conn)
     plan = plan_structure(conn)
     leave_to, pulls, on_swap = swap_maps(conn)
+    # A function whose people some swap draws elsewhere (Arbeidsbord → uren).
+    pulls_from = {f: {g for g, sources in pulls.items() if f in sources and g not in leave_to.get(f, ())}
+                  for f in on_swap}
     zone_functions: dict[str, list[str]] = defaultdict(list)
     for function_id, zone in plan["zone_of"].items():
         zone_functions[zone].append(function_id)
@@ -158,6 +170,26 @@ def suggest_day(conn: sqlite3.Connection, date: dt.date, source: str = "forslag"
         ):
             groups[segment].append(employee_id)
 
+    shift_end = {e: max(s.end for s, people in groups.items() if e in people) for e in shifts}
+
+    # Exposure (D110): weighted heavy hours over the «utjevningsvindu» before
+    # this day, and this week's full-intensity days apart from this one.
+    rules = exposure.settings(conn)
+    wins = exposure.windows(conn)
+    history = exposure.ledger(conn, date - dt.timedelta(days=rules["window_days"]),
+                              date - dt.timedelta(days=1), wins)
+    week = exposure.week_occurrences(conn, date - dt.timedelta(days=date.weekday()),
+                                     rules["threshold"], exclude=date, wins=wins)
+    today_hours: dict[str, float] = defaultdict(float)
+    heavy_today: set[str] = set()
+    load_cache: dict[tuple, tuple[float, float]] = {}
+
+    def load(function_id: str, start: dt.datetime, end: dt.datetime) -> tuple[float, float]:
+        key = (function_id, start, end)
+        if key not in load_cache:
+            load_cache[key] = exposure.load(wins, function_id, start, end)
+        return load_cache[key]
+
     coverage: dict[str, dict[int, int]] = defaultdict(lambda: defaultdict(int))
     assigned: dict[tuple[str, dt.datetime], str] = {}
     segment_end: dict[tuple[str, dt.datetime], dt.datetime] = {}
@@ -169,6 +201,26 @@ def suggest_day(conn: sqlite3.Connection, date: dt.date, source: str = "forslag"
         ends[(employee_id, segment.end)] = function_id
         for hour in segment_hours(segment):
             coverage[function_id][hour] += 1
+        weighted, peak = load(function_id, segment.start, segment.end)
+        today_hours[employee_id] += weighted
+        if peak >= rules["threshold"]:
+            heavy_today.add(employee_id)
+
+    def exposure_key(e: str, function_id: str, segment: domain.Segment) -> tuple:
+        """How suitable `e` is for `function_id` from `segment` on, as far as
+        heavy work goes: (breaks the weekly cap, passes the weekly target,
+        balance). A function outside the swap is counted to the end of the
+        shift, since the person keeps it after the rotation point."""
+        end = segment.end if function_id in on_swap else shift_end.get(e, segment.end)
+        weighted, peak = load(function_id, segment.start, end)
+        new_occurrence = peak >= rules["threshold"] and e not in heavy_today
+        done = week.get(e, 0)
+        exposed = history.get(e, 0.0) + today_hours[e]
+        return (new_occurrence and done >= rules["cap"],
+                new_occurrence and done >= rules["target"],
+                # Heavy work goes to the least exposed; light work to the most
+                # exposed, which keeps the less exposed free for heavy work.
+                exposed if weighted > 0 else -exposed)
 
     # Locked assignments are fixed points: seed coverage from them, plan around.
     locked_keys: set[tuple[str, dt.datetime]] = set()
@@ -203,47 +255,72 @@ def suggest_day(conn: sqlite3.Connection, date: dt.date, source: str = "forslag"
         stuck = {e for e, targets in must_leave.items()
                  if not targets & eligibility.get(e, set())}
 
-        def rank(e: str, function_id: str) -> int:
-            """0 = drawn here by a swap, 1 = new on duty, 2 = other,
-            3 = should go across instead (taken only if nobody else can)."""
+        def continuing(e: str) -> str | None:
+            """The function outside the swap that `e` would simply keep."""
             p = prev.get(e)
+            if p is None or p in on_swap or p not in eligibility.get(e, set()):
+                return None
+            if p in plan["fill_order"] and short(p) > 0:
+                return p
+            if p in plan["zone_fill"].values() and zone_short(plan["zone_of"][p]) > 0:
+                return p
+            return None
+
+        def rank(e: str, function_id: str) -> int:
+            """0 = drawn here by a swap, 1 = new on duty, 2 = free after the
+            rotation point, 3 = wanted by a swap elsewhere, 4 = should go
+            across instead, 5 = keeps a function outside the swap (steril,
+            Kontrollsone …: those don't rotate, so they are taken last)."""
+            p = prev.get(e)
+            if continuing(e) not in (None, function_id):
+                return 5
             if e in must_leave and function_id not in must_leave[e]:
-                return 3
+                return 4
             if p is not None and p in pulls.get(function_id, ()):
                 return 0
+            if p is not None and pulls_from.get(p):
+                return 3
             return 1 if p is None else 2
 
-        # 0) Continuity: who can't cross over stays put; functions outside the
-        #    swap keep their people while still needed.
+        def order(e: str, function_id: str, segment: domain.Segment, lead: set[str]) -> tuple:
+            """Who first: the lead code, then never past the weekly cap unless
+            nobody else can, the swap, the weekly target, the exposure balance."""
+            over_cap, over_target, balance = exposure_key(e, function_id, segment)
+            return (roster.get(e) not in lead, over_cap, rank(e, function_id), over_target,
+                    balance, e)
+
+        def keep(function_id: str, still_short) -> None:
+            """Continuity: people already on `function_id` (outside the swap)
+            keep it while it is short – unless that breaks the weekly cap."""
+            for e in free_people(segment):
+                if continuing(e) == function_id and still_short() > 0 \
+                        and not exposure_key(e, function_id, segment)[0]:
+                    register(e, segment, function_id)
+
+        # 0) Whoever can't cross over stays where they were.
         for e in free_people(segment):
-            p = prev.get(e)
-            if p is None or p not in eligibility.get(e, set()):
-                continue
-            if e in stuck:
-                register(e, segment, p)
-            elif p in on_swap:
-                continue
-            elif p in plan["fill_order"] and short(p) > 0:
-                register(e, segment, p)
-            elif p in plan["zone_fill"].values() and zone_short(plan["zone_of"][p]) > 0:
-                register(e, segment, p)
-        # 1) Demand functions, in the department's fill order.
+            if e in stuck and prev[e] in eligibility.get(e, set()):
+                register(e, segment, prev[e])
+        # 1) Demand functions, in the department's fill order: first those
+        #    continuing, then the best of the rest.
         for function_id in plan["fill_order"]:
+            keep(function_id, lambda f=function_id: short(f))
             needed = short(function_id)
             if needed <= 0:
                 continue
             lead = plan["lead_codes"].get(function_id, set())
             candidates = [e for e in free_people(segment) if function_id in eligibility.get(e, set())]
-            candidates.sort(key=lambda e: (roster.get(e) not in lead, rank(e, function_id), e))
+            candidates.sort(key=lambda e: order(e, function_id, segment, lead))
             for employee_id in candidates[:needed]:
                 register(employee_id, segment, function_id)
         # 2) Zone totals -> each zone's own remainder (Produksjon uren/steril).
         for zone, function_id in plan["zone_fill"].items():
+            keep(function_id, lambda z=zone: zone_short(z))
             needed = zone_short(zone)
             if needed <= 0:
                 continue
             candidates = [e for e in free_people(segment) if function_id in eligibility.get(e, set())]
-            candidates.sort(key=lambda e: (rank(e, function_id), e))
+            candidates.sort(key=lambda e: order(e, function_id, segment, set()))
             for employee_id in candidates[:needed]:
                 register(employee_id, segment, function_id)
         # 3) Everyone left -> the department's remainder (Arbeidsbord, D13/D14).
