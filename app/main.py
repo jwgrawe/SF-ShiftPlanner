@@ -27,7 +27,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from app import absences as absences_mod
-from app import applog, auth, checks, competency, contingency, db, domain, exposure, hr_import, planner, roster_changes, rules, service, shift_codes, winauth
+from app import applog, auth, checks, competency, contingency, db, domain, exposure, hr_import, planner, printout, roster_changes, rules, service, shift_codes, winauth
 from app.hr_export import Rejected
 
 try:
@@ -276,6 +276,7 @@ def today_page(request: Request):
         model = {
             "now": now,
             "today": today,
+            "tomorrow": today + dt.timedelta(days=1),
             "horizon": horizon,
             "weeks": service.build_overview_model(conn, today, n_weeks=3)["weeks"],
             "display": service.build_display_model(conn, now),
@@ -326,6 +327,24 @@ def plan_week(request: Request, start: str):
     finally:
         conn.close()
     return TEMPLATES.TemplateResponse(request, "plan_week.html", model)
+
+
+@app.get("/plan/utskrift", response_class=HTMLResponse)
+def plan_print(request: Request, fra: str | None = None, dager: int = 1, skriv: int = 0,
+               tilbake: str | None = None):
+    """The daily plan on A4 to hang up (D123): one sheet per day."""
+    try:
+        first = dt.date.fromisoformat(fra) if fra else domain.operational_day(local_now())
+    except ValueError:
+        first = domain.operational_day(local_now())
+    conn = get_conn()
+    try:
+        sheets = printout.sheets(conn, first, dager)
+    finally:
+        conn.close()
+    return TEMPLATES.TemplateResponse(request, "print.html", {
+        "sheets": sheets, "printed_at": local_now(), "autoprint": bool(skriv),
+        "back": _safe_next(tilbake or f"/plan/dag?date={first}")})
 
 
 @app.get("/plan/dag", response_class=HTMLResponse)

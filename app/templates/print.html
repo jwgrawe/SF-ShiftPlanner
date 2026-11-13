@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% block title %}Utskrift – SF-Planlegger{% endblock %}
+{% block body_class %}printpage{% endblock %}
+{% block header %}{% endblock %}
+{% block content %}
+<div class="print-toolbar">
+  <button class="btn" type="button" onclick="window.print()">Skriv ut</button>
+  <a class="btn secondary" href="{{ back }}">Tilbake</a>
+  <span class="muted small">{{ sheets|length }} side{% if sheets|length != 1 %}r{% endif %} · A4 stående.
+    Velg «Skriv ut» – eller «Lagre som PDF» i utskriftsvinduet.</span>
+</div>
+
+{% if not sheets %}
+  <div class="card print-empty"><h1>Ingenting å skrive ut</h1>
+    <p>Det er ingen plan for disse dagene ennå. Lag planen under «Plan» først.</p></div>
+{% endif %}
+{% for sheet in sheets %}
+<section class="sheet"><div class="sheet-body">
+  <header class="sheet-head">
+    <div>
+      <h1>Fordeling, SF</h1>
+      <div class="sheet-date">{{ sheet.weekday }} {{ sheet.date.strftime("%d.%m.%Y") }}{% if sheet.weekend %} · helg/helligdag{% endif %}</div>
+    </div>
+    {% if not sheet.published %}<div class="sheet-draft">UTKAST – ikke publisert</div>{% endif %}
+  </header>
+
+  {% if not sheet.has_plan and not sheet.crew %}
+    <p class="sheet-empty">Ingen plan for denne dagen ennå.</p>
+  {% endif %}
+
+  {% for table in sheet.tables %}
+    <table class="sheet-table">
+      <thead>
+        <tr><th class="cat" colspan="{{ table.columns|length + 1 }}">{{ table.label }} <span>{{ table.span }}</span></th></tr>
+        {% if table.columns|length > 1 %}
+          <tr><th></th>{% for col in table.columns %}<th class="col">{{ col }}</th>{% endfor %}</tr>
+        {% endif %}
+      </thead>
+      <tbody>
+        {% for fn in table.functions %}
+          <tr>
+            <th class="fn"><span class="zonebar {{ fn.zone_id }}"></span>{{ fn.name }}</th>
+            {% for cell in fn.cells %}
+              <td>{% for p in cell %}<span class="who">{{ p.name }}{% if p.note %} <small>{{ p.note }}</small>{% endif %}</span>{% else %}<span class="none">–</span>{% endfor %}</td>
+            {% endfor %}
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% endfor %}
+
+  {% if sheet.crew %}
+    <table class="sheet-table">
+      <thead><tr><th class="cat">På jobb – fordeles ad hoc</th></tr></thead>
+      <tbody><tr><td>{% for p in sheet.crew %}<span class="who">{{ p.name }} <small>{{ p.span }}</small></span>{% endfor %}</td></tr></tbody>
+    </table>
+  {% endif %}
+
+  {% if sheet.day_info %}
+    <div class="sheet-info"><strong>Diverse info</strong><p>{{ sheet.day_info }}</p></div>
+  {% endif %}
+
+  {% if sheet.index %}
+    <div class="sheet-index">
+      <h2>Finn deg selv</h2>
+      <ul>
+        {% for p in sheet.index %}
+          <li><strong>{{ p.name }}</strong> <span class="muted">{{ p.span }}</span>:
+            {% for step in p.steps %}{% if step.at %} → {{ step.at }} {% endif %}{{ step.function }}{% endfor %}</li>
+        {% endfor %}
+      </ul>
+    </div>
+  {% endif %}
+
+  <footer class="sheet-foot">Skrevet ut {{ printed_at.strftime("%d.%m.%Y kl. %H:%M") }}. Planen kan endres etter utskrift – spør leder ved tvil.</footer>
+</div></section>
+{% endfor %}
+
+<script>
+  // Each day on one A4: a sheet whose content is too tall is scaled down just
+  // enough to fit (not below 60 %, to stay readable on the wall).
+  function fitSheets() {
+    document.querySelectorAll(".sheet").forEach(function (sheet) {
+      var body = sheet.querySelector(".sheet-body");
+      body.style.zoom = 1;
+      var style = getComputedStyle(sheet);
+      var room = sheet.clientHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom);
+      var need = body.scrollHeight;
+      body.style.zoom = need > room ? Math.max(0.6, (room - 4) / need) : 1;
+    });
+  }
+  window.addEventListener("load", function () {
+    fitSheets();
+    {% if autoprint %}window.print();{% endif %}
+  });
+  window.addEventListener("beforeprint", fitSheets);
+</script>
+{% endblock %}

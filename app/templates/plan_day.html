@@ -26,6 +26,7 @@
   {% if has_plan %}
     <a class="btn" href="/plan/dag/rediger?date={{ plan_date }}">Rediger planen</a>
     <a class="btn secondary" target="_blank" rel="noopener" href="/display?date={{ plan_date }}&time=10:00">Forhåndsvis tavle</a>
+    <a class="btn secondary" href="/plan/utskrift?fra={{ plan_date }}&skriv=1">Skriv ut</a>
     {% if status == "draft" %}
       <form method="post" action="/plan/publiser">
         <input type="hidden" name="start" value="{{ plan_date }}">

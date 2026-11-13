@@ -692,3 +692,53 @@ details.av-fixed > summary { cursor: pointer; color: var(--ink-soft); font-weigh
 .login-box { max-width: 34rem; margin: 3rem auto; }
 .login-box h1 { margin-top: 0; }
 .login-box ol { padding-left: 1.2rem; }
+
+/* ------------------------------------------------------- the printed plan (D123) */
+body.printpage { background: #e9eef1; }
+body.printpage main { max-width: none; padding: 0; }
+.print-empty { max-width: 40rem; margin: 2rem auto; }
+.print-toolbar {
+  display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap;
+  padding: 0.6rem 1rem; background: var(--surface); border-bottom: 1px solid var(--line);
+}
+.sheet {
+  width: 210mm; height: 297mm; margin: 1rem auto; padding: 10mm 11mm; box-sizing: border-box; overflow: hidden;
+  background: #fff; color: #111; box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
+  font-size: 10.5pt; line-height: 1.25;
+}
+.sheet-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem;
+  border-bottom: 2.5pt solid #111; padding-bottom: 2mm; margin-bottom: 3mm; }
+.sheet-head h1 { margin: 0; font-size: 17pt; }
+.sheet-date { font-size: 14pt; font-weight: 700; }
+.sheet-draft { border: 2pt solid #8c3a2a; color: #8c3a2a; font-weight: 800; padding: 1.5mm 3mm;
+  font-size: 12pt; letter-spacing: 0.04em; }
+.sheet-empty { font-size: 14pt; margin: 2rem 0; }
+.sheet-table { width: 100%; border-collapse: collapse; margin: 0 0 3mm; background: #fff; font-size: 10pt;
+  break-inside: avoid; page-break-inside: avoid; }
+.sheet-table th, .sheet-table td { border: 0.6pt solid #888; padding: 0.9mm 1.6mm; vertical-align: top; text-align: left;
+  color: #111; background: #fff; text-transform: none; letter-spacing: 0; font-size: inherit; }
+.sheet-table th.cat { background: #e8e8e8; font-size: 11.5pt; font-weight: 800; }
+.sheet-table th.cat span { font-weight: 600; margin-left: 2mm; }
+.sheet-table th.col { font-weight: 700; background: #f4f4f4; width: 40%; }
+.sheet-table th.fn { width: 20%; font-weight: 700; white-space: nowrap; }
+.zonebar { display: inline-block; width: 2.2mm; height: 3.6mm; margin-right: 1.6mm; vertical-align: -0.4mm; background: #999; }
+.zonebar.uren { background: #b25f4d; } .zonebar.ren { background: #4877ab; }
+.zonebar.steril { background: #54876a; } .zonebar.utpost { background: #9c7a3d; } .zonebar.adhoc { background: #6b7a83; }
+.who { display: inline-block; margin: 0 2.5mm 0.3mm 0; font-weight: 600; white-space: nowrap; }
+.who small { font-weight: 400; color: #444; }
+.none { color: #999; }
+.sheet-info { border: 1.5pt solid #111; padding: 1.5mm 3mm; margin: 0 0 3mm; break-inside: avoid; }
+.sheet-info p { margin: 0.5mm 0 0; white-space: pre-wrap; font-size: 11.5pt; font-weight: 600; }
+.sheet-index h2 { font-size: 11pt; margin: 0 0 1mm; }
+.sheet-index ul { columns: 3; column-gap: 5mm; margin: 0; padding: 0; list-style: none; font-size: 8.5pt; }
+.sheet-index li { break-inside: avoid; margin: 0 0 0.3mm; }
+.sheet-foot { margin-top: 3mm; font-size: 8pt; color: #555; border-top: 0.6pt solid #999; padding-top: 1.5mm; }
+
+@media print {
+  @page { size: A4 portrait; margin: 0; }
+  body.printpage { background: #fff; }
+  .print-toolbar { display: none !important; }
+  .sheet { margin: 0; box-shadow: none; height: 297mm; overflow: hidden; break-after: page; page-break-after: always; }
+  .sheet:last-of-type { break-after: auto; page-break-after: auto; }
+  .zonebar, .sheet-table th.cat, .sheet-table th.col { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}
