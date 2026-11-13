@@ -130,6 +130,14 @@ def main() -> None:
 
         profile = ROOT / "data" / "tavle-profil"
         threading.Timer(2.0, lambda: print(kiosk.open_board(f"{url}tavle", profile, args.tavle_x))).start()
+    if not db.is_demo():
+        from app import auth, folder_check
+
+        folders = folder_check.status(ROOT, db.DATA_DIR, auth.process_account())
+        if folders and folders["open"]:
+            print("OBS: alle som logger på denne PC-en, kommer til appens filer ("
+                  + "; ".join(folder_check.describe(e) for e in folders["open"])
+                  + "). Se Administrasjon → Tilgang for hvordan du strammer inn.")
     mode = "DEMO (fiktive ansatte)" if db.is_demo() else "ekte data fra data/import/"
     print(f"SF-Planlegger kjører på {url} – {mode}  (stopp med Ctrl+C)")
     uvicorn.run(fastapi_app, host="127.0.0.1", port=args.port, log_level="warning")

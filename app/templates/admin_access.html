@@ -54,5 +54,31 @@ engangsnøkkel som gjør nettopp den nettleseren til rot så lenge appen kjører
 <p class="small">Innloggingsmåte: {{ methods[method] }}.</p>
 {% endif %}
 
+<h2>Filene på PC-en</h2>
+<p class="small" style="max-width:48rem">Innloggingen beskytter skjermbildene i appen. Selve filene – databasen,
+importfilene og koden – beskyttes av mappetillatelsene i Windows: den som kan lese datamappen, kan kopiere databasen
+og åpne den med et hvilket som helst verktøy, og den som kan endre appmappen, kan skru av innloggingen.</p>
+{% if folders is none %}
+  <p class="muted small">Mappetillatelsene kan bare sjekkes når appen kjører på Windows.</p>
+{% elif folders.error %}
+  <p class="note">Fikk ikke lest mappetillatelsene: {{ folders.error }}</p>
+{% elif folders.ok %}
+  <p class="note ok">✔ Ingen brede grupper (Alle, Godkjente brukere, Brukere, Domenebrukere) har tilgang til
+    <code>{{ folders.folder }}</code>. Bare kontoene som er gitt tilgang, administratorer på PC-en (IT) og Windows selv
+    kommer til filene.</p>
+{% else %}
+  <div class="card warn-card" style="max-width:48rem">
+    <h3 style="margin-top:0">Alle som logger på denne PC-en, kommer til filene</h3>
+    <ul class="small">{% for e in folders.open %}<li>{{ folder_text(e) }}</li>{% endfor %}</ul>
+    <p class="small">Slik strammer du inn (tar et øyeblikk, uten administratorrettigheter når du selv laget mappen):
+      lukk appen, åpne en terminal og kjør</p>
+    <pre class="small">{{ folders.fix }}</pre>
+    <p class="small">Da har bare <code>{{ process_account }}</code>, administratorene på PC-en (IT) og Windows tilgang.
+      Andre ledere som skal starte appen eller legge filer i <code>data\import</code> fra sin egen Windows-konto,
+      legges til med <code>icacls "{{ folders.folder }}" /grant "DOMENE\bruker:(OI)(CI)M"</code> – eller be IT om en
+      gruppe for lederne. Se <code>docs/security.md</code>.</p>
+  </div>
+{% endif %}
+
 {{ log_panel(log, "Logg – tilgang") }}
 {% endblock %}

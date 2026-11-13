@@ -109,6 +109,9 @@ tr:last-child td { border-bottom: none; }
   background: var(--warn-bg); border: 1px solid var(--warn-line); color: var(--warn-ink);
   border-radius: var(--radius); padding: 0.6rem 0.9rem; margin: 0.8rem 0; font-size: 0.96rem;
 }
+.note.ok { background: var(--ok-bg); border-color: var(--ok-line); color: var(--ok-ink); }
+.warn-card { border-left: 4px solid #c79a3a; }
+.warn-card pre { white-space: pre-wrap; word-break: break-all; background: var(--bg, #f4f6f7); padding: 0.5rem 0.7rem; border-radius: var(--radius); user-select: all; }
 .card {
   background: var(--surface); border: 1px solid var(--line);
   border-radius: var(--radius); padding: 0.9rem 1.1rem; margin: 0.8rem 0;

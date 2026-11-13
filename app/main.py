@@ -27,7 +27,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from app import absences as absences_mod
-from app import applog, auth, checks, competency, contingency, db, domain, exposure, hr_import, planner, printout, roster_changes, rules, service, shift_codes, winauth
+from app import applog, auth, checks, competency, contingency, db, domain, exposure, folder_check, hr_import, planner, printout, roster_changes, rules, service, shift_codes, winauth
 from app.hr_export import Rejected
 
 try:
@@ -49,6 +49,7 @@ TEMPLATES.env.globals["is_demo"] = db.is_demo
 TEMPLATES.env.globals["current_user"] = lambda: CURRENT_USER.get()
 TEMPLATES.env.globals["access_open"] = lambda: not db.is_demo() and not _access_set_up()
 TEMPLATES.env.globals["kind_label"] = hr_import.kind_label
+TEMPLATES.env.globals["folder_text"] = folder_check.describe
 
 
 def _unknown_shift_count() -> int:
@@ -940,6 +941,7 @@ def admin_access(request: Request):
             "admins": auth.admins(conn), "method": auth.method(conn), "methods": auth.METHODS,
             "is_root": (CURRENT_USER.get() or {}).get("role") == "root",
             "process_account": auth.process_account(), "log": applog.entries(conn, "tilgang"),
+            "folders": folder_check.status(db.REPO_ROOT, db.DATA_DIR, auth.process_account()),
         })
     finally:
         conn.close()
