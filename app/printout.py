@@ -1,17 +1,21 @@
 """The daily plan on paper (D123), until the board screen is in place.
 
-One A4 sheet per day to hang where everyone can see it. Public content only,
-like the board (D46/D120): names, placements, times and «Diverse info».
+One A4 sheet per day to hang where everyone can see it, laid out like the
+board (light theme – a dark page would only use up ink): zone cards with the
+zone's colour band, function names in capitals over a rule, each person on
+their own row with a chip saying where they go at the rotation.
 
-Laid out for reading on a wall:
-- one table per shift category (Tidligvakt, Mellomvakt, …): a row per
-  function, one column before and one after the category's rotation time,
-  so «where am I before and after 11:00» is one glance along a row;
-- an alphabetical list of everyone on the plan with their placements, for
-  finding yourself quickly;
-- on weekends, the crew working ad hoc;
-- a clear «UTKAST» mark when the day isn't published, and when it was
-  printed, since the plan can change after printing.
+The board shows one moment; a sheet shows the whole day, so it has a section
+per shift (Tidligvakt, Mellomvakt, Senvakt, Nattevakt) with that shift's
+rotation time. Each person is listed once, under the function they start in,
+with a chip per move («→ Ren sone (Brikkelegging)», plus the time when it
+isn't the shift's usual rotation). A start or end that differs from the
+shift's usual hours is written after the name. Weekends add the crew working
+ad hoc, as on the board.
+
+Public content only, like the board (D46/D120): names, placements, times and
+«Diverse info». A clear «UTKAST» mark when the day isn't published, and the
+time it was printed, since the plan can change after printing.
 """
 from __future__ import annotations
 
@@ -28,67 +32,84 @@ def _short(t: dt.datetime) -> str:
     return t.strftime("%H") if t.minute == 0 else t.strftime("%H:%M")
 
 
+def _span(start: dt.datetime, end: dt.datetime) -> str:
+    return f"{_short(start)}–{_short(end)}"
+
+
 def day_sheet(conn: sqlite3.Connection, date: dt.date) -> dict:
     rows = service.day_assignments(conn, date)
     rotations = service.rotation_times(conn)
     status = service.day_status(conn, date)
 
-    categories: dict[str, dict] = {}
-    people: dict[str, list] = defaultdict(list)
+    # Each person's segments, in the shift category they belong to.
+    segments: dict[str, list] = defaultdict(list)
+    category_of: dict[str, str] = {}
     for row in rows:
         start, end = service._to_datetimes(date, row)
-        category = row["shift_category"] or ""
+        segments[row["employee_id"]].append((start, end, row))
+        category_of.setdefault(row["employee_id"], row["shift_category"] or "")
+
+    by_category: dict[str, list] = defaultdict(list)
+    for employee, parts in segments.items():
+        parts.sort(key=lambda p: p[0])
+        by_category[category_of[employee]].append(parts)
+
+    shifts = []
+    for category in sorted(by_category, key=lambda c: ORDER.index(c) if c in ORDER else 99):
+        people = by_category[category]
+        first = min(p[0][0] for p in people)
+        last = max(p[-1][1] for p in people)
+        usual = Counter((p[0][0], p[-1][1]) for p in people).most_common(1)[0][0]
         rotation = rotations.get(category)
         cut = dt.datetime.combine(date, rotation) if rotation else None
-        group = categories.setdefault(category, {"cut": cut, "functions": {}, "spans": []})
-        column = 0 if group["cut"] is None or start < group["cut"] else 1
-        fn = group["functions"].setdefault(row["function_id"], {
-            "name": row["function_name"], "zone": row["zone_name"], "zone_id": row["zone_id"],
-            "order": (row["zone_order"], row["function_order"]), "cells": [[], []]})
-        fn["cells"][column].append({"name": row["display_name"], "start": start, "end": end})
-        group["spans"].append((start, end))
-        people[row["display_name"]].append((start, end, row["short_name"] or row["function_name"],
-                                            row["zone_id"]))
-
-    tables = []
-    for category in sorted(categories, key=lambda c: ORDER.index(c) if c in ORDER else 99):
-        group = categories[category]
-        cut = group["cut"]
-        first = min(s for s, _ in group["spans"])
-        last = max(e for _, e in group["spans"])
         if cut is not None and not first < cut < last:
-            cut = None                                # nobody works on both sides: one column
-        columns = ([f"{_short(first)}–{_short(cut)}", f"{_short(cut)}–{_short(last)}"]
-                   if cut else [f"{_short(first)}–{_short(last)}"])
-        functions = []
-        for fn in sorted(group["functions"].values(), key=lambda f: f["order"]):
-            cells = fn["cells"] if cut else [fn["cells"][0] + fn["cells"][1], []]
-            out = []
-            for entries in cells[:len(columns)]:
-                usual = Counter((e["start"], e["end"]) for e in entries).most_common(1)
-                usual = usual[0][0] if usual else None
-                out.append([{"name": e["name"],
-                             "note": "" if (e["start"], e["end"]) == usual
-                             else f"{_short(e['start'])}–{_short(e['end'])}"}
-                            for e in sorted(entries, key=lambda e: (e["start"], e["name"]))])
-            functions.append({"name": fn["name"], "zone": fn["zone"], "zone_id": fn["zone_id"],
-                              "cells": out})
-        tables.append({"label": service.SHIFT_CATEGORY_LABELS.get(category, category or "Vakt"),
-                       "span": f"{_short(first)}–{_short(last)}", "columns": columns,
-                       "functions": functions})
+            cut = None
+        zones: dict[str, dict] = {}
+        for parts in people:
+            start, end, row = parts[0]
+            moves, current = [], row["function_id"]
+            for s_, _, later in parts[1:]:
+                if later["function_id"] == current:
+                    continue
+                moves.append({"zone_id": later["zone_id"], "zone_name": later["zone_name"],
+                              "short_name": later["short_name"] or later["function_name"],
+                              "at": "" if s_ == cut else _short(s_)})
+                current = later["function_id"]
+            own = (parts[0][0], parts[-1][1])
+            zone = zones.setdefault(row["zone_id"], {"zone_id": row["zone_id"], "name": row["zone_name"],
+                                                     "order": row["zone_order"], "functions": {}})
+            fn = zone["functions"].setdefault(row["function_id"], {
+                "name": row["function_name"], "order": row["function_order"], "people": []})
+            fn["people"].append({"name": row["display_name"], "start": own[0],
+                                 "note": "" if own == usual else _span(*own), "moves": moves})
+        zone_list = []
+        for zone in sorted(zones.values(), key=lambda z: z["order"]):
+            functions = []
+            for fn in sorted(zone["functions"].values(), key=lambda f: f["order"]):
+                fn["people"].sort(key=lambda p: (p["start"], p["name"].lower()))
+                functions.append({"name": fn["name"],
+                                  "people": [{k: p[k] for k in ("name", "note", "moves")} for p in fn["people"]]})
+            zone_list.append({"zone_id": zone["zone_id"], "name": zone["name"], "order": zone["order"],
+                              "functions": functions})
+        shifts.append({"label": service.SHIFT_CATEGORY_LABELS.get(category, category or "Vakt"),
+                       "span": _span(first, last),
+                       "rotation": cut.strftime("%H:%M") if cut and any(
+                           m["at"] == "" for z in zone_list for f in z["functions"] for p in f["people"]
+                           for m in p["moves"]) else "",
+                       "zones": zone_list})
 
-    index = []
-    for name in sorted(people, key=str.lower):
-        parts = sorted(people[name])
-        steps, previous = [], None
-        for start, end, function, zone_id in parts:
-            if previous == function:
-                continue
-            steps.append({"function": function, "zone_id": zone_id,
-                          "at": start.strftime("%H:%M") if steps else ""})
-            previous = function
-        index.append({"name": name, "span": f"{_short(parts[0][0])}–{_short(parts[-1][1])}",
-                      "steps": steps})
+    # A fixed column per zone, the same on every shift (uren | ren | steril),
+    # so a zone is always in the same place on the sheet.
+    columns, seen = [], set()
+    for zone in sorted((z for sh in shifts for z in sh["zones"]), key=lambda z: z["order"]):
+        if zone["zone_id"] not in seen:
+            seen.add(zone["zone_id"])
+            columns.append({"zone_id": zone["zone_id"], "name": zone["name"]})
+    for shift in shifts:
+        present = {z["zone_id"]: z for z in shift["zones"]}
+        shift["zones"] = [{"zone_id": c["zone_id"], "name": c["name"],
+                           "functions": present[c["zone_id"]]["functions"] if c["zone_id"] in present else []}
+                          for c in columns]
 
     crew = []
     if status["day_kind"] == "weekend_holiday":
@@ -109,8 +130,8 @@ def day_sheet(conn: sqlite3.Connection, date: dt.date) -> dict:
         "weekend": status["day_kind"] == "weekend_holiday",
         "published": status["status"] == "published",
         "has_plan": bool(rows),
-        "tables": tables,
-        "index": index,
+        "shifts": shifts,
+        "columns": len(columns),
         "crew": crew,
         "day_info": service.day_info(conn, date),
     }

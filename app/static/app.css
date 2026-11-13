@@ -717,33 +717,54 @@ body.printpage main { max-width: none; padding: 0; }
   background: #fff; color: #111; box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
   font-size: 10.5pt; line-height: 1.25;
 }
-.sheet-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem;
-  border-bottom: 2.5pt solid #111; padding-bottom: 2mm; margin-bottom: 3mm; }
-.sheet-head h1 { margin: 0; font-size: 17pt; }
-.sheet-date { font-size: 14pt; font-weight: 700; }
-.sheet-draft { border: 2pt solid #8c3a2a; color: #8c3a2a; font-weight: 800; padding: 1.5mm 3mm;
-  font-size: 12pt; letter-spacing: 0.04em; }
+/* Laid out like the board in its light theme (D69/D123); sizes in pt for paper. */
+.sheet .p-top { display: flex; justify-content: space-between; align-items: baseline; gap: 4mm; }
+.sheet .p-top h1 { margin: 0; font-size: 20pt; color: #0d161b; }
+.sheet .p-date { font-size: 17pt; font-weight: 700; color: #0d161b; }
+.sheet .p-daylabel { color: #5a6b74; font-size: 10pt; margin: 0.5mm 0 2.5mm; display: flex; align-items: center; gap: 3mm; }
+.sheet-draft { border: 1.5pt solid #8c3a2a; color: #8c3a2a; font-weight: 800; padding: 0.5mm 2.5mm;
+  font-size: 10pt; letter-spacing: 0.04em; border-radius: 3pt; }
 .sheet-empty { font-size: 14pt; margin: 2rem 0; }
-.sheet-table { width: 100%; border-collapse: collapse; margin: 0 0 3mm; background: #fff; font-size: 10pt;
-  break-inside: avoid; page-break-inside: avoid; }
-.sheet-table th, .sheet-table td { border: 0.6pt solid #888; padding: 0.9mm 1.6mm; vertical-align: top; text-align: left;
-  color: #111; background: #fff; text-transform: none; letter-spacing: 0; font-size: inherit; }
-.sheet-table th.cat { background: #e8e8e8; font-size: 11.5pt; font-weight: 800; }
-.sheet-table th.cat span { font-weight: 600; margin-left: 2mm; }
-.sheet-table th.col { font-weight: 700; background: #f4f4f4; width: 40%; }
-.sheet-table th.fn { width: 20%; font-weight: 700; white-space: nowrap; }
-.zonebar { display: inline-block; width: 2.2mm; height: 3.6mm; margin-right: 1.6mm; vertical-align: -0.4mm; background: #999; }
-.zonebar.uren { background: #b25f4d; } .zonebar.ren { background: #4877ab; }
-.zonebar.steril { background: #54876a; } .zonebar.utpost { background: #9c7a3d; } .zonebar.adhoc { background: #6b7a83; }
-.who { display: inline-block; margin: 0 2.5mm 0.3mm 0; font-weight: 600; white-space: nowrap; }
-.who small { font-weight: 400; color: #444; }
-.none { color: #999; }
-.sheet-info { border: 1.5pt solid #111; padding: 1.5mm 3mm; margin: 0 0 3mm; break-inside: avoid; }
-.sheet-info p { margin: 0.5mm 0 0; white-space: pre-wrap; font-size: 11.5pt; font-weight: 600; }
-.sheet-index h2 { font-size: 11pt; margin: 0 0 1mm; }
-.sheet-index ul { columns: 3; column-gap: 5mm; margin: 0; padding: 0; list-style: none; font-size: 8.5pt; }
-.sheet-index li { break-inside: avoid; margin: 0 0 0.3mm; }
-.sheet-foot { margin-top: 3mm; font-size: 8pt; color: #555; border-top: 0.6pt solid #999; padding-top: 1.5mm; }
+.p-shift { margin: 0 0 2.5mm; }
+.p-shifthead { margin: 0 0 1.2mm; font-size: 12.5pt; color: #0d161b; border-bottom: 1.5pt solid #0d161b;
+  padding-bottom: 0.6mm; display: flex; align-items: baseline; gap: 2.5mm; break-after: avoid; }
+.p-shifthead span { font-weight: 600; color: #5a6b74; font-size: 11pt; }
+.p-shifthead .p-rot { margin-left: auto; font-size: 9.5pt; }
+.p-zones { display: grid; gap: 3mm; align-items: start; }
+.sheet .zone { break-inside: avoid; page-break-inside: avoid;
+  border-radius: 4pt; overflow: hidden; margin: 0; background: #fff; border: 0.75pt solid #cfd9de; }
+.sheet .zone > header { padding: 0.8mm 2.5mm; font-size: 10.5pt; font-weight: 700; color: #fff;
+  display: flex; justify-content: space-between; align-items: center; }
+.sheet .zone.uren > header { background: var(--z-uren); }
+.sheet .zone.ren > header { background: var(--z-ren); }
+.sheet .zone.steril > header { background: var(--z-steril); }
+.sheet .zone.utpost > header { background: var(--z-utpost); }
+.sheet .zone.adhoc > header { background: var(--z-adhoc); }
+.sheet .fngroup { padding: 0 2.5mm 0.8mm; }
+.sheet .fnname { font-size: 8pt; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: #0d161b;
+  margin: 1.4mm 0 0.3mm; padding-bottom: 0.4mm; border-bottom: 1pt solid #aebec6; }
+.sheet ul.people { list-style: none; margin: 0; padding: 0; }
+.sheet ul.people li { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 0.5mm 2mm;
+  padding: 0.55mm 0; font-size: 10pt; border-bottom: 0.5pt solid #e4eaed; color: #17242b; }
+.sheet ul.people li:last-child { border-bottom: none; }
+.sheet .pname { font-weight: 700; }
+.sheet .pname small { font-weight: 500; color: #5a6b74; font-size: 8.5pt; }
+.sheet .chips { display: flex; flex-wrap: wrap; gap: 0.8mm; justify-content: flex-end; margin-left: auto; }
+.sheet .nextchip { font-size: 7.8pt; font-weight: 600; white-space: nowrap; border-radius: 999px; padding: 0.15mm 2mm; color: #fff; }
+.sheet .nextchip.uren { background: var(--z-uren); }
+.sheet .nextchip.ren { background: var(--z-ren); }
+.sheet .nextchip.steril { background: var(--z-steril); }
+.sheet .nextchip.utpost { background: var(--z-utpost); }
+.sheet .nextchip.adhoc { background: var(--z-adhoc); }
+.sheet .nextchip.none { background: transparent; color: #5a6b74; font-weight: 500; }
+.sheet .adhoc-tag { font-size: 7.5pt; font-weight: 600; background: rgba(255, 255, 255, 0.25); border-radius: 999px; padding: 0.2mm 2mm; }
+.sheet .p-crew { margin: 0 0 2.5mm; }
+.sheet .p-crew .people { column-count: 3; column-gap: 5mm; }
+.sheet .dayinfo { margin: 1mm 0 2mm; border-radius: 4pt; padding: 1.5mm 3mm; background: #fdf3d6; color: #3d2c05;
+  border: 1pt solid #a8791d; border-left-width: 2.5mm; break-inside: avoid; }
+.sheet .dayinfo h2 { margin: 0 0 0.5mm; font-size: 8.5pt; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #6b4a0d; }
+.sheet .dayinfo p { margin: 0; font-size: 11pt; font-weight: 600; line-height: 1.35; white-space: pre-wrap; }
+.sheet-foot { margin-top: 2mm; font-size: 7.5pt; color: #5a6b74; border-top: 0.5pt solid #cfd9de; padding-top: 1.2mm; }
 
 @media print {
   @page { size: A4 portrait; margin: 0; }
@@ -751,5 +772,5 @@ body.printpage main { max-width: none; padding: 0; }
   .print-toolbar { display: none !important; }
   .sheet { margin: 0; box-shadow: none; height: 297mm; overflow: hidden; break-after: page; page-break-after: always; }
   .sheet:last-of-type { break-after: auto; page-break-after: auto; }
-  .zonebar, .sheet-table th.cat, .sheet-table th.col { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .sheet, .sheet * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }

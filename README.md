@@ -97,9 +97,11 @@ week). Preview any moment with e.g. `/display?date=ÅÅÅÅ-MM-DD&time=10:30`.
 3. **Print the plan to hang up** (until the board screen is in place):
    «I dag» has **Skriv ut i dag** / **Skriv ut i morgen**, a day's plan has
    **Skriv ut**, and the week view has **Skriv ut uken** (one page per day).
-   Each day fits one A4 page (portrait): a table per shift with the
-   function's people before and after the rotation, «Diverse info», and an
-   alphabetical «Finn deg selv» list. A day that isn't published is marked
+   Each day fits one A4 page (portrait), laid out like the board in its
+   light theme: a section per shift with a zone card per zone (always in the
+   same column), each person under the function they start in with a chip
+   for where they go at the rotation, and «Diverse info». A day that isn't
+   published is marked
    **UTKAST**; the footer says when it was printed. Like the board, the
    sheet shows names, placements, times and Diverse info only (D123).
 

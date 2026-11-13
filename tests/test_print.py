@@ -13,14 +13,14 @@ sys.path.insert(0, str(ROOT))
 
 from app import db, demo, importer, planner, printout, service  # noqa: E402
 
-SHEET_KEYS = {"date", "weekday", "weekend", "published", "has_plan", "tables", "index", "crew", "day_info"}
-TABLE_KEYS = {"label", "span", "columns", "functions"}
-FUNCTION_KEYS = {"name", "zone", "zone_id", "cells"}
-CELL_KEYS = {"name", "note"}
-INDEX_KEYS = {"name", "span", "steps"}
-STEP_KEYS = {"function", "zone_id", "at"}
+SHEET_KEYS = {"date", "weekday", "weekend", "published", "has_plan", "shifts", "columns", "crew", "day_info"}
+SHIFT_KEYS = {"label", "span", "rotation", "zones"}
+ZONE_KEYS = {"zone_id", "name", "functions"}
+FUNCTION_KEYS = {"name", "people"}
+PERSON_KEYS = {"name", "note", "moves"}
+MOVE_KEYS = {"zone_id", "zone_name", "short_name", "at"}
 CREW_KEYS = {"name", "span"}
-TEMPLATE_NAMES = SHEET_KEYS | {"sheets", "sheet", "table", "col", "fn", "cell", "p", "step", "printed_at",
+TEMPLATE_NAMES = SHEET_KEYS | {"sheets", "sheet", "shift", "zone", "fn", "p", "m", "printed_at",
                                "autoprint", "back", "loop", "strftime"}
 
 
@@ -51,30 +51,35 @@ class PrintSheetTest(unittest.TestCase):
     def test_the_sheet_holds_only_public_fields(self):
         sheet = printout.day_sheet(self.conn, self.day)
         self.assertEqual(set(sheet), SHEET_KEYS)
-        self.assertTrue(sheet["tables"] and sheet["index"])
-        for table in sheet["tables"]:
-            self.assertEqual(set(table), TABLE_KEYS)
-            for fn in table["functions"]:
-                self.assertEqual(set(fn), FUNCTION_KEYS)
-                self.assertEqual(len(fn["cells"]), len(table["columns"]))
-                for cell in fn["cells"]:
-                    for person in cell:
-                        self.assertEqual(set(person), CELL_KEYS)
-        for person in sheet["index"]:
-            self.assertEqual(set(person), INDEX_KEYS)
-            for step in person["steps"]:
-                self.assertEqual(set(step), STEP_KEYS)
+        self.assertTrue(sheet["shifts"])
+        for shift in sheet["shifts"]:
+            self.assertEqual(set(shift), SHIFT_KEYS)
+            for zone in shift["zones"]:
+                self.assertEqual(set(zone), ZONE_KEYS)
+                for fn in zone["functions"]:
+                    self.assertEqual(set(fn), FUNCTION_KEYS)
+                    for person in fn["people"]:
+                        self.assertEqual(set(person), PERSON_KEYS)
+                        for move in person["moves"]:
+                            self.assertEqual(set(move), MOVE_KEYS)
         for person in sheet["crew"]:
             self.assertEqual(set(person), CREW_KEYS)
 
-    def test_everyone_placed_is_on_the_sheet_once_in_the_index(self):
+    def test_everyone_placed_is_on_the_sheet_once_with_their_moves(self):
         sheet = printout.day_sheet(self.conn, self.day)
-        placed = {r["display_name"] for r in service.day_assignments(self.conn, self.day)}
-        names = [p["name"] for p in sheet["index"]]
-        self.assertEqual(sorted(set(names)), sorted(placed))
-        self.assertEqual(len(names), len(set(names)))
-        in_tables = {p["name"] for t in sheet["tables"] for f in t["functions"] for c in f["cells"] for p in c}
-        self.assertEqual(in_tables, placed)
+        rows = service.day_assignments(self.conn, self.day)
+        placed = {r["display_name"] for r in rows}
+        people = [p for s in sheet["shifts"] for z in s["zones"] for f in z["functions"] for p in f["people"]]
+        names = [p["name"] for p in people]
+        self.assertEqual(sorted(names), sorted(placed))                 # each person once
+        functions = {}
+        for r in sorted(rows, key=lambda r: r["start"]):
+            functions.setdefault(r["display_name"], [])
+            if not functions[r["display_name"]] or functions[r["display_name"]][-1] != r["function_id"]:
+                functions[r["display_name"]].append(r["function_id"])
+        for p in people:                                                # a chip per change of function
+            self.assertEqual(len(p["moves"]), len(functions[p["name"]]) - 1, p["name"])
+        self.assertTrue(any(p["moves"] for p in people))
 
     def test_draft_and_published(self):
         self.assertFalse(printout.day_sheet(self.conn, self.day)["published"])

@@ -16,60 +16,55 @@
 {% endif %}
 {% for sheet in sheets %}
 <section class="sheet"><div class="sheet-body">
-  <header class="sheet-head">
-    <div>
-      <h1>Fordeling, SF</h1>
-      <div class="sheet-date">{{ sheet.weekday }} {{ sheet.date.strftime("%d.%m.%Y") }}{% if sheet.weekend %} · helg/helligdag{% endif %}</div>
-    </div>
-    {% if not sheet.published %}<div class="sheet-draft">UTKAST – ikke publisert</div>{% endif %}
-  </header>
+  <div class="p-top">
+    <h1>Fordeling, SF</h1>
+    <span class="p-date">{{ sheet.weekday }} {{ sheet.date.strftime("%d.%m.%Y") }}</span>
+  </div>
+  <div class="p-daylabel">{% if sheet.weekend %}Helg/helligdag · {% endif %}Hele dagen
+    {% if sheet.has_plan and not sheet.published %}<span class="sheet-draft">UTKAST – ikke publisert</span>{% endif %}</div>
 
   {% if not sheet.has_plan and not sheet.crew %}
     <p class="sheet-empty">Ingen plan for denne dagen ennå.</p>
   {% endif %}
 
-  {% for table in sheet.tables %}
-    <table class="sheet-table">
-      <thead>
-        <tr><th class="cat" colspan="{{ table.columns|length + 1 }}">{{ table.label }} <span>{{ table.span }}</span></th></tr>
-        {% if table.columns|length > 1 %}
-          <tr><th></th>{% for col in table.columns %}<th class="col">{{ col }}</th>{% endfor %}</tr>
-        {% endif %}
-      </thead>
-      <tbody>
-        {% for fn in table.functions %}
-          <tr>
-            <th class="fn"><span class="zonebar {{ fn.zone_id }}"></span>{{ fn.name }}</th>
-            {% for cell in fn.cells %}
-              <td>{% for p in cell %}<span class="who">{{ p.name }}{% if p.note %} <small>{{ p.note }}</small>{% endif %}</span>{% else %}<span class="none">–</span>{% endfor %}</td>
-            {% endfor %}
-          </tr>
+  {% for shift in sheet.shifts %}
+    <section class="p-shift">
+      <h2 class="p-shifthead">{{ shift.label }} <span>{{ shift.span }}</span>
+        {% if shift.rotation %}<span class="p-rot">rullering kl. {{ shift.rotation }}</span>{% endif %}</h2>
+      <div class="p-zones" style="grid-template-columns: repeat({{ sheet.columns }}, minmax(0, 1fr))">
+        {% for zone in shift.zones %}
+          {% if not zone.functions %}<div></div>{% else %}
+          <section class="zone {{ zone.zone_id }}">
+            <header>{{ zone.name }}</header>
+            <div class="fngroup">
+              {% for fn in zone.functions %}
+                <div class="fnname">{{ fn.name }}</div>
+                <ul class="people">
+                  {% for p in fn.people %}
+                    <li><span class="pname">{{ p.name }}{% if p.note %} <small>{{ p.note }}</small>{% endif %}</span>
+                      <span class="chips">{% for m in p.moves %}<span class="nextchip {{ m.zone_id }}" title="{{ m.zone_name }}">→ {{ m.short_name }}{% if m.at %} kl. {{ m.at }}{% endif %}</span>{% endfor %}</span></li>
+                  {% endfor %}
+                </ul>
+              {% endfor %}
+            </div>
+          </section>
+          {% endif %}
         {% endfor %}
-      </tbody>
-    </table>
+      </div>
+    </section>
   {% endfor %}
 
   {% if sheet.crew %}
-    <table class="sheet-table">
-      <thead><tr><th class="cat">På jobb – fordeles ad hoc</th></tr></thead>
-      <tbody><tr><td>{% for p in sheet.crew %}<span class="who">{{ p.name }} <small>{{ p.span }}</small></span>{% endfor %}</td></tr></tbody>
-    </table>
+    <section class="zone ren p-crew">
+      <header>På jobb i dag <span class="adhoc-tag">fordeles ad hoc</span></header>
+      <div class="fngroup"><ul class="people">
+        {% for p in sheet.crew %}<li><span class="pname">{{ p.name }}</span><span class="nextchip none">{{ p.span }}</span></li>{% endfor %}
+      </ul></div>
+    </section>
   {% endif %}
 
   {% if sheet.day_info %}
-    <div class="sheet-info"><strong>Diverse info</strong><p>{{ sheet.day_info }}</p></div>
-  {% endif %}
-
-  {% if sheet.index %}
-    <div class="sheet-index">
-      <h2>Finn deg selv</h2>
-      <ul>
-        {% for p in sheet.index %}
-          <li><strong>{{ p.name }}</strong> <span class="muted">{{ p.span }}</span>:
-            {% for step in p.steps %}{% if step.at %} → {{ step.at }} {% endif %}{{ step.function }}{% endfor %}</li>
-        {% endfor %}
-      </ul>
-    </div>
+    <section class="dayinfo"><h2>Diverse info</h2><p>{{ sheet.day_info }}</p></section>
   {% endif %}
 
   <footer class="sheet-foot">Skrevet ut {{ printed_at.strftime("%d.%m.%Y kl. %H:%M") }}. Planen kan endres etter utskrift – spør leder ved tvil.</footer>
