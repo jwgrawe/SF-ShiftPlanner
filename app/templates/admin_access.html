@@ -1,0 +1,58 @@
+{% extends "admin_base.html" %}
+{% from "_macros.html" import log_panel %}
+{% block admin_content %}
+<p class="intro small">Hvem som kan bruke administrasjonen. Alle logger på Windows med ID-kortet; appen bruker den
+innloggingen, så det er ingen egne passord. Tavlen er alltid åpen. Administratorer legges til og fjernes bare i
+<strong>rotmodus</strong>: start appen med <code>python run.py --rotadmin</code> – den åpner nettleseren med en
+engangsnøkkel som gjør nettopp den nettleseren til rot så lenge appen kjører.</p>
+
+{% if not is_root %}
+  <p class="note">Du ser listen, men endringer gjøres i rotmodus.</p>
+{% endif %}
+
+<h2>Administratorer</h2>
+<div class="tablewrap"><table>
+  <tr><th>Navn</th><th>Windows-konto</th><th>Lagt til</th><th>Sist innlogget</th><th style="width:7rem"></th></tr>
+  {% for a in admins if a.active %}
+    <tr><td><strong>{{ a.name }}</strong></td><td><code>{{ a.account }}</code></td>
+        <td class="muted small">{{ (a.added_at or "")[:10] }}{% if a.added_by %} av {{ a.added_by }}{% endif %}</td>
+        <td class="muted small">{{ (a.last_login or "–")[:16]|replace("T", " ") }}</td>
+        <td>{% if is_root %}<form method="post" action="/admin/tilgang/fjern" class="inline"
+              onsubmit="return confirm('Fjerne tilgangen for {{ a.name }}?');">
+              <input type="hidden" name="account" value="{{ a.account }}">
+              <button class="btn secondary small danger" type="submit">Fjern</button></form>{% endif %}</td></tr>
+  {% else %}
+    <tr><td colspan="5" class="muted">Ingen ennå – administrasjonen er åpen for alle på denne PC-en til den første
+      legges til.</td></tr>
+  {% endfor %}
+</table></div>
+
+{% if is_root %}
+<form method="post" action="/admin/tilgang/legg-til" class="card" style="max-width:40rem">
+  <h3 style="margin-top:0">Legg til administrator</h3>
+  <label class="vk-field"><span>Windows-konto</span>
+    <input type="text" name="account" required placeholder="DOMENE\brukernavn" autocomplete="off"></label>
+  <p class="muted small" style="margin-top:-0.4rem">Som i Windows-innloggingen, f.eks. <code>DOMENE\olanor</code>.
+    Uten domene gjelder brukernavnet i alle domener. Appen kjører nå som <code>{{ process_account }}</code>.</p>
+  <label class="vk-field"><span>Navn</span><input type="text" name="name" required maxlength="80"
+    placeholder="Slik det skal stå i loggen"></label>
+  <button class="btn" type="submit">Legg til</button>
+</form>
+
+<form method="post" action="/admin/tilgang/metode" class="card" style="max-width:40rem">
+  <h3 style="margin-top:0">Innloggingsmåte</h3>
+  {% for key, label in methods.items() %}
+    <label class="av-choice"><input type="radio" name="method" value="{{ key }}" {% if method == key %}checked{% endif %}>
+      {{ label }}</label>
+  {% endfor %}
+  <p class="muted small">«Windows-innlogging» er standard og sikrest: nettleseren beviser hvem som bruker den.
+    «Windows-brukeren som startet appen» er en reserve hvis nettleseren ikke får lov til å sende innloggingen –
+    da er alle som bruker denne Windows-økten, innlogget som den som startet appen.</p>
+  <button class="btn secondary" type="submit">Lagre</button>
+</form>
+{% else %}
+<p class="small">Innloggingsmåte: {{ methods[method] }}.</p>
+{% endif %}
+
+{{ log_panel(log, "Logg – tilgang") }}
+{% endblock %}

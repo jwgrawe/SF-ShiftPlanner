@@ -682,3 +682,13 @@ details.av-fixed > summary { cursor: pointer; color: var(--ink-soft); font-weigh
 .rc-kinds input.clock { width: 4.6rem; font: inherit; padding: 0.15rem 0.35rem; text-align: center; }
 .rc-code { font: inherit; padding: 0.15rem 0.3rem; margin-left: 0.4rem; }
 @media (max-width: 700px) { .rc-grid { grid-template-columns: 1fr; } }
+
+/* ------------------------------------------------------------ login (D121) */
+.badge.rootmode { background: #8c3a2a; color: #fff; letter-spacing: 0.06em; }
+.access-open {
+  margin: 0; padding: 0.45rem 1.2rem; font-size: 0.9rem;
+  background: var(--warn-bg); color: var(--warn-ink); border-bottom: 1px solid var(--warn-line);
+}
+.login-box { max-width: 34rem; margin: 3rem auto; }
+.login-box h1 { margin-top: 0; }
+.login-box ol { padding-left: 1.2rem; }

@@ -1,5 +1,9 @@
 # Logging in with the Buypass ID card: assessment
 
+> **Superseded (round 15):** everyone is always logged into Windows with the
+> card, so the app uses the Windows login instead (D121, [login.md](login.md)).
+> This assessment is kept as the fallback if Windows sign-on can't be used.
+
 Round 14 (2026-11-12). Assessment of the proposal from a separate research
 session (local challenge–response against the card through Windows' own
 smart-card support). Nothing is built yet (Q53).

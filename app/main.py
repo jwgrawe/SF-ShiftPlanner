@@ -11,9 +11,11 @@ Preview any moment with ?date=YYYY-MM-DD&time=HH:MM on /display.
 """
 from __future__ import annotations
 
+import contextvars
 import datetime as dt
 import json
 import os
+import sqlite3
 import time as time_module
 from urllib.parse import quote
 from pathlib import Path
@@ -25,7 +27,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from app import absences as absences_mod
-from app import applog, checks, competency, contingency, db, domain, exposure, hr_import, planner, roster_changes, rules, service, shift_codes
+from app import applog, auth, checks, competency, contingency, db, domain, exposure, hr_import, planner, roster_changes, rules, service, shift_codes, winauth
 from app.hr_export import Rejected
 
 try:
@@ -44,6 +46,8 @@ _STATIC = Path(__file__).parent / "static"
 TEMPLATES.env.globals["static_version"] = max(
     (int(p.stat().st_mtime) for p in _STATIC.glob("*.*")), default=0)
 TEMPLATES.env.globals["is_demo"] = db.is_demo
+TEMPLATES.env.globals["current_user"] = lambda: CURRENT_USER.get()
+TEMPLATES.env.globals["access_open"] = lambda: not db.is_demo() and not _access_set_up()
 TEMPLATES.env.globals["kind_label"] = hr_import.kind_label
 
 
@@ -68,6 +72,133 @@ app = FastAPI(title="SF-Planlegger", docs_url=None, redoc_url=None)
 app.mount(
     "/static", StaticFiles(directory=str(Path(__file__).parent / "static")), name="static"
 )
+
+
+# --------------------------------------------------------------------------
+# Login (D121). Middleware defined first runs innermost: the board lock
+# (below) is checked before this gate.
+CURRENT_USER: "contextvars.ContextVar[dict | None]" = contextvars.ContextVar("user", default=None)
+
+
+def _access_set_up() -> bool:
+    try:
+        conn = db.get_conn()
+        try:
+            return auth.is_set_up(conn)
+        finally:
+            conn.close()
+    except sqlite3.OperationalError:             # first start: tables not made yet
+        return False
+
+
+def _safe_next(target: str | None) -> str:
+    target = target or "/"
+    return target if target.startswith("/") and not target.startswith("//") else "/"
+
+
+@app.middleware("http")
+async def login_gate(request: Request, call_next):
+    applog.CURRENT_USER.set(None)
+    CURRENT_USER.set(None)
+    if db.is_demo():                              # the demo needs no login
+        CURRENT_USER.set(auth.DEMO_USER)
+        applog.CURRENT_USER.set(auth.DEMO_USER["name"])
+        return await call_next(request)
+    user = auth.session_user(request.cookies.get(auth.SESSION_COOKIE))
+    if user:
+        CURRENT_USER.set(user)
+        applog.CURRENT_USER.set(user["name"])
+        return await call_next(request)
+    path = request.url.path
+    if auth.is_public(path) or not _access_set_up():
+        return await call_next(request)
+    if request.method == "GET":
+        target = path + (f"?{request.url.query}" if request.url.query else "")
+    else:                                         # a form after the session ran out: back to its page
+        referer = request.headers.get("referer", "")
+        target = "/" + referer.split("/", 3)[3] if referer.count("/") >= 3 else "/"
+    return RedirectResponse(f"/logginn?neste={quote(_safe_next(target))}", status_code=303)
+
+
+def _login_page(request: Request, state: str, message: str = "", status: int = 200,
+                headers: dict | None = None, neste: str = "/"):
+    return TEMPLATES.TemplateResponse(request, "login.html", {"state": state, "message": message,
+                                      "neste": neste}, status_code=status, headers=headers)
+
+
+@app.get("/logginn", response_class=HTMLResponse)
+async def login_page(request: Request, neste: str | None = None):
+    """Single sign-on with the Windows login (or the app's Windows user,
+    method «prosess»); then a session cookie for this browser."""
+    neste = _safe_next(neste)
+    if db.is_demo():
+        return RedirectResponse(neste, status_code=303)
+    conn = get_conn()
+    try:
+        if not auth.is_set_up(conn):
+            return _login_page(request, "ikke_oppsatt", neste=neste)
+        if auth.method(conn) == "prosess":
+            token, message = auth.login(conn, auth.process_account())
+            out = None
+        else:
+            header = request.headers.get("authorization", "")
+            if not header.lower().startswith("negotiate "):
+                # Ask the browser to prove the Windows login. A browser that
+                # does so never shows this page; one that doesn't, does.
+                return _login_page(request, "venter", status=401, neste=neste,
+                                   headers={"WWW-Authenticate": "Negotiate"})
+            client = request.client
+            try:
+                done, out, user = winauth.handshakes().step(
+                    (client.host, client.port) if client else ("?", 0), header[len("negotiate "):])
+            except winauth.AuthError as error:
+                return _login_page(request, "feil", str(error), status=403, neste=neste)
+            if not done:
+                return _login_page(request, "venter", status=401, neste=neste,
+                                   headers={"WWW-Authenticate": f"Negotiate {out}" if out else "Negotiate"})
+            token, message = auth.login(conn, user)
+    finally:
+        conn.close()
+    if token is None:
+        return _login_page(request, "nekt", message, status=403, neste=neste)
+    response = RedirectResponse(neste, status_code=303)
+    if out:
+        response.headers["WWW-Authenticate"] = f"Negotiate {out}"
+    response.set_cookie(auth.SESSION_COOKIE, token, httponly=True, samesite="strict")
+    return response
+
+
+@app.get("/loggut", response_class=HTMLResponse)
+def logout(request: Request):
+    user = auth.session_user(request.cookies.get(auth.SESSION_COOKIE))
+    auth.end_session(request.cookies.get(auth.SESSION_COOKIE))
+    if user:
+        applog.CURRENT_USER.set(user["name"])
+        conn = get_conn()
+        try:
+            applog.write(conn, "tilgang", f"{user['name']} logget ut.")
+        finally:
+            conn.close()
+    response = _login_page(request, "utlogget")
+    response.delete_cookie(auth.SESSION_COOKIE)
+    return response
+
+
+@app.get("/rot", response_class=HTMLResponse)
+def root_mode(request: Request, nokkel: str | None = None):
+    """The one-time key from `python run.py --rotadmin` → this browser is root."""
+    token = auth.use_root_key(nokkel)
+    if token is None:
+        return _login_page(request, "rot_feil", status=403)
+    applog.CURRENT_USER.set(auth.ROOT_USER["name"])
+    conn = get_conn()
+    try:
+        applog.write(conn, "tilgang", "Rotmodus åpnet (python run.py --rotadmin).")
+    finally:
+        conn.close()
+    response = RedirectResponse("/admin/tilgang", status_code=303)
+    response.set_cookie(auth.SESSION_COOKIE, token, httponly=True, samesite="strict")
+    return response
 
 
 # --------------------------------------------------------------------------
@@ -780,6 +911,53 @@ async def admin_rules_contingency(request: Request):
 @app.post("/admin/regler/standard")
 async def admin_rules_reset(request: Request):
     return _rules_action(rules.reset)
+
+
+@app.get("/admin/tilgang", response_class=HTMLResponse)
+def admin_access(request: Request):
+    conn = get_conn()
+    try:
+        return admin_page(request, conn, "tilgang", "admin_access.html", {
+            "admins": auth.admins(conn), "method": auth.method(conn), "methods": auth.METHODS,
+            "is_root": (CURRENT_USER.get() or {}).get("role") == "root",
+            "process_account": auth.process_account(), "log": applog.entries(conn, "tilgang"),
+        })
+    finally:
+        conn.close()
+
+
+def _root_action(action) -> RedirectResponse:
+    if (CURRENT_USER.get() or {}).get("role") != "root":
+        return back("/admin/tilgang", "Administratorer endres bare i rotmodus: start appen med "
+                                      "python run.py --rotadmin.")
+    conn = get_conn()
+    try:
+        try:
+            message = action(conn)
+        except auth.Invalid as error:
+            return back("/admin/tilgang", f"Ikke lagret: {error}")
+    finally:
+        conn.close()
+    return back("/admin/tilgang", message)
+
+
+@app.post("/admin/tilgang/legg-til")
+async def admin_access_add(request: Request):
+    form = await request.form()
+    return _root_action(lambda conn: auth.add_admin(conn, str(form.get("account", "")),
+                                                    str(form.get("name", "")), CURRENT_USER.get()))
+
+
+@app.post("/admin/tilgang/fjern")
+async def admin_access_remove(request: Request):
+    form = await request.form()
+    return _root_action(lambda conn: auth.remove_admin(conn, str(form.get("account", ""))))
+
+
+@app.post("/admin/tilgang/metode")
+async def admin_access_method(request: Request):
+    form = await request.form()
+    return _root_action(lambda conn: auth.set_method(conn, str(form.get("method", ""))))
 
 
 @app.get("/admin/grunndata", response_class=HTMLResponse)

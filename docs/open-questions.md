@@ -1,6 +1,6 @@
 # Open questions
 
-Current list as of 2026-11-12 (round 14: per-hour balancing, roster changes, board window, card login). Q-numbers are stable across
+Current list as of 2026-11-13 (round 15: login through Windows, root mode). Q-numbers are stable across
 rounds — resolved ones are recorded in [decisions.md](decisions.md) and
 listed at the bottom. Where an *interim rule* is stated, work proceeds on
 that assumption; the question is whether it's right.
@@ -27,11 +27,15 @@ tilrettelegging can be health information). Proposal: an admin-only editor under
 Administrasjon (per person: fritak from heavy work or from given functions, from/to
 dates, note), stored only in the database and logged.
 
-**Q53 🔴 Login with the Buypass ID card** (one account per manager). Assessment and plan
-in [smart-card-login.md](smart-card-login.md): go-ahead recommended, with adjustments.
-Needed from the owner: (1) does each manager log into Windows on that PC with their own
-card, or is it a shared login? (2) who is the first owner (approves the others)? (3) is
-a card reader fitted? Then: a one-off `--test-kort` run on the PC.
+**Q54 🔴 Who keeps the app (and the board) running?** The app runs as the Windows user who
+started it; when that person logs off, the app and the board stop. With everyone logging in
+personally, the PC by the big screen probably needs a session that stays logged in for the
+board (e.g. a dedicated account from IT), with managers using the app from their own login
+on the same PC (Windows sign-on tells them apart). Ask IT what is possible there.
+
+**Q55 🟡 Check Windows sign-on on the PC.** Run `python run.py --test-innlogging` and send the
+output; then open `http://localhost:8000` and see that you're logged in without typing anything
+(details in [login.md](login.md)).
 
 ## Resolved (all rounds)
 
@@ -53,6 +57,8 @@ Q41 (titles: hold out until classified, once → D87).
 Round 7: Q42 (surname first; the first word is the full surname, hyphens included —
 as implemented), Q43 (`DX`: manual times per occurrence → D95), Q44 (temps get a
 manager-defined standard set; new staff are assessed → D97).
+Round 15: Q53 (login: use the Windows login, owner = the department owner, root mode for
+managing administrators → D121).
 Round 14: Q51 (balance per hour worked → D118), Q52 (board window built → D120; one
 account per manager, via the ID card → Q53).
 Round 13: Q48 (contingency rules reviewed; choices built → D114/D115), Q50 (statistics:

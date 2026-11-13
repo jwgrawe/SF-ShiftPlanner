@@ -34,6 +34,8 @@ display.
   and PersonID matching, download a fill-in form, the temps' standard set),
   *Vaktkoder* (the app's shift-code list: add, change, ignore or remove
   codes; unknown codes and deviations from the turnus are flagged),
+  *Tilgang* (administrators — Windows accounts, changed in root mode — and
+  the login method),
   *Planregler* (who swaps with whom at the rotation point, when each shift
   category rotates, the heavy-work numbers, and «Avvik og tiltak»: what the
   app does when something doesn't fit),
@@ -46,6 +48,10 @@ its own database, marked DEMO. Remaining in M2: PINs, and the real
 competency data (Q40). **`python run.py --tavle`** also opens the
 board in kiosk mode on the second screen, locked to the board (D120;
 `--tavle-x` sets where the second screen starts, default 1920).
+Everything except the board needs a login once an administrator exists —
+the Windows login is used, nothing to type (D121). **`python run.py
+--rotadmin`** opens a one-time root session for adding administrators;
+**`python run.py --test-innlogging`** checks Windows sign-on on the PC.
 
 ## Running the prototype
 
@@ -120,12 +126,13 @@ Tips for the hospital PC:
 |---|---|
 | [docs/assessment.md](docs/assessment.md) | Proposed architecture, eligibility model, rotation framework, planning engine, roadmap |
 | [docs/decisions.md](docs/decisions.md) | **Decision log** — everything settled, as referenceable D-numbers (superseded ones struck through) |
-| [docs/open-questions.md](docs/open-questions.md) | **Open questions** — stable Q-numbers; currently Q20, Q27, Q40, Q45, Q49, Q53 |
+| [docs/open-questions.md](docs/open-questions.md) | **Open questions** — stable Q-numbers; currently Q20, Q27, Q40, Q45, Q49, Q54, Q55 |
 | [docs/generic.md](docs/generic.md) | Can other departments use the app? What is already generic, what isn't, and a suggested order |
 | [docs/how-the-planner-works.md](docs/how-the-planner-works.md) | How a suggestion is made: heavy-work counting, the ledger, the weekly cap and target, the order of preference |
 | [docs/fairness.md](docs/fairness.md) | Is the heavy-work measure right, and how fair is the planner over time? Research, risks, recommendations |
 | [docs/access-and-board.md](docs/access-and-board.md) | Keeping admin screens off the public board on one PC: recommended setup |
-| [docs/smart-card-login.md](docs/smart-card-login.md) | Assessment: logging in with the Buypass ID card |
+| [docs/login.md](docs/login.md) | Login through the Windows login, root mode, what to check on the PC |
+| [docs/smart-card-login.md](docs/smart-card-login.md) | Earlier assessment: logging in with the Buypass ID card directly (fallback) |
 | [docs/contingency-rules.md](docs/contingency-rules.md) | Plan: every «when X, the app does Y» rule, which become settings and which stay fixed |
 | [docs/source-data-findings.md](docs/source-data-findings.md) | What the source workbooks contain, how they were restructured, and how each flag got resolved |
 

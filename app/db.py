@@ -85,6 +85,11 @@ CREATE TABLE IF NOT EXISTS roster_overrides (
     employee_id TEXT NOT NULL, date TEXT NOT NULL, kind TEXT NOT NULL, code TEXT,
     start TEXT, end TEXT, note TEXT, replaced TEXT, entered_at TEXT NOT NULL,
     PRIMARY KEY (employee_id, date));
+-- Administrators (D121): Windows accounts («domene\bruker», lower case, or
+-- just «bruker»), added in root mode. active = 0 keeps the history.
+CREATE TABLE IF NOT EXISTS admins (
+    account TEXT PRIMARY KEY, name TEXT NOT NULL, active INTEGER NOT NULL DEFAULT 1,
+    added_at TEXT, added_by TEXT, last_login TEXT);
 -- «Avvik og tiltak» (D114): only values changed from the default (app/contingency.py).
 CREATE TABLE IF NOT EXISTS contingency_settings (
     rule_id TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT);
@@ -275,6 +280,7 @@ def init_schema(conn: sqlite3.Connection) -> None:
     _ensure_column(conn, "employee_competencies", "source", "TEXT")
     # Every log line belongs to an area, so each page can show its own (D100).
     _ensure_column(conn, "import_log", "area", "TEXT NOT NULL DEFAULT 'import'")
+    _ensure_column(conn, "import_log", "who", "TEXT")      # D121
     _ensure_column(conn, "roster_pending", "fixable", "INTEGER NOT NULL DEFAULT 0")
     _ensure_column(conn, "shift_codes", "kind", "TEXT NOT NULL DEFAULT 'vanlig'")
     # A deviation from the turnus the admin chose to keep ("07:00-15:30").

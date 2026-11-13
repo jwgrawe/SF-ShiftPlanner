@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Innlogging – SF-Planlegger{% endblock %}
+{% block header %}
+  <header class="app"><span class="brand">SF-Planlegger</span>
+    <nav><a href="/display">Tavle</a></nav></header>
+{% endblock %}
+{% block content %}
+<div class="card login-box">
+  {% if state == "venter" %}
+    <h1>Logger inn …</h1>
+    <p>Appen bruker Windows-innloggingen din – det skal skje av seg selv. Ser du denne siden, sendte ikke
+    nettleseren innloggingen.</p>
+    <ol class="small">
+      <li>Åpne appen som <code>http://localhost:8000</code> (ikke <code>127.0.0.1</code>) – nettleseren deler
+        bare Windows-innloggingen med adresser den regner som interne.</li>
+      <li>Bruk Edge eller Chrome, ikke et privat/InPrivate-vindu.</li>
+      <li>Hjelper ikke det, kan IT legge <code>localhost</code> til «Lokalt intranett», eller eieren bytte
+        innloggingsmåte under Administrasjon → Tilgang (rotmodus).</li>
+    </ol>
+    <p><a class="btn" href="/logginn?neste={{ neste|urlencode }}">Prøv igjen</a></p>
+  {% elif state == "nekt" %}
+    <h1>Ingen tilgang</h1>
+    <p>{{ message }}</p>
+    <p class="muted small">Tavlen er åpen for alle: <a href="/display">vis tavlen</a>.</p>
+  {% elif state == "feil" %}
+    <h1>Innloggingen virket ikke</h1>
+    <p>Windows svarte: {{ message }}.</p>
+    <p class="small">Prøv igjen. Skjer det igjen, kjør <code>python run.py --test-innlogging</code> på PC-en og
+    send resultatet til den som drifter appen.</p>
+    <p><a class="btn" href="/logginn?neste={{ neste|urlencode }}">Prøv igjen</a></p>
+  {% elif state == "ikke_oppsatt" %}
+    <h1>Tilgang er ikke satt opp</h1>
+    <p>Ingen administratorer er lagt til ennå, så administrasjonen er åpen for alle på denne PC-en.
+    Start appen med <code>python run.py --rotadmin</code> for å legge til administratorer.</p>
+    <p><a class="btn" href="{{ neste }}">Fortsett</a></p>
+  {% elif state == "utlogget" %}
+    <h1>Du er logget ut</h1>
+    <p>Administrasjonen er låst for denne nettleseren. Tavlen er fortsatt åpen.</p>
+    <p><a class="btn" href="/logginn">Logg inn igjen</a> <a class="btn secondary" href="/display">Vis tavlen</a></p>
+  {% elif state == "rot_feil" %}
+    <h1>Ugyldig rotnøkkel</h1>
+    <p>Rotmodus åpnes bare fra nettleseren som <code>python run.py --rotadmin</code> åpner, og nøkkelen virker
+    én gang. Start appen på nytt med <code>--rotadmin</code>.</p>
+  {% endif %}
+</div>
+{% endblock %}

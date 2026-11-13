@@ -8,6 +8,7 @@
         {% for entry in entries %}
           <tr><td class="muted" style="width:9.5rem; white-space:nowrap">{{ entry.at.strftime("%d.%m.%Y %H:%M") }}</td>
               {% if show_area %}<td class="muted small" style="width:7rem">{{ entry.area }}</td>{% endif %}
+              <td class="muted small" style="width:9rem">{{ entry.who }}</td>
               <td>{{ entry.text }}</td></tr>
         {% endfor %}
       </table></div>

@@ -20,10 +20,17 @@
       <a href="/import">Datagrunnlag{% if unknown %} <span class="navbadge" title="{{ unknown }} vakt(er) uten fast tid mangler tid">{{ unknown }}</span>{% endif %}</a>
       <a href="/admin">Administrasjon</a>
     </nav>
-    <span class="muted small" style="margin-left:auto">
+    <span class="muted small userbox" style="margin-left:auto">
       {% if is_demo() %}<span class="badge demo" title="Fiktive ansatte og generert vaktliste – egen database">DEMO</span>{% endif %}
-      Prototype (M2)</span>
+      {% set me = current_user() %}
+      {% if me and me.role == "root" %}<span class="badge rootmode" title="Startet med python run.py --rotadmin">ROTMODUS</span>{% endif %}
+      {% if me and not is_demo() %}{{ me.name }} · <a href="/loggut">Logg ut</a>{% else %}Prototype (M2){% endif %}</span>
   </header>
+  {% if access_open() %}
+  <p class="access-open">Tilgang er ikke satt opp – alle som bruker denne PC-en har full tilgang til administrasjonen.
+    Start appen med <code>python run.py --rotadmin</code> og legg til administratorer under
+    Administrasjon → Tilgang.</p>
+  {% endif %}
   {% endblock %}
   <main>{% block content %}{% endblock %}</main>
 </body>

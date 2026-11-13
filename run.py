@@ -29,11 +29,27 @@ def main() -> None:
                         help="open the board in kiosk mode on the second screen (D120)")
     parser.add_argument("--tavle-x", type=int, default=1920,
                         help="left edge of the second screen in pixels (default 1920)")
+    parser.add_argument("--rotadmin", action="store_true",
+                        help="root mode: this run's browser may add and remove administrators (D121)")
+    parser.add_argument("--test-innlogging", action="store_true",
+                        help="check that Windows single sign-on works on this PC, then exit")
     parser.add_argument("--demo", action="store_true",
                         help="start the demo (fictional staff, own database)")
     parser.add_argument("--check-deps", action="store_true",
                         help="exit 0 if all dependencies are installed, 1 otherwise")
     args = parser.parse_args()
+
+    if args.test_innlogging:
+        from app import auth, winauth
+
+        print(f"Appen kjører som Windows-bruker: {auth.process_account()}")
+        try:
+            user = winauth.selftest()
+        except winauth.AuthError as error:
+            raise SystemExit(f"Windows-innlogging virker IKKE her: {error}")
+        print(f"Windows-innlogging virker: Windows bekreftet brukeren {user}.")
+        print("Neste: åpne http://localhost:8000 i Edge/Chrome – du skal bli logget inn uten å skrive noe.")
+        return
 
     import importlib.util
 
@@ -94,8 +110,21 @@ def main() -> None:
     from app.main import app as fastapi_app
 
     url = f"http://127.0.0.1:{args.port}/"
+    # «localhost» (not 127.0.0.1) is what browsers treat as an internal site,
+    # where they share the Windows login (single sign-on, D121).
+    admin_url = f"http://localhost:{args.port}/"
+    if args.rotadmin:
+        import secrets
+
+        from app import auth
+
+        auth.ROOT_KEY = secrets.token_urlsafe(32)
+        admin_url = f"{admin_url}rot?nokkel={auth.ROOT_KEY}"
+        print("ROTMODUS: nettleseren som åpnes nå, kan legge til og fjerne administratorer.")
+        if args.no_browser:
+            print(f"  Åpne denne adressen (virker én gang): {admin_url}")
     if not args.no_browser:
-        threading.Timer(1.5, webbrowser.open, args=(url,)).start()
+        threading.Timer(1.5, webbrowser.open, args=(admin_url,)).start()
     if args.tavle:
         from app import kiosk
 
