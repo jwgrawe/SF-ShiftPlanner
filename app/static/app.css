@@ -282,9 +282,9 @@ kbd {
   overflow: auto; max-height: calc(100vh - 1.5rem); border: 1px solid var(--line);
   border-radius: var(--radius); background: var(--surface);
   /* keep the focused cell clear of the pinned headings and name column */
-  scroll-padding: calc(var(--tb) + 13.9rem) 0 0.5rem 19.5rem;
+  scroll-padding: calc(var(--tb) + 13.9rem) 0 0.5rem 16rem;   /* left: set from the name column's width */
 }
-table.matrix { border-collapse: separate; border-spacing: 0; width: max-content; min-width: 100%; }
+table.matrix { border-collapse: separate; border-spacing: 0; width: max-content; }
 table.matrix th, table.matrix td { border-bottom: 1px solid var(--line); padding: 0.15rem 0.25rem; }
 table.matrix thead th { position: sticky; z-index: 3; background: var(--surface-2); }
 .mx-zones th { top: var(--tb); height: 1.7rem; color: #fff; font-size: 0.72rem; text-align: center; letter-spacing: 0.02em; white-space: nowrap; }
@@ -307,12 +307,17 @@ table.matrix tbody th, table.matrix tfoot th {
 }
 table.matrix .mx-name {
   position: sticky; left: 0; z-index: 2; background: var(--surface); text-align: left;
-  min-width: 15rem; max-width: 19rem; font-weight: 500; border-right: 1px solid var(--line);
+  white-space: nowrap; padding-right: 0.8rem; font-weight: 500; border-right: 1px solid var(--line);
 }
 table.matrix thead .mx-name { z-index: 4; background: var(--surface-2); }
-.mx-name .pn { display: block; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.mx-name .small { display: block; font-weight: 400; }
-td.mx-title { font-size: 0.84rem; color: var(--ink-soft); white-space: nowrap; max-width: 13rem; overflow: hidden; text-overflow: ellipsis; }
+.mx-name .pn { display: block; font-weight: 600; white-space: nowrap; }
+.mx-name .small { display: block; font-weight: 400; white-space: nowrap; }
+td.mx-title { font-size: 0.84rem; color: var(--ink-soft); white-space: nowrap; padding-right: 0.8rem; }
+.mx-tip {
+  position: fixed; z-index: 50; pointer-events: none; max-width: 22rem;
+  background: var(--ink); color: var(--surface); font-size: 0.82rem; font-weight: 600;
+  padding: 0.3rem 0.55rem; border-radius: 5px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+}
 table.matrix tbody tr:hover > *, table.matrix tbody tr:focus-within > * { background: var(--accent-soft); }
 button.cell, .cell-chip {
   width: 2.4rem; height: 1.75rem; border-radius: 5px; border: 1px solid var(--line);
@@ -333,6 +338,9 @@ tr.mx-standard > * {
 }
 tr.mx-standard .mx-name { z-index: 3; color: var(--info-ink); font-weight: 700; }
 tr.mx-standard .mx-name .small { color: var(--info-ink); font-weight: 400; }
+tr.mx-standard .mx-name, tr.mx-standard .mx-name .small, tr.mx-standard .mx-title { white-space: normal; }
+/* wraps within the width the names give the column, without widening it */
+.mx-follow { width: 0; min-width: 100%; }
 
 /* ------------------------------------------------- review, dialogs, logs */
 .link-tools { display: flex; gap: 1rem; align-items: center; margin: 0.4rem 0; flex-wrap: wrap; }

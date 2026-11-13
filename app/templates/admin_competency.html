@@ -72,10 +72,10 @@ Klikk en celle for å bytte, eller bruk tastaturet: piltaster flytter, <kbd>J</k
       {% for row in rows %}
         <tr data-name="{{ (row.full_name ~ ' ' ~ row.display)|lower }}" data-title="{{ row.title }}"
             data-empty="{{ 1 if row.empty else 0 }}" data-unknown="{{ row.unknown }}" data-temp="{{ 1 if row.temp else 0 }}">
-          <th class="mx-name" scope="row"><span class="pn">{{ row.full_name }}</span>
+          <th class="mx-name" scope="row"{% if row.empty and not row.temp %} title="Ingen kompetanse registrert ennå"{% endif %}><span class="pn">{{ row.full_name }}</span>
             <span class="muted small">{{ row.display }}{% if row.person_id %} · {{ row.person_id }}{% endif %}</span></th>
           <td class="mx-title">{% if row.temp %}<span class="badge draft" title="I ukeplanen, ikke i turnusen – bruker standardkompetansen om raden er tom">vikar</span>{% endif %}
-            {{ row.title }}{% if row.empty and not row.temp %} <span class="badge alert">mangler</span>{% endif %}</td>
+            {{ row.title }}</td>
           {% for col in columns %}
             {% set v = row["values"].get(col.key, "") %}
             <td><button type="button" class="cell {{ 'q' if v == 'qualified' else 'u' if v == 'uncertain' else '' }}"
@@ -89,8 +89,8 @@ Klikk en celle for å bytte, eller bruk tastaturet: piltaster flytter, <kbd>J</k
     </tbody>
     <tfoot>
       <tr class="mx-standard" data-name="standardkompetanse" data-empty="0" data-unknown="0" data-temp="0" data-title="">
-        <th class="mx-name" scope="row">Standardkompetanse for vikarer
-          <span class="small">Gjelder vikarer uten egen rad{% if temps %} – nå {{ temps }} stk.{% endif %}</span></th>
+        <th class="mx-name" scope="row"><div class="mx-follow">Standard&shy;kompetanse for vikarer
+          <span class="small">Gjelder vikarer uten egen rad{% if temps %} – nå {{ temps }} stk.{% endif %}</span></div></th>
         <td class="mx-title small">Endres sjelden</td>
         {% for col in columns %}
           {% set v = standard.get(col.key, "") %}
@@ -174,7 +174,34 @@ Klikk en celle for å bytte, eller bruk tastaturet: piltaster flytter, <kbd>J</k
       window.scrollBy({top: r.top - 8, behavior: "instant"});
     }
   }
-  box.addEventListener("pointerdown", fitBox);
+  // The sticky name column's real width keeps a focused cell clear of it.
+  box.style.scrollPaddingLeft = (form.querySelector("thead .mx-name").offsetWidth + 8) + "px";
+
+  // Instant tip with the function's name (the vertical headings are hard to
+  // read far down the matrix) – on hover and on keyboard focus.
+  var tip = document.createElement("div");
+  tip.className = "mx-tip"; tip.hidden = true; document.body.appendChild(tip);
+  var heads = Array.prototype.slice.call(form.querySelectorAll("th.mx-col"));
+  function showTip(cell) {
+    var th = heads[+cell.dataset.ci];
+    heads.forEach(function (h) { h.classList.toggle("hot", h === th); });
+    var person = cell.closest("tr").querySelector(".mx-name .pn");
+    tip.textContent = th.title + (person ? " · " + person.textContent : "");
+    tip.hidden = false;
+    var r = cell.getBoundingClientRect();
+    var left = Math.min(Math.max(4, r.left + r.width / 2 - tip.offsetWidth / 2), window.innerWidth - tip.offsetWidth - 4);
+    var top = r.top - tip.offsetHeight - 6;
+    tip.style.left = left + "px";
+    tip.style.top = (top < 4 ? r.bottom + 6 : top) + "px";
+  }
+  function hideTip() { tip.hidden = true; heads.forEach(function (h) { h.classList.remove("hot"); }); }
+  box.addEventListener("mouseover", function (e) {
+    var cell = e.target.closest && e.target.closest("button.cell");
+    if (cell) showTip(cell);
+  });
+  box.addEventListener("mouseleave", hideTip);
+  box.addEventListener("scroll", hideTip, {passive: true});
+  window.addEventListener("scroll", hideTip, {passive: true});
 
   // Grid navigation: rows of buttons, arrow keys move like a spreadsheet.
   var grid = rows.map(function (r) { return Array.prototype.slice.call(r.querySelectorAll("button.cell")); });
@@ -200,16 +227,12 @@ Klikk en celle for å bytte, eller bruk tastaturet: piltaster flytter, <kbd>J</k
       else if (k === "n" || k === "N" || k === "Delete" || k === "Backspace") { set(cell, ""); e.preventDefault(); }
       else if (k === " ") { set(cell, cycle[cell.dataset.value]); e.preventDefault(); }
     });
-    // Crosshair: highlight the column heading of the focused cell.
+    // Keyboard focus: bring the matrix into view and show the tip. A mouse
+    // click never scrolls – the click must land where it was aimed.
     cell.addEventListener("focus", function () {
-      fitBox();
-      var th = form.querySelector('th.mx-col[data-ci="' + cell.dataset.ci + '"]');
-      if (th) th.classList.add("hot");
+      if (cell.matches(":focus-visible")) { fitBox(); showTip(cell); }
     });
-    cell.addEventListener("blur", function () {
-      var th = form.querySelector('th.mx-col[data-ci="' + cell.dataset.ci + '"]');
-      if (th) th.classList.remove("hot");
-    });
+    cell.addEventListener("blur", hideTip);
   });
 
   reset.addEventListener("click", function () {
@@ -235,7 +258,9 @@ Klikk en celle for å bytte, eller bruk tastaturet: piltaster flytter, <kbd>J</k
       r.hidden = !ok;
       if (ok) shown++;
     });
-    count.textContent = shown === total ? total + " ansatte" : "viser " + shown + " av " + total;
+    var empty = rows.filter(function (r) { return r.dataset.empty === "1" && r.dataset.temp !== "1"; }).length;
+    count.textContent = (shown === total ? total + " ansatte" : "viser " + shown + " av " + total)
+      + (empty ? " · " + empty + " uten kompetanse ennå" : "");
   }
   [search, filter, title].forEach(function (el) { if (el) el.addEventListener("input", applyFilter); });
   applyFilter();
