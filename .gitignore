@@ -4,10 +4,21 @@ __pycache__/
 .venv/
 venv/
 
-# App runtime (future)
+# The databases (personal data) and SQLite's side files.
 *.db
 *.db-journal
+*.db-wal
+*.db-shm
 *.sqlite3
+
+# Spreadsheets and CSVs anywhere – HR exports, competency forms, downloads
+# saved into the app folder by hand – except the committed seed and source
+# files re-included below. (Belt and braces: the PC only pulls.)
+*.csv
+*.xlsx
+*.xlsm
+*.xls
+!data/seed/*.csv
 
 # OS / editors
 .DS_Store

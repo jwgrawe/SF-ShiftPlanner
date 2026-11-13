@@ -27,15 +27,18 @@ tilrettelegging can be health information). Proposal: an admin-only editor under
 Administrasjon (per person: fritak from heavy work or from given functions, from/to
 dates, note), stored only in the database and logged.
 
-**Q54 🔴 Who keeps the app (and the board) running?** The app runs as the Windows user who
-started it; when that person logs off, the app and the board stop. With everyone logging in
-personally, the PC by the big screen probably needs a session that stays logged in for the
-board (e.g. a dedicated account from IT), with managers using the app from their own login
-on the same PC (Windows sign-on tells them apart). Ask IT what is possible there.
+**Q54 🔴 The board while the PC is locked.** Owner (round 16): the screen PC stays logged in as
+a manager, locked when they're away. But **a locked Windows session shows the lock screen on
+every monitor**, so the board goes blank whenever the PC is locked. Options, best first:
+(a) a separate small device for the board (mini PC or the screen's own browser) showing the
+board over the network, read-only (needs IT); (b) a dedicated board account on that PC that is
+never locked and runs only the kiosk window (IT «assigned access»/kiosk), with managers using
+the app from their own logins elsewhere (needs the app reachable on the network, i.e. IT);
+(c) the manager's session is not locked, and the main screen is turned away/off: weakest, since
+anyone at the keyboard is that manager. To discuss with IT; nothing to build until chosen.
 
-**Q55 🟡 Check Windows sign-on on the PC.** Run `python run.py --test-innlogging` and send the
-output; then open `http://localhost:8000` and see that you're logged in without typing anything
-(details in [login.md](login.md)).
+**Q55 ✔ Windows sign-on on the PC.** `--test-innlogging` confirmed the Windows user (round 16).
+Remains: confirm that opening `http://localhost:8000` logs in without typing ([login.md](login.md)).
 
 ## Resolved (all rounds)
 

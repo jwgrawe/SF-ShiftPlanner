@@ -155,7 +155,8 @@ class AccessTest(unittest.TestCase):
         status, _, text, jar = call("GET", "/logginn", client=conn_a,
                                     headers={"Authorization": f"Negotiate {b64(b'AUTHENTICATE')}"})
         self.assertEqual(status, 403)
-        self.assertIn("sykehus\\kari har ikke tilgang", text)
+        self.assertIn("logget på Windows som sykehus\\kari, men er ikke lagt til som administrator", text)
+        self.assertIn("Vis tavlen", text)
         self.assertNotIn(auth.SESSION_COOKIE, jar)
 
     def test_process_method_and_matching_without_domain(self):

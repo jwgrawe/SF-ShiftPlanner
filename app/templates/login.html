@@ -21,7 +21,10 @@
   {% elif state == "nekt" %}
     <h1>Ingen tilgang</h1>
     <p>{{ message }}</p>
-    <p class="muted small">Tavlen er åpen for alle: <a href="/display">vis tavlen</a>.</p>
+    <p>Dagens plan står på tavlen, som er åpen for alle.</p>
+    <p><a class="btn" href="/display">Vis tavlen</a></p>
+    <p class="muted small">For eieren: administratorer legges til under Administrasjon → Tilgang, i rotmodus
+    (<code>python run.py --rotadmin</code>).</p>
   {% elif state == "feil" %}
     <h1>Innloggingen virket ikke</h1>
     <p>Windows svarte: {{ message }}.</p>

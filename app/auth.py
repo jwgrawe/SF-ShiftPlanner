@@ -156,8 +156,8 @@ def login(conn: sqlite3.Connection, account: str) -> tuple[str | None, str]:
     """(session token or None, message) for a proven Windows account."""
     admin = find_admin(conn, account)
     if admin is None:
-        return None, (f"Kontoen {normalise(account)} har ikke tilgang til administrasjonen. Be eieren "
-                      "legge den til (rotmodus: python run.py --rotadmin).")
+        return None, (f"Du er logget på Windows som {normalise(account)}, men er ikke lagt til som "
+                      "administrator i SF-Planlegger. Trenger du tilgang, be en leder om det.")
     with conn:
         conn.execute("UPDATE admins SET last_login = ? WHERE account = ?",
                      (dt.datetime.now().isoformat(timespec="seconds"), admin["account"]))
