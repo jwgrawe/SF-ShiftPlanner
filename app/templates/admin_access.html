@@ -67,16 +67,12 @@ og åpne den med et hvilket som helst verktøy, og den som kan endre appmappen, 
     <code>{{ folders.folder }}</code>. Bare kontoene som er gitt tilgang, administratorer på PC-en (IT) og Windows selv
     kommer til filene.</p>
 {% else %}
-  <div class="card warn-card" style="max-width:48rem">
-    <h3 style="margin-top:0">Alle som logger på denne PC-en, kommer til filene</h3>
+  <div class="note" style="max-width:48rem">
+    <strong>Til informasjon:</strong> Windows gir nå alle som logger på denne PC-en, tilgang til appens filer:
     <ul class="small">{% for e in folders.open %}<li>{{ folder_text(e) }}</li>{% endfor %}</ul>
-    <p class="small">Slik strammer du inn (tar et øyeblikk, uten administratorrettigheter når du selv laget mappen):
-      lukk appen, åpne en terminal og kjør</p>
-    <pre class="small">{{ folders.fix }}</pre>
-    <p class="small">Da har bare <code>{{ process_account }}</code>, administratorene på PC-en (IT) og Windows tilgang.
-      Andre ledere som skal starte appen eller legge filer i <code>data\import</code> fra sin egen Windows-konto,
-      legges til med <code>icacls "{{ folders.folder }}" /grant "DOMENE\bruker:(OI)(CI)M"</code> – eller be IT om en
-      gruppe for lederne. Se <code>docs/security.md</code>.</p>
+    <p class="small" style="margin-bottom:0">Det er vanlig for mapper på C:\ og greit i prøveperioden. Mappetillatelser
+      er IT-avdelingens ansvar – ikke endre dem selv. Ta det med IT før appen tas i bredere bruk eller legges på
+      nettverket (se <code>docs/security.md</code>).</p>
   </div>
 {% endif %}
 

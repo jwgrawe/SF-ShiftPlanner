@@ -11,6 +11,9 @@ This asks Windows for the folder's permission list (as SDDL, through
 advapi32 with ctypes – nothing to install) and reports any entry that lets
 a broad group (Alle, Godkjente brukere, Brukere, Interaktive, Domenebrukere,
 Anonym) read or change it. Elsewhere than Windows it reports nothing.
+
+It only reports. Folder permissions on the hospital's PCs are IT's to set,
+so the app neither changes them nor offers a command to do so (D122).
 """
 from __future__ import annotations
 
@@ -96,21 +99,14 @@ def folder_sddl(path: Path) -> str:
         kernel32.LocalFree(descriptor)
 
 
-def fix_command(folder: Path, account: str) -> str:
-    """The icacls line that leaves the folder to the given account,
-    Administratorer and SYSTEM (by SID, so it works on Norwegian Windows)."""
-    return (f'icacls "{folder}" /inheritance:r /grant:r "{account}:(OI)(CI)F" '
-            '"*S-1-5-32-544:(OI)(CI)F" "*S-1-5-18:(OI)(CI)F"')
-
-
-def status(root: Path, data: Path, account: str) -> dict | None:
-    """None off Windows; else {"folder", "ok", "open", "error", "fix"} for the
+def status(root: Path, data: Path) -> dict | None:
+    """None off Windows; else {"folder", "ok", "open", "error"} for the
     app folder (the code: whoever can change it can switch the login off) and
     the data folder (the database, imports and keys: whoever can read it has
     the data). "open" lists [{"where", "group", "read", "write"}]."""
     if os.name != "nt":
         return None
-    out = {"folder": str(root), "ok": False, "open": [], "error": "", "fix": fix_command(root, account)}
+    out = {"folder": str(root), "ok": False, "open": [], "error": ""}
     try:
         for where, folder in (("appmappen", root), ("datamappen", data)):
             if folder.exists():

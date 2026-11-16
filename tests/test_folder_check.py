@@ -12,7 +12,7 @@ from app import folder_check as fc  # noqa: E402
 UNDER_C = ("O:S-1-5-21-1-2-3-1001G:S-1-5-21-1-2-3-513D:AI(A;ID;FA;;;BA)(A;OICIIOID;GA;;;BA)(A;ID;FA;;;SY)"
            "(A;OICIIOID;GA;;;SY)(A;OICIID;0x1200a9;;;BU)(A;ID;0x1301bf;;;AU)(A;OICIIOID;SDGXGWGR;;;AU)"
            "(A;OICIIOID;GA;;;CO)")
-# The same folder after the recommended icacls line.
+# A folder whose permissions IT has narrowed to named accounts.
 LOCKED = "D:PAI(A;OICI;FA;;;S-1-5-21-1-2-3-1001)(A;OICI;FA;;;BA)(A;OICI;FA;;;SY)"
 
 
@@ -37,16 +37,9 @@ class FolderCheckTest(unittest.TestCase):
         groups = {e["group"] for e in fc.broad_access("D:(A;OICI;FR;;;S-1-5-21-7-8-9-513)(A;;0x80000000;;;S-1-1-0)")}
         self.assertEqual(groups, {"Domenebrukere (Domain Users)", "Alle (Everyone)"})
 
-    def test_the_fix_uses_sids_not_localised_names(self):
-        cmd = fc.fix_command(Path("C:/Planlegger"), "domene\\kari")
-        self.assertIn("/inheritance:r", cmd)
-        self.assertIn('"domene\\kari:(OI)(CI)F"', cmd)
-        self.assertIn("*S-1-5-32-544", cmd)
-        self.assertIn("*S-1-5-18", cmd)
-
     def test_nothing_to_report_off_windows(self):
         if fc.os.name != "nt":
-            self.assertIsNone(fc.status(Path("."), Path("."), "x"))
+            self.assertIsNone(fc.status(Path("."), Path(".")))
 
 
 if __name__ == "__main__":

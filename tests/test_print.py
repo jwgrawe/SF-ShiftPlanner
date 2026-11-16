@@ -41,7 +41,8 @@ class PrintSheetTest(unittest.TestCase):
             importer.import_seed(self.conn, people=True)
         self.conn.execute("PRAGMA foreign_keys = ON")
         demo.ensure(self.conn)
-        self.day = next_weekday(dt.date.today() + dt.timedelta(days=1))
+        # Past the demo's published week (it publishes week 1), inside its four-week roster.
+        self.day = next_weekday(dt.date.today() + dt.timedelta(days=15))
         planner.suggest_day(self.conn, self.day)
 
     def tearDown(self):

@@ -941,7 +941,7 @@ def admin_access(request: Request):
             "admins": auth.admins(conn), "method": auth.method(conn), "methods": auth.METHODS,
             "is_root": (CURRENT_USER.get() or {}).get("role") == "root",
             "process_account": auth.process_account(), "log": applog.entries(conn, "tilgang"),
-            "folders": folder_check.status(db.REPO_ROOT, db.DATA_DIR, auth.process_account()),
+            "folders": folder_check.status(db.REPO_ROOT, db.DATA_DIR),
         })
     finally:
         conn.close()

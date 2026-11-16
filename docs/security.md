@@ -13,35 +13,41 @@
   permissions decide that, not the app.
 - A folder made directly under `C:\` (such as `C:\Planlegger`) usually
   inherits **«Godkjente brukere: endre»**. That means every employee who can
-  log on to that PC can read and change everything in it. Without tightening
-  the folder, the login gives a false sense of security. Tightening the
-  folder makes the login meaningful.
+  log on to that PC can read and change everything in it. Keep that in mind:
+  the login is about who did what, not about keeping the files secret. For
+  the pilot on one PC that's accepted. Tightening the folder is IT's job and
+  comes with the proper access setup (see below).
 
-## What to do (once, takes a minute)
+## Decision for now: leave the folder as it is
 
-1. Look under Administrasjon → Tilgang → «Filene på PC-en». The app reads the
-   folder's permissions and says whether broad groups (Alle, Godkjente
-   brukere, Brukere, Domenebrukere) can reach it. It also warns at startup.
-2. If they can: close the app, open a terminal and run the line the page
-   shows. It is filled in with the account running the app:
+Folder permissions on the hospital's PCs are IT's domain. Changing them
+ourselves could break the app: another manager's account could no longer
+start it, run `git pull` or save HR exports in `data\import`. It could also
+conflict with IT's policies. So during the pilot the folder stays as Windows
+made it, and the app doesn't touch it:
 
-   ```
-   icacls "C:\Planlegger" /inheritance:r /grant:r "DOMENE\bruker:(OI)(CI)F" "*S-1-5-32-544:(OI)(CI)F" "*S-1-5-18:(OI)(CI)F"
-   ```
+- Administrasjon → Tilgang → «Filene på PC-en» only **reports** which broad
+  groups (Alle, Godkjente brukere, Brukere, Domenebrukere) can reach the
+  files. It offers no command and changes nothing.
+- Before the app is used more widely or opened on the network, we take this
+  up with IT, together with the rest of the access setup (roles, a proper
+  runtime, possibly a server). We may also involve the privacy officer
+  (personvernombud), since absences are recorded.
 
-   This removes the inherited entries and grants access to that account,
-   the PC's administrators (IT) and SYSTEM only. It uses SIDs, so it works on
-   Norwegian Windows. You don't need administrator rights if you created the
-   folder yourself.
-3. Some other managers start the app or put HR exports in `data\import` from
-   their own Windows account. Add each of them:
-   `icacls "C:\Planlegger" /grant "DOMENE\bruker:(OI)(CI)M"`. Better still,
-   ask IT for a group for the managers and grant that group once.
-4. Ask IT to confirm that the PC's disk is encrypted with **BitLocker**
-   (standard on hospital PCs). That covers a stolen PC or disk.
+### For IT, when that conversation happens (don't run this yourself)
 
-IT (local administrators) can always reach the files. That is normal and
-can't be prevented from inside an app.
+One way to leave the folder to named accounts, the PC's administrators and
+SYSTEM. It removes inheritance from `C:\`, so **every** account that starts
+the app or drops files into it must be listed, or be in a group that is:
+
+```
+icacls "C:\Planlegger" /inheritance:r /grant:r "DOMENE\gruppe-eller-bruker:(OI)(CI)M" "*S-1-5-32-544:(OI)(CI)F" "*S-1-5-18:(OI)(CI)F"
+```
+
+To undo it: `icacls "C:\Planlegger" /reset /T` puts the inherited permissions
+back. IT may well prefer their own tooling (group policy, a managed folder);
+the app's check reports the result either way. BitLocker on the PC's disk
+covers a stolen PC or disk.
 
 ## Why not encrypt the database?
 
