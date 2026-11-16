@@ -165,17 +165,20 @@ Klikk en celle for å bytte, eller bruk tastaturet: piltaster flytter, <kbd>J</k
   cells.forEach(paint);
   refresh();
 
-  // While working in the matrix the whole box (toolbar, headings, Lagre)
-  // should be on screen: bring it fully into view if the page has scrolled.
   var box = form.querySelector(".mx-scroll");
-  function fitBox() {
-    var r = box.getBoundingClientRect();
-    if (r.top < 0 || r.bottom > window.innerHeight + 1) {
-      window.scrollBy({top: r.top - 8, behavior: "instant"});
-    }
+  // The page scrolls, not a box: keep a cell reached with the arrow keys
+  // clear of the sticky toolbar/headings and name column.
+  function pad() {
+    var root = document.documentElement;
+    // the headings stick just below the toolbar, however many lines it wraps to
+    box.style.setProperty("--tb", form.querySelector(".mx-toolbar").offsetHeight + "px");
+    root.style.scrollPaddingTop = (form.querySelector("thead").getBoundingClientRect().height
+      + form.querySelector(".mx-toolbar").offsetHeight + 8) + "px";
+    root.style.scrollPaddingLeft = (form.querySelector("thead .mx-name").offsetWidth + 8) + "px";
   }
-  // The sticky name column's real width keeps a focused cell clear of it.
-  box.style.scrollPaddingLeft = (form.querySelector("thead .mx-name").offsetWidth + 8) + "px";
+  pad();
+  window.addEventListener("resize", pad);
+  if (window.ResizeObserver) new ResizeObserver(pad).observe(form.querySelector(".mx-toolbar"));
 
   // Instant tip with the function's name (the vertical headings are hard to
   // read far down the matrix) – on hover and on keyboard focus.
@@ -200,7 +203,6 @@ Klikk en celle for å bytte, eller bruk tastaturet: piltaster flytter, <kbd>J</k
     if (cell) showTip(cell);
   });
   box.addEventListener("mouseleave", hideTip);
-  box.addEventListener("scroll", hideTip, {passive: true});
   window.addEventListener("scroll", hideTip, {passive: true});
 
   // Grid navigation: rows of buttons, arrow keys move like a spreadsheet.
@@ -227,10 +229,10 @@ Klikk en celle for å bytte, eller bruk tastaturet: piltaster flytter, <kbd>J</k
       else if (k === "n" || k === "N" || k === "Delete" || k === "Backspace") { set(cell, ""); e.preventDefault(); }
       else if (k === " ") { set(cell, cycle[cell.dataset.value]); e.preventDefault(); }
     });
-    // Keyboard focus: bring the matrix into view and show the tip. A mouse
-    // click never scrolls – the click must land where it was aimed.
+    // Keyboard focus shows the tip too. A mouse click never scrolls – the
+    // click must land where it was aimed.
     cell.addEventListener("focus", function () {
-      if (cell.matches(":focus-visible")) { fitBox(); showTip(cell); }
+      if (cell.matches(":focus-visible")) showTip(cell);
     });
     cell.addEventListener("blur", hideTip);
   });
