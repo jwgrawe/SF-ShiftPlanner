@@ -216,7 +216,7 @@ class WorkbookTest(RealModeBase):
         self.assertEqual(wb[competency.BASE_SHEET].sheet_state, "veryHidden")
         ws = wb[competency.MAIN_SHEET]
         names = [ws.cell(row=r, column=1).value for r in range(3, ws.max_row + 1)]
-        self.assertEqual(names, ["Hansen Kari", "Olsen Tor"])     # no temps in the form
+        self.assertEqual(names, ["Hansen Kari", "Olsen Tor", "Vikar Vera"])     # temps last
         heads = [ws.cell(row=2, column=c).value for c in range(1, ws.max_column + 1)]
         kontroll = heads.index("Kontrollsone") + 1
         arbeid = heads.index("Arbeidsbord/brikkelegging") + 1
@@ -239,6 +239,76 @@ class WorkbookTest(RealModeBase):
         self.assertEqual(values["Hansen Kari"], {"Kontrollsone": "uncertain",          # app edit kept
                                                  "Arbeidsbord/brikkelegging": "qualified"})
         self.assertEqual(values.get("Olsen Tor", {}), {})                                # conflict: app kept
+
+
+class TempsInTheFormTest(RealModeBase):
+    """Temps are in the form, marked VIKAR (R18). One who follows the standard
+    set has it filled in; changing anything in that row makes the whole row
+    the temp's own (all or nothing, D97)."""
+
+    def setUp(self):
+        super().setUp()
+        competency.apply_changes(self.conn, [
+            {"key": competency.STANDARD_KEY, "col": "Produksjon, uren sone", "old": "", "new": "qualified"},
+            {"key": competency.STANDARD_KEY, "col": "Arbeidsbord/brikkelegging", "old": "", "new": "qualified"}])
+
+    def form(self):
+        from openpyxl import load_workbook
+        wb = load_workbook(io.BytesIO(competency.build_form(self.conn)))
+        ws = wb[competency.MAIN_SHEET]
+        heads = [ws.cell(row=2, column=c).value for c in range(1, ws.max_column + 1)]
+        rows = {ws.cell(row=r, column=1).value: r for r in range(3, ws.max_row + 1)}
+        return wb, ws, heads, rows
+
+    def stage(self, wb):
+        buffer = io.BytesIO()
+        wb.save(buffer)
+        with self.conn:
+            return competency.stage(self.conn, "skjema.xlsx", buffer.getvalue())
+
+    def test_a_temp_on_the_standard_is_marked_and_prefilled(self):
+        _, ws, heads, rows = self.form()
+        vera = rows["Vikar Vera"]
+        self.assertEqual(ws.cell(row=vera, column=heads.index("Stilling") + 1).value, "VIKAR – følger standard")
+        self.assertEqual(ws.cell(row=vera, column=heads.index("Produksjon, uren sone") + 1).value, "Ja")
+        self.assertIsNone(ws.cell(row=vera, column=heads.index("Kontrollsone") + 1).value)
+        self.assertIsNotNone(ws.cell(row=vera, column=1).comment)          # the first temp explains
+        self.assertEqual(ws.cell(row=rows["Hansen Kari"], column=heads.index("Stilling") + 1).value,
+                         "Sterilforsyningstekniker")
+
+    def test_an_untouched_temp_keeps_following_the_standard(self):
+        wb, _, _, _ = self.form()
+        model = competency.review(self.conn, self.stage(wb))
+        self.assertEqual(model["people"], [])
+        self.assertEqual(competency.current_values(self.conn).get("Vikar Vera", {}), {})
+
+    def test_changing_a_standard_temp_makes_the_whole_row_their_own(self):
+        wb, ws, heads, rows = self.form()
+        ws.cell(row=rows["Vikar Vera"], column=heads.index("Kontrollsone") + 1, value="Ja")
+        import_id = self.stage(wb)
+        model = competency.review(self.conn, import_id)
+        vera = next(p for p in model["people"] if p["target"] == "Vikar Vera")
+        self.assertTrue(vera["from_standard"])
+        competency.apply_import(self.conn, import_id, overwrite_conflicts=False)
+        self.assertEqual(competency.current_values(self.conn)["Vikar Vera"],
+                         {"Produksjon, uren sone": "qualified", "Arbeidsbord/brikkelegging": "qualified",
+                          "Kontrollsone": "qualified"})                  # standard + the change, now own
+        hr_import.rebuild(self.conn, TODAY)
+        self.assertEqual(self.comps("Vikar Vera"), {"produksjon_uren": ("qualified", None),
+                                                    "arbeidsbord": ("qualified", None),
+                                                    "kontrollsone": ("qualified", None)})
+
+    def test_a_temp_with_own_competencies_is_edited_cell_by_cell(self):
+        competency.apply_changes(self.conn, [{"key": "Vikar Vera", "col": "Sterrad", "old": "", "new": "qualified"}])
+        wb, ws, heads, rows = self.form()
+        vera = rows["Vikar Vera"]
+        self.assertEqual(ws.cell(row=vera, column=heads.index("Stilling") + 1).value, "VIKAR – egen kompetanse")
+        self.assertIsNone(ws.cell(row=vera, column=heads.index("Produksjon, uren sone") + 1).value)
+        ws.cell(row=vera, column=heads.index("Kontrollsone") + 1, value="Ukjent")
+        import_id = self.stage(wb)
+        competency.apply_import(self.conn, import_id, overwrite_conflicts=False)
+        self.assertEqual(competency.current_values(self.conn)["Vikar Vera"],
+                         {"Sterrad": "qualified", "Kontrollsone": "uncertain"})
 
 
 class CsvAndPersonIdTest(RealModeBase):

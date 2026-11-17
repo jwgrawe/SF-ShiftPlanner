@@ -504,6 +504,10 @@ def review(conn: sqlite3.Connection, import_id: int) -> dict:
 
     current = current_values(conn)
     base = data["base"]
+    # Temps without their own row follow the standard set (D97). The form
+    # shows them with it filled in; if anything in such a row is changed, the
+    # whole row as it stands in the form becomes their own (all or nothing).
+    on_standard = {p["key"] for p in people(conn) if p["temp"] and not current.get(p["key"])}
     per_person: list[dict] = []
     counts = defaultdict(int)
     for name, values in data["rows"].items():
@@ -513,6 +517,16 @@ def review(conn: sqlite3.Connection, import_id: int) -> dict:
             continue
         cur_row = current.get(target, {})
         base_row = base.get(name) if base is not None else None
+        if target in on_standard and base_row is not None:
+            if all(new == base_row.get(col, "") for col, new in values.items()):
+                continue                              # untouched: still follows the standard
+            changes = [{"col": col, "old": "", "new": new, "kind": "ny"}
+                       for col, new in values.items() if new]
+            counts["ny"] += len(changes)
+            if changes:
+                per_person.append({"name": name, "target": target, "changes": changes,
+                                   "linked": name != target, "from_standard": True})
+            continue
         changes = []
         for col, new in values.items():
             cur = cur_row.get(col, "")
@@ -532,7 +546,7 @@ def review(conn: sqlite3.Connection, import_id: int) -> dict:
             counts[kind] += 1
         if changes:
             per_person.append({"name": name, "target": target, "changes": changes,
-                               "linked": name != target})
+                               "linked": name != target, "from_standard": False})
     per_person.sort(key=lambda p: p["target"].lower())
     model.update(step="diff", people=per_person, counts=dict(counts),
                  linked={n: t for n, t in targets.items() if t and n != t})
@@ -618,13 +632,21 @@ GUIDE = [
     "",
     "Bare cellene du endrer, brukes. Har noen andre endret samme celle i appen i",
     "mellomtiden, vises det som en konflikt som må avgjøres – ingenting overskrives i det stille.",
+    "",
+    "Vikarer står nederst, med lilla merking og «VIKAR» i Stilling-kolonnen:",
+    "     VIKAR – følger standard   – bruker standardkompetansen for vikarer (den er fylt inn).",
+    "                                 Lar du raden stå urørt, følger vikaren standarden videre.",
+    "                                 Endrer du noe i raden, får vikaren HELE raden slik den står",
+    "                                 som sin egen kompetanse – standarden gjelder ikke lenger.",
+    "     VIKAR – egen kompetanse   – har egen kompetanse, som de faste; endres celle for celle.",
 ]
 
 
 def build_form(conn: sqlite3.Connection) -> bytes:
-    """The fill-in form: every regular employee (temps get the standard set),
-    names exactly as exported, current values pre-filled, dropdowns, colours,
-    locked structure, and a hidden copy of the starting values."""
+    """The fill-in form: every employee in the turnus and ukeplans, names
+    exactly as exported, current values pre-filled, dropdowns, colours,
+    locked structure, and a hidden copy of the starting values. Temps come
+    last, marked VIKAR; one who follows the standard set has it filled in."""
     from openpyxl import Workbook
     from openpyxl.formatting.rule import CellIsRule
     from openpyxl.styles import Alignment, Font, PatternFill, Protection
@@ -633,7 +655,17 @@ def build_form(conn: sqlite3.Connection) -> bytes:
 
     data = matrix(conn)
     cols = data["columns"]
-    rows = [r for r in data["rows"] if not r["temp"]]
+    rows = sorted(data["rows"], key=lambda r: r["temp"])          # temps last, order kept
+
+    def form_values(person: dict) -> dict:
+        if person["temp"] and not person["values"]:
+            return data["standard"]                   # follows the standard set
+        return person["values"]
+
+    def title_of(person: dict) -> str:
+        if not person["temp"]:
+            return person["title"]
+        return "VIKAR – egen kompetanse" if person["values"] else "VIKAR – følger standard"
     stamp = f"Generert {dt.datetime.now():%d.%m.%Y %H:%M} av SF-Planlegger"
 
     wb = Workbook()
@@ -664,10 +696,11 @@ def build_form(conn: sqlite3.Connection) -> bytes:
         ws.cell(row=2, column=len(cols) + 3, value="PersonID")
         for i, person in enumerate(rows, start=3):
             ws.cell(row=i, column=1, value=person["full_name"])
+            values = form_values(person)
             for j, c in enumerate(cols, start=2):
-                status = person["values"].get(c["key"], "")
+                status = values.get(c["key"], "")
                 ws.cell(row=i, column=j, value=word(status) if status else None)
-            ws.cell(row=i, column=len(cols) + 2, value=person["title"])
+            ws.cell(row=i, column=len(cols) + 2, value=title_of(person))
             ws.cell(row=i, column=len(cols) + 3, value=person.get("person_id") or None)
 
     ws = wb.create_sheet(MAIN_SHEET)
@@ -701,6 +734,23 @@ def build_form(conn: sqlite3.Connection) -> bytes:
             for cell in row:
                 cell.protection = Protection(locked=False)
                 cell.alignment = Alignment(horizontal="center")
+    temps = [i for i, person in enumerate(rows, start=3) if person["temp"]]
+    if temps:
+        from openpyxl.comments import Comment
+        from openpyxl.styles import Border, Side
+
+        lilac = PatternFill("solid", fgColor="E6DDF3")
+        for i in temps:
+            for j in (1, len(cols) + 2, len(cols) + 3):
+                ws.cell(row=i, column=j).fill = lilac
+            ws.cell(row=i, column=len(cols) + 2).font = Font(bold=True, color="4B2E83")
+        thick = Side(style="medium", color="4B2E83")
+        for j in range(1, len(cols) + 4):
+            ws.cell(row=temps[0], column=j).border = Border(top=thick)
+        ws.cell(row=temps[0], column=1).comment = Comment(
+            "Herfra og ned: vikarer (i ukeplanen, ikke i turnusen). «Følger standard» = "
+            "standardkompetansen er fylt inn. Endrer du noe i raden, får vikaren hele raden "
+            "som egen kompetanse.", "SF-Planlegger", width=320, height=110)
     ws.freeze_panes = "B3"
     ws.protection.sheet = True
     ws.protection.formatColumns = False
@@ -713,5 +763,6 @@ def build_form(conn: sqlite3.Connection) -> bytes:
 
     buffer = io.BytesIO()
     wb.save(buffer)
-    applog.write(conn, "kompetanse", f"Utfyllingsskjema lastet ned ({len(rows)} ansatte).")
+    applog.write(conn, "kompetanse", f"Utfyllingsskjema lastet ned ({len(rows) - len(temps)} ansatte, "
+                                      f"{len(temps)} vikarer).")
     return buffer.getvalue()

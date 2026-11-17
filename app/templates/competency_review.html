@@ -85,7 +85,8 @@
     <tr><th style="width:30%">Ansatt</th><th>Endringer</th></tr>
     {% for person in people %}
       <tr><td><strong>{{ person.target }}</strong>
-            {% if person.linked %}<br><span class="muted small">i filen: «{{ person.name }}»</span>{% endif %}</td>
+            {% if person.linked %}<br><span class="muted small">i filen: «{{ person.name }}»</span>{% endif %}
+            {% if person.from_standard %}<br><span class="badge draft" title="Vikaren fulgte standardkompetansen; raden i skjemaet blir vikarens egen">vikar: fra standard til egen</span>{% endif %}</td>
           <td class="changes">
             {% for c in person.changes %}
               <span class="chg {{ c.kind }}" title="{{ c.kind }}">{{ c.col }}:
