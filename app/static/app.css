@@ -311,7 +311,9 @@ table.matrix .mx-name {
 table.matrix thead .mx-name { z-index: 4; background: var(--surface-2); }
 .mx-name .pn { display: block; font-weight: 600; white-space: nowrap; }
 .mx-name .small { display: block; font-weight: 400; white-space: nowrap; }
-td.mx-title { font-size: 0.84rem; color: var(--ink-soft); white-space: nowrap; padding-right: 0.8rem; }
+td.mx-title { font-size: 0.84rem; color: var(--ink-soft); white-space: nowrap; }
+/* air between the job titles and the first competency column */
+table.matrix .mx-title { padding-right: 1.8rem; }
 .mx-tip {
   position: fixed; z-index: 50; pointer-events: none; max-width: 22rem;
   background: var(--ink); color: var(--surface); font-size: 0.82rem; font-weight: 600;
