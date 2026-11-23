@@ -5,10 +5,15 @@ data/seed/shift_codes.csv, learns codes from the turnus legend, and is then
 edited here: add, change, ignore or remove a code. shift_codes, which the
 rest of the app joins against, is derived from it by db.sync_shift_codes().
 
-Three kinds of code:
+Five kinds of code:
   vanlig     fixed times (D 07:00–15:00) – planned as usual
   egen_tid   no fixed times (DX/AX) – the time is entered per shift
   ignoreres  never planned (DMT/DMK) – the day is shown but held out
+  fravaer    absence (SE …): away the whole day (R19)
+  permisjon  leave (PLB …): alone, away the whole day; in parentheses after a
+             shift («A (PLB)»), the shift is shortened – its time is entered
+             per shift, like DX/AX (R19)
+For fravær and permisjon the app keeps no record of which code it was.
 """
 from __future__ import annotations
 
@@ -22,12 +27,18 @@ KINDS = {
     "vanlig": "Fast tid",
     "egen_tid": "Tid per vakt",
     "ignoreres": "Ignoreres",
+    "permisjon": "Permisjon",
+    "fravaer": "Fravær",
 }
 KIND_HELP = {
     "vanlig": "Vakten har faste tider og planlegges som vanlig.",
     "egen_tid": "Ingen faste tider (f.eks. DX/AX fra vikarenheten). Tiden angis for hver vakt "
                 "under Datagrunnlag → Vakter uten fast tid.",
     "ignoreres": "Vakten planlegges aldri (f.eks. DMT/DMK). Dagen vises, men holdes utenfor.",
+    "permisjon": "Permisjonskode. Alene (f.eks. PLB): borte hele vakten. I parentes etter en vakt "
+                 "(f.eks. A (PLB)): vakten er kortere – tiden angis per vakt under Datagrunnlag → "
+                 "Vakter uten fast tid. Appen lagrer ikke hvilken kode det var.",
+    "fravaer": "Fraværskode (f.eks. SE): borte hele dagen. Appen lagrer ikke hvilken kode det var.",
 }
 SOURCES = {"standard": "standard", "turnus": "fra turnusen", "manuell": "lagt til her"}
 CODE = re.compile(r"^[A-ZÆØÅ0-9]{1,6}$")
@@ -72,16 +83,20 @@ def unknown_codes(conn: sqlite3.Connection, today: dt.date) -> list[dict]:
     found: dict[str, dict] = {}
     for r in conn.execute("SELECT * FROM roster_pending WHERE date >= ? ORDER BY date",
                           (today.isoformat(),)):
-        code, _, problem = hr_import.interpret(r["raw"])
-        if problem or not code or code in active:
+        code, _, problem, leave = hr_import.parse_cell(r["raw"])
+        # «A (XYZ)»: the code in parentheses may be the unknown one (R19).
+        # A kept partial-leave cell reads «A (permisjon)» – not a code.
+        unknown = [c for c in (code, leave) if c and c not in active and CODE.match(c)]
+        if problem or not unknown:
             continue
-        entry = found.setdefault(code, {"code": code, "count": 0, "examples": [],
-                                        "deleted": code in deleted})
-        entry["count"] += 1
-        if len(entry["examples"]) < 4:
-            entry["examples"].append(
-                f"{names.get(r['employee_id'], r['employee_id'])} "
-                f"{dt.date.fromisoformat(r['date']):%d.%m}")
+        for c in unknown:
+            entry = found.setdefault(c, {"code": c, "count": 0, "examples": [],
+                                         "deleted": c in deleted, "in_parentheses": c == leave})
+            entry["count"] += 1
+            if len(entry["examples"]) < 4:
+                entry["examples"].append(
+                    f"{names.get(r['employee_id'], r['employee_id'])} "
+                    f"{dt.date.fromisoformat(r['date']):%d.%m}")
     return sorted(found.values(), key=lambda e: e["code"])
 
 
@@ -99,13 +114,15 @@ def overview(conn: sqlite3.Connection, today: dt.date) -> dict:
         "GROUP BY shift_code", (today.isoformat(), horizon))}
     for r in conn.execute("SELECT raw FROM roster_pending WHERE date BETWEEN ? AND ?",
                           (today.isoformat(), horizon)):
-        code = hr_import.interpret(r["raw"])[0]
+        code = hr_import.parse_cell(r["raw"])[0]
         if code:
             used[code] = used.get(code, 0) + 1
     manual = conn.execute("SELECT COUNT(*) FROM roster WHERE shift_code = 'MAN' "
                           "AND date BETWEEN ? AND ?", (today.isoformat(), horizon)).fetchone()[0]
     codes, deleted = [], []
-    for r in conn.execute("SELECT * FROM shift_code_defs ORDER BY code"):
+    # Shift codes first, then the leave and absence codes (R19).
+    for r in conn.execute("SELECT * FROM shift_code_defs ORDER BY kind IN ('permisjon', 'fravaer'), "
+                          "kind = 'fravaer', code"):
         item = dict(r)
         item["kind_label"] = KINDS.get(r["kind"], r["kind"])
         item["source_label"] = SOURCES.get(r["source"], r["source"])
@@ -120,6 +137,8 @@ def overview(conn: sqlite3.Connection, today: dt.date) -> dict:
         "vanlig": sum(1 for c in codes if c["kind"] == "vanlig"),
         "egen_tid": sum(1 for c in codes if c["kind"] == "egen_tid"),
         "ignoreres": sum(1 for c in codes if c["kind"] == "ignoreres"),
+        "permisjon": sum(1 for c in codes if c["kind"] == "permisjon"),
+        "fravaer": sum(1 for c in codes if c["kind"] == "fravaer"),
         "utpost": sum(1 for c in codes if c["kind"] == "vanlig" and c["utpost_code"] == "yes"),
         "avvik": sum(1 for c in codes if c["deviation"]),
         "nye": sum(1 for c in codes if not c["reviewed"]),

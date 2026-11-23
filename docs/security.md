@@ -70,8 +70,10 @@ or server.
 
 ## What counts as personal data here
 
-- The database (names, shifts, absences, including the absence type
-  «Syk», and competencies)
+- The database (names, shifts, absences registered in the app, including the
+  absence type «Syk», and competencies). Absence and leave codes from the HR
+  exports are *not* kept: the app records only that the day isn't worked
+  (D125)
 - `data\import\` with `arkiv\` and `avvist\`
 - `data\private\` (including the anonymiser key)
 - The log, which is in the database

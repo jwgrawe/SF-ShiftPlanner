@@ -16,8 +16,10 @@ endre, ignorere og fjerne koder – alt logges, og planen bygges på nytt med en
       <div class="vk-item-main">
         <code class="vk-code">{{ u.code }}</code>
         <div>
-          <strong>Ukjent kode</strong> – står på {{ u.count }} vakt{{ "er" if u.count != 1 }} de neste fire ukene,
+          <strong>Ukjent kode{% if u.in_parentheses %} i parentes{% endif %}</strong> – står på {{ u.count }} vakt{{ "er" if u.count != 1 }} de neste fire ukene,
           som holdes utenfor planen til koden er definert.
+          {% if u.in_parentheses %}<div class="small">Står i parentes etter en vakt, f.eks. «A ({{ u.code }})» – trolig en
+            permisjonskode (delvis permisjon).</div>{% endif %}
           <div class="muted small">{{ u.examples|join(", ") }}{% if u.count > u.examples|length %} …{% endif %}
             {% if u.deleted %}· koden ble fjernet fra listen tidligere{% endif %}</div>
         </div>
@@ -29,7 +31,8 @@ endre, ignorere og fjerne koder – alt logges, og planen bygges på nytt med en
             <button class="btn secondary small" type="submit">Hent tilbake</button>
           </form>
         {% endif %}
-        <button class="btn small vk-new" type="button" data-code="{{ u.code }}">Definer {{ u.code }}</button>
+        <button class="btn small vk-new" type="button" data-code="{{ u.code }}"
+                {% if u.in_parentheses %}data-kind="permisjon"{% endif %}>Definer {{ u.code }}</button>
       </div>
     </div>
   {% endfor %}
@@ -85,7 +88,8 @@ endre, ignorere og fjerne koder – alt logges, og planen bygges på nytt med en
 <div class="vk-toolbar">
   <div class="vk-filters" role="group" aria-label="Vis">
     {% for key, label in [("alle", "Alle"), ("vanlig", "Fast tid"), ("egen_tid", "Tid per vakt"),
-                          ("ignoreres", "Ignoreres"), ("utpost", "Utpost")] %}
+                          ("ignoreres", "Ignoreres"), ("utpost", "Utpost"), ("permisjon", "Permisjon"),
+                          ("fravaer", "Fravær")] %}
       <button type="button" class="vk-filter {% if key == 'alle' %}active{% endif %}" data-filter="{{ key }}"
               aria-pressed="{{ 'true' if key == 'alle' else 'false' }}">{{ label }} <span>{{ counts[key] }}</span></button>
     {% endfor %}
@@ -109,6 +113,7 @@ endre, ignorere og fjerne koder – alt logges, og planen bygges på nytt med en
       <td>
         {% if c.kind == "ignoreres" %}<span class="badge vk-ignored" title="{{ kind_help.ignoreres }}">⊘ Ignoreres</span>
         {% elif c.kind == "egen_tid" %}<span class="badge vk-pershift" title="{{ kind_help.egen_tid }}">Tid per vakt</span>
+        {% elif c.kind in ("permisjon", "fravaer") %}<span class="badge vk-leave" title="{{ kind_help[c.kind] }}">{{ c.kind_label }}</span>
         {% else %}<span class="muted">Fast tid</span>{% endif %}
         {% if c.utpost_code == "yes" %}<span class="badge utpost" title="Dager med utpostkode holdes utenfor SF-planleggingen">utpost</span>{% endif %}
       </td>
@@ -116,10 +121,13 @@ endre, ignorere og fjerne koder – alt logges, og planen bygges på nytt med en
         {% if c.kind == "vanlig" %}{{ c.start }}–{{ c.end }}
           {% if c.deviation %}<div class="small vk-dev">turnus: {{ c.legend[0] }}–{{ c.legend[1] }}</div>{% endif %}
         {% elif c.kind == "egen_tid" %}<a class="small" href="/import/ukjente">angis per vakt</a>
+        {% elif c.kind == "permisjon" %}<span class="small muted">borte · delvis: <a href="/import/ukjente">angis per vakt</a></span>
+        {% elif c.kind == "fravaer" %}<span class="small muted">borte hele dagen</span>
         {% else %}<span class="muted">–</span>{% endif %}
       </td>
       <td>{% if c.kind == "vanlig" %}{{ category_labels.get(c.category, c.category) }}{% else %}<span class="muted">–</span>{% endif %}</td>
-      <td>{% if c.used %}{{ c.used }}{% else %}<span class="muted">0</span>{% endif %}</td>
+      <td>{% if c.kind in ("permisjon", "fravaer") %}<span class="muted" title="Telles ikke – appen lagrer ikke hvem som har fravær eller permisjon">–</span>
+          {% elif c.used %}{{ c.used }}{% else %}<span class="muted">0</span>{% endif %}</td>
       <td class="small">
         {{ c.comment or "" }}
         <div class="muted">{{ c.source_label }}{% if c.edited and c.source != "manuell" %} · endret her{% endif %}
@@ -251,7 +259,7 @@ settes under <a href="/admin/regler">Planregler</a>.</p>
   }
   document.querySelectorAll(".vk-new").forEach(function (b) {
     b.addEventListener("click", function () {
-      open({code: b.dataset.code || "", kind: "vanlig",
+      open({code: b.dataset.code || "", kind: b.dataset.kind || "vanlig",
             utpost: (b.dataset.code || "").toUpperCase().charAt(0) === "U" ? "yes" : "no"}, true);
     });
   });

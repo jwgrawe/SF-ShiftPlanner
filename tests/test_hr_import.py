@@ -154,7 +154,9 @@ class InterpretTest(unittest.TestCase):
 
 
 # ---------------------------------------------------------------- pipeline
-class PipelineTest(unittest.TestCase):
+class PipelineBase(unittest.TestCase):
+    """Shared set-up and helpers for the pipeline tests."""
+
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp())
         self.inbox = self.tmp / "import"
@@ -204,6 +206,17 @@ class PipelineTest(unittest.TestCase):
     def findings(self):
         return [r["text"] for r in self.conn.execute("SELECT text FROM import_findings")]
 
+    def change(self, name, day, **fields):
+        from app import roster_changes
+        from starlette.datastructures import FormData
+        eid = self.conn.execute("SELECT employee_id FROM employees WHERE full_name = ?", (name,)).fetchone()[0]
+        message = roster_changes.save(self.conn, FormData([("employee_id", eid), ("date", day.isoformat())]
+                                                          + list(fields.items())))
+        hr_import.rebuild(self.conn, TODAY)
+        return eid, message
+
+
+class PipelineTest(PipelineBase):
     def test_files_leave_the_inbox(self):
         self.load()
         self.assertEqual(sorted(p.name for p in self.inbox.iterdir()), ["arkiv"])
@@ -280,15 +293,6 @@ class PipelineTest(unittest.TestCase):
         self.assertEqual(self.redo_scenario("varsle")[0], "14:00")   # left as it was …
         self.assertTrue([f for f in checks.day_checks(self.conn, MON + dt.timedelta(1))
                          if f["kind"] == "shift_changed" and "Kari" in f["text"]])   # … and warned
-
-    def change(self, name, day, **fields):
-        from app import roster_changes
-        from starlette.datastructures import FormData
-        eid = self.conn.execute("SELECT employee_id FROM employees WHERE full_name = ?", (name,)).fetchone()[0]
-        message = roster_changes.save(self.conn, FormData([("employee_id", eid), ("date", day.isoformat())]
-                                                          + list(fields.items())))
-        hr_import.rebuild(self.conn, TODAY)
-        return eid, message
 
     def test_roster_changes_win_over_turnus_and_ukeplan(self):
         self.use_turnus_for_unlisted()
@@ -559,6 +563,103 @@ class PipelineTest(unittest.TestCase):
         self.assertEqual(self.conn.execute("SELECT COUNT(*) FROM roster").fetchone()[0], first)
         self.assertEqual(self.conn.execute(
             "SELECT COUNT(*) FROM employees WHERE origin = 'import'").fetchone()[0], 7)
+
+
+class LeaveCodesTest(PipelineBase):
+    """Fravær and permisjon (R19, D125): alone, the person is away and the app
+    keeps no record of which code; «A (PLB)» is partial leave – the shift is
+    held until a manager enters its real time, like DX/AX."""
+
+    WEEK = {MON: "SE", MON + dt.timedelta(1): "A (PLB)", MON + dt.timedelta(2): "PLB",
+            MON + dt.timedelta(3): "D (XYZ)", MON + dt.timedelta(4): "D (D2)"}
+
+    def load_leave(self):
+        self.use_turnus_for_unlisted()
+        self.drop(fx.plan_name(EXPORTED), fx.plan_csv(people(), START, 4, EXPORTED))
+        exported = dt.datetime(2027, 1, 4, 6, 30)
+        self.drop(fx.ukeplan_name(exported), fx.ukeplan_csv([("1001", "Hansen Kari", self.WEEK)], MON, exported))
+        hr_import.scan_inbox(self.conn, self.inbox)
+        hr_import.rebuild(self.conn, TODAY)
+        self.kari = self.conn.execute("SELECT employee_id FROM employees WHERE full_name = 'Hansen Kari'").fetchone()[0]
+
+    def test_parsing(self):
+        self.assertEqual(hr_import.parse_cell("A (PLB)"), ("A", None, None, "PLB"))
+        self.assertEqual(hr_import.parse_cell("D/F3 (VB)"), ("D", "12:00", None, "VB"))
+        self.assertEqual(hr_import.parse_cell("N (PLB), M"), ("N", None, None, "PLB"))
+        self.assertEqual(hr_import.parse_cell("SE"), ("SE", None, None, None))
+        self.assertEqual(hr_import.generic_partial("A (PLB)"), "A (permisjon)")
+
+    def test_whole_day_absence_and_leave_mean_not_working_and_leave_no_trace(self):
+        self.load_leave()
+        kari_roster, kari_pending = self.roster("Hansen Kari"), self.pending("Hansen Kari")
+        for day in (MON, MON + dt.timedelta(2)):                       # SE, PLB
+            self.assertNotIn(day.isoformat(), kari_roster)
+            self.assertNotIn(day.isoformat(), kari_pending)
+        stored = " ".join(str(v) for table in ("roster", "roster_pending", "import_findings")
+                          for row in self.conn.execute(f"SELECT * FROM {table}") for v in tuple(row))
+        for code in ("SE", "PLB"):
+            self.assertNotIn(code, stored.split(), f"{code} is kept somewhere")
+            self.assertNotIn(f"«{code}»", stored)
+            self.assertNotIn(f"({code})", stored)
+
+    def test_partial_leave_waits_for_the_real_time(self):
+        from app import service
+        self.load_leave()
+        tue = (MON + dt.timedelta(1)).isoformat()
+        row = self.conn.execute("SELECT * FROM roster_pending WHERE employee_id = ? AND date = ?",
+                                (self.kari, tue)).fetchone()
+        self.assertEqual((row["raw"], row["fixable"]), ("A (permisjon)", 1))
+        self.assertIn("delvis permisjon", row["reason"])
+        self.assertTrue(any("delvis permisjon" in f and "Vakter uten fast tid" in f for f in self.findings()))
+        item = next(i for p in service.unknown_shifts_model(self.conn, TODAY)["people"] for i in p["items"]
+                    if i["raw"] == "A (permisjon)")
+        self.assertEqual(item["usual"], ("14:00", "22:00"))           # A, offered as a starting point
+        with self.conn:
+            self.conn.execute("INSERT INTO manual_shift_times VALUES (?, ?, 'A (permisjon)', '14:00', '18:00', 'nå')",
+                              (self.kari, tue))
+        hr_import.rebuild(self.conn, TODAY)
+        planned = self.roster("Hansen Kari")[tue]
+        self.assertEqual((planned["shift_code"], planned["start_override"], planned["end_override"]),
+                         ("MAN", "14:00", "18:00"))
+
+    def test_cells_kept_for_problems_carry_no_leave_code_either(self):
+        codes = {r["code"]: r for r in self.conn.execute("SELECT * FROM shift_codes")}
+        self.assertEqual(hr_import.without_leave_codes("SE", codes), "fravær")
+        self.assertEqual(hr_import.without_leave_codes("PLB", codes), "permisjon")
+        self.assertEqual(hr_import.without_leave_codes("Q9 (PLB)", codes), "Q9 (permisjon)")   # unknown shift
+        self.assertEqual(hr_import.without_leave_codes("D (XYZ)", codes), "D (XYZ)")         # unknown: shown
+        self.assertEqual(hr_import.without_leave_codes("D, A", codes), "D, A")
+
+    def test_odd_parentheses_are_flagged(self):
+        from app import shift_codes
+        self.load_leave()
+        pending = self.pending("Hansen Kari")
+        self.assertIn("ukjent kode i parentes «XYZ»", pending[(MON + dt.timedelta(3)).isoformat()])
+        self.assertIn("«D2» i parentes er ikke en permisjons", pending[(MON + dt.timedelta(4)).isoformat()])
+        unknown = {u["code"]: u for u in shift_codes.unknown_codes(self.conn, TODAY)}
+        self.assertTrue(unknown["XYZ"]["in_parentheses"])
+        self.assertNotIn("permisjon", unknown)                         # «A (permisjon)» is no code
+        shift_codes.save(self.conn, {"code": "XYZ", "kind": "permisjon"})
+        hr_import.rebuild(self.conn, TODAY)
+        self.assertIn("delvis permisjon", self.pending("Hansen Kari")[(MON + dt.timedelta(3)).isoformat()])
+
+    def test_a_roster_change_on_an_absent_day_says_only_fravaer(self):
+        self.load_leave()
+        self.change("Hansen Kari", MON, kind="vakt", code="D")
+        replaced = self.conn.execute("SELECT replaced FROM roster_overrides WHERE employee_id = ?",
+                                     (self.kari,)).fetchone()[0]
+        self.assertEqual(replaced, "fravær")
+
+    def test_the_standard_list_takes_over_a_leave_code_learned_as_a_shift(self):
+        with self.conn:
+            self.conn.execute("UPDATE shift_code_defs SET kind = 'vanlig', start = '08:00', end = '16:00', "
+                              "category = 'tidligvakt', source = 'turnus' WHERE code = 'PLB'")
+            self.conn.execute("UPDATE shift_code_defs SET kind = 'ignoreres', source = 'manuell', edited = 1 "
+                              "WHERE code = 'SE'")
+            importer.import_seed(self.conn, people=False)
+        kinds = {r["code"]: r["kind"] for r in self.conn.execute("SELECT code, kind FROM shift_code_defs")}
+        self.assertEqual(kinds["PLB"], "permisjon")                    # learned from the legend: replaced
+        self.assertEqual(kinds["SE"], "ignoreres")                     # set by hand here: kept
 
 
 if __name__ == "__main__":

@@ -775,3 +775,9 @@ body.printpage main { max-width: none; padding: 0; }
   .sheet:last-of-type { break-after: auto; page-break-after: auto; }
   .sheet, .sheet * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
+
+/* A button that reads as a link (inline actions in running text). */
+button.linklike { background: none; border: 0; padding: 0; font: inherit; color: var(--accent);
+  text-decoration: underline; cursor: pointer; }
+/* Leave and absence codes on Vaktkoder (R19). */
+.badge.vk-leave { background: var(--info-bg); color: var(--info-ink); border: 1px solid var(--info-line, #c9d3f0); }

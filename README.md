@@ -94,7 +94,12 @@ week). Preview any moment with e.g. `/display?date=ÅÅÅÅ-MM-DD&time=10:30`.
    odd — e.g. no ukeplan for this week, turnus running out, a new job title
    to classify, an unknown shift code.
 
-3. **Print the plan to hang up** (until the board screen is in place):
+3. **Partial leave and DX/AX:** a shift written as «A (PLB)» (partial leave)
+   or a DX/AX code waits under Datagrunnlag → **Vakter uten fast tid** until
+   its real time is entered; for partial leave the shift's usual time is
+   offered to adjust. Absence and leave codes on their own («SE», «PLB») just
+   mean the person is away – the app keeps no record of which code (D125).
+4. **Print the plan to hang up** (until the board screen is in place):
    «I dag» has **Skriv ut i dag** / **Skriv ut i morgen**, a day's plan has
    **Skriv ut**, and the week view has **Skriv ut uken** (one page per day).
    Each day fits one A4 page (portrait), laid out like the board in its

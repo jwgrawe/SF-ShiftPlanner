@@ -147,7 +147,7 @@ def main() -> int:
 
     for row in shift_codes:
         kind = row.get("kind", "vanlig")
-        if kind not in {"vanlig", "ignoreres", "egen_tid"}:
+        if kind not in {"vanlig", "ignoreres", "egen_tid", "permisjon", "fravaer"}:
             errors.append(f"shift_codes.csv: {row['code']}: bad kind {kind!r}")
         if kind == "vanlig":  # only regular codes have fixed times and a category
             for col in ("start", "end"):

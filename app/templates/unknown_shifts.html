@@ -3,7 +3,8 @@
 {% block content %}
 <p><a href="/import">&larr; Datagrunnlag</a></p>
 <h1>Vakter uten fast tid</h1>
-<p class="intro">Koder uten fast tid – typisk <code>DX</code> og <code>AX</code> fra vikarenheten. Appen kan ikke
+<p class="intro">Koder uten fast tid – typisk <code>DX</code> og <code>AX</code> fra vikarenheten – og vakter med
+<strong>delvis permisjon</strong> («A (permisjon)»: vakten er kortet ned, men eksporten sier ikke hvordan). Appen kan ikke
 vite når vakten er, så den holdes utenfor planen til du angir tiden. Skriv tiden (<kbd>8</kbd>, <kbd>830</kbd>,
 <kbd>15.30</kbd> …) eller dra over tidslinjen; pil opp/ned endrer med en halvtime. Ingenting lagres før du
 trykker «Lagre». Hvilke koder dette gjelder, styres under <a href="/admin/vaktkoder">Administrasjon → Vaktkoder</a>.</p>
@@ -49,6 +50,11 @@ trykker «Lagre». Hvilke koder dette gjelder, styres under <a href="/admin/vakt
           <strong>{{ item.weekday }} {{ item.date.strftime("%d.%m") }}</strong>
           {% if item.relative %}<span class="muted small">{{ item.relative }}</span>{% endif %}
           <div><code class="uk-code">{{ item.raw }}</code></div>
+          {% if item.usual and not item.done %}
+            <div class="small muted">Delvis permisjon · vanlig tid {{ item.usual[0] }}–{{ item.usual[1] }}
+              <button type="button" class="linklike uk-usual" data-start="{{ item.usual[0] }}"
+                      data-end="{{ item.usual[1] }}">fyll inn og juster</button></div>
+          {% endif %}
         </div>
 
         <div class="uk-week" aria-label="Uka til {{ p.display }}">
@@ -139,6 +145,12 @@ bort og vakten dukker opp her igjen. Alt som lagres, logges.</p>
       var s = Clock.parse(start.value);
       return s === null ? previous(row, ".uk-end") : Clock.format(s + 7 * 60);
     }});
+    var usual = row.querySelector(".uk-usual");
+    if (usual) usual.addEventListener("click", function () {
+      start.value = usual.dataset.start; end.value = usual.dataset.end;
+      start.dispatchEvent(new Event("change")); end.dispatchEvent(new Event("change"));
+      end.focus(); end.select();
+    });
     [start, end].forEach(function (input) {
       input.addEventListener("input", function () { hint(row); });
       input.addEventListener("change", function () { hint(row); });

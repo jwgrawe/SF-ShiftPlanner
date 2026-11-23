@@ -905,9 +905,25 @@ def unknown_shifts_model(conn: sqlite3.Connection, today: dt.date, show_past: bo
                           "kind": kind, "this": d == day})
         return strip
 
+    from app import hr_import                      # here: hr_import imports this module's users
+
+    times = {r["code"]: (r["start"], r["end"]) for r in conn.execute(
+        "SELECT code, start, end FROM shift_codes WHERE kind = 'vanlig'")}
+
+    def usual(raw: str) -> tuple[str, str] | None:
+        """A partial-leave cell («A (permisjon)», R19): the shift's own time,
+        offered as a starting point – the export doesn't say how it's shortened."""
+        if not raw.endswith("(permisjon)"):
+            return None
+        code, end_override, problem, _ = hr_import.parse_cell(raw)
+        if problem or code not in times:
+            return None
+        return times[code][0], end_override or times[code][1]
+
     for eid, p in people.items():
         p["items"].sort(key=lambda item: item["date"])
         for item in p["items"]:
+            item["usual"] = usual(item["raw"])
             item["weekday"] = WEEKDAYS_NB[item["date"].weekday()]
             item["relative"] = ("i dag" if item["date"] == today else
                                 "i morgen" if item["date"] == today + dt.timedelta(days=1) else

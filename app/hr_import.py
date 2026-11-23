@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+import re
 import shutil
 import sqlite3
 import threading
@@ -207,10 +208,49 @@ def scan_inbox(conn: sqlite3.Connection, inbox: Path | None = None) -> list[str]
 
 
 # ---------------------------------------------------------- the rebuild
+# Codes that mean the person is away (R19, D125): never planned, and the app
+# keeps no record of which code it was – only that the day isn't worked.
+LEAVE_KINDS = ("fravaer", "permisjon")
+PARTIAL = re.compile(r"^(?P<rest>.*?)\s*\((?P<leave>[^()]*)\)\s*$")
+
+
+def parse_cell(raw: str) -> tuple[str | None, str | None, str | None, str | None]:
+    """Raw cell -> (code, end override, problem, code in parentheses).
+    «A (PLB)» is shift A with partial leave PLB on top (R19): the code in
+    parentheses comes back separately."""
+    # Overtime (M) beside it is no part of the shift (Q34): «N (PLB), M».
+    cell = ", ".join(p.strip() for p in raw.split(",") if p.strip() and p.strip().upper() != "M")
+    match = PARTIAL.match(cell)
+    if match and match.group("rest").strip():
+        code, end_override, problem = interpret(match.group("rest"))
+        return code, end_override, problem, match.group("leave").strip().upper() or None
+    return (*interpret(raw), None)
+
+
+def generic_partial(raw: str) -> str:
+    """What the app keeps of a partial-leave cell: the shift, not the leave
+    code (R19) – «A (PLB)» becomes «A (permisjon)»."""
+    cell = ", ".join(p.strip() for p in raw.split(",") if p.strip() and p.strip().upper() != "M")
+    match = PARTIAL.match(cell)
+    return f"{match.group('rest').strip()} (permisjon)" if match else raw
+
+
+def without_leave_codes(raw: str, codes: dict) -> str:
+    """A cell as the app may keep it (R19): a leave/absence code becomes
+    «fravær»/«permisjon», a known one in parentheses «(permisjon)»."""
+    code, _, problem, leave = parse_cell(raw)
+    if not problem and code in codes and codes[code]["kind"] in LEAVE_KINDS:
+        return "permisjon" if codes[code]["kind"] == "permisjon" else "fravær"
+    if leave and leave in codes and codes[leave]["kind"] in LEAVE_KINDS:
+        return generic_partial(raw)
+    return raw
+
+
 def interpret(raw: str) -> tuple[str | None, str | None, str | None]:
     """Raw cell -> (code, end override, problem). Only what is confirmed is
     applied (D86/D92); everything else comes back as a problem. A cell with
-    only overtime (M) is no shift at all (Q34): (None, None, None)."""
+    only overtime (M) is no shift at all (Q34): (None, None, None). A code in
+    parentheses (partial leave, R19) is read by parse_cell, not here."""
     parts = [p.strip() for p in raw.split(",") if p.strip()]
     parts = [p for p in parts if p.upper() != "M"]          # overtime (Q34)
     if not parts:
@@ -559,6 +599,7 @@ class Rebuild:
 
         conn.execute("DELETE FROM roster")
         conn.execute("DELETE FROM roster_pending")
+        self.away: dict[tuple[str, str], str] = {}
         manual = {(r["employee_id"], r["export_date"]): r for r in conn.execute(
             "SELECT * FROM manual_shift_times")}
         placed: set[tuple[str, str]] = set()
@@ -566,16 +607,33 @@ class Rebuild:
         not_in_plan: set[str] = set()
         for (eid, day), (raw, source, key) in sorted(effective.items()):
             if (eid, day) in conflicts:
-                pending.append((day, eid, raw, "to rader har vakt samme dag (D80)", source, 0))
+                pending.append((day, eid, without_leave_codes(raw, codes),
+                                "to rader har vakt samme dag (D80)", source, 0))
                 continue
-            code, end_override, problem = interpret(raw)
+            code, end_override, problem, leave = parse_cell(raw)
+            raw = without_leave_codes(raw, codes)       # what the app keeps (R19)
             if code is None and problem is None:
                 continue                       # only overtime (M): no shift (Q34)
             shift = codes.get(code) if not problem else None
             if not problem and shift is None:
                 problem = f"ukjent vaktkode «{code}» – definer den under Administrasjon → Vaktkoder"
+            if shift is not None and shift["kind"] in LEAVE_KINDS:
+                # Away the whole day (R19): no shift, and no record of the code.
+                self.away[(eid, day)] = "permisjon" if shift["kind"] == "permisjon" else "fravær"
+                continue
             fixable = False
-            if shift is not None and shift["kind"] == "egen_tid":
+            if not problem and leave:
+                leave_def = codes.get(leave)
+                if leave_def is None:
+                    problem = (f"ukjent kode i parentes «{leave}» – definer den under "
+                               "Administrasjon → Vaktkoder")
+                elif leave_def["kind"] not in LEAVE_KINDS:
+                    problem = f"«{leave}» i parentes er ikke en permisjons- eller fraværskode"
+                elif shift["kind"] != "ignoreres":
+                    # Partial leave: the shift is shortened, but the export doesn't
+                    # say how – the real time is entered per shift, like DX/AX.
+                    problem, fixable = f"delvis permisjon («{code}») – angi faktisk tid", True
+            if not problem and shift["kind"] == "egen_tid":
                 problem, fixable = f"tid angis per vakt («{code}»)", True
             start_override = category_override = None
             if problem:
@@ -670,8 +728,10 @@ class Rebuild:
                 (eid, day)).fetchone()
             pending = conn.execute("SELECT raw FROM roster_pending WHERE employee_id = ? AND date = ?",
                                    (eid, day)).fetchone()
+            away = getattr(self, "away", {}).get((eid, day))
             replaced = (f"{before['shift_code']} {before['start']}–{before['end']}" if before
-                        else f"«{pending['raw']}» (kunne ikke planlegges)" if pending else "ingen vakt")
+                        else f"«{pending['raw']}» (kunne ikke planlegges)" if pending
+                        else away if away else "ingen vakt")
             conn.execute("UPDATE roster_overrides SET replaced = ? WHERE employee_id = ? AND date = ?",
                          (replaced, eid, day))
             conn.execute("DELETE FROM roster WHERE employee_id = ? AND date = ?", (eid, day))

@@ -145,7 +145,10 @@ def seed_shift_codes(conn: sqlite3.Connection) -> int:
                 """INSERT INTO shift_code_defs (code, kind, start, end, category, utpost_code, comment,
                        source, reviewed) VALUES (?, ?, ?, ?, ?, ?, ?, 'standard', 1)""",
                 (r["code"], *values))
-        elif current["source"] == "standard" and not current["edited"]:
+        elif not current["edited"] and (current["source"] == "standard" or (
+                values[0] in ("fravaer", "permisjon") and current["source"] == "turnus")):
+            # A leave/absence code the turnus legend taught the app as a shift
+            # (R19) becomes what the standard list says, unless edited here.
             conn.execute(
                 """UPDATE shift_code_defs SET kind = ?, start = ?, end = ?, category = ?,
                        utpost_code = ?, comment = ? WHERE code = ? AND deleted_at IS NULL""",
