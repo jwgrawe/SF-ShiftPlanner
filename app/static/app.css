@@ -58,7 +58,8 @@ header.app {
   padding: 0.7rem 1.2rem; background: var(--surface);
   border-bottom: 1px solid var(--line);
 }
-header.app .brand { font-weight: 700; letter-spacing: 0.02em; }
+header.app .brand { font-weight: 700; letter-spacing: 0.02em; color: inherit; text-decoration: none; }
+header.app a.brand:hover { color: var(--accent); }
 header.app nav a { margin-right: 0.9rem; text-decoration: none; }
 
 /* ----------------------------------------------------------------- tables */
@@ -781,3 +782,4 @@ button.linklike { background: none; border: 0; padding: 0; font: inherit; color:
   text-decoration: underline; cursor: pointer; }
 /* Leave and absence codes on Vaktkoder (R19). */
 .badge.vk-leave { background: var(--info-bg); color: var(--info-ink); border: 1px solid var(--info-line, #c9d3f0); }
+.finding-link { margin-left: 0.4rem; white-space: nowrap; font-weight: 600; }

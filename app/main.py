@@ -49,6 +49,15 @@ TEMPLATES.env.globals["is_demo"] = db.is_demo
 TEMPLATES.env.globals["current_user"] = lambda: CURRENT_USER.get()
 TEMPLATES.env.globals["access_open"] = lambda: not db.is_demo() and not _access_set_up()
 TEMPLATES.env.globals["kind_label"] = hr_import.kind_label
+# Where a notice from the import is dealt with, by its kind.
+TEMPLATES.env.globals["finding_links"] = {
+    "vakttid": ("/import/ukjente", "Angi tid"),
+    "vaktkode": ("/admin/vaktkoder", "Vaktkoder"),
+    "stilling": ("/admin/stillinger", "Stillinger"),
+    "kompetanse": ("/admin/kompetanse", "Kompetanse"),
+    "ukeplan": ("/import#dekning", "Dekning per uke"),
+    "vakt": ("/import#utenfor", "Se vaktene"),
+}
 TEMPLATES.env.globals["folder_text"] = folder_check.describe
 
 
@@ -325,6 +334,9 @@ def plan_week(request: Request, start: str):
     conn = get_conn()
     try:
         model = service.build_week_model(conn, monday)
+        model["missing_times"] = conn.execute(
+            "SELECT COUNT(*) FROM roster_pending WHERE fixable = 1 AND date BETWEEN ? AND ?",
+            (monday.isoformat(), (monday + dt.timedelta(days=6)).isoformat())).fetchone()[0]
     finally:
         conn.close()
     return TEMPLATES.TemplateResponse(request, "plan_week.html", model)

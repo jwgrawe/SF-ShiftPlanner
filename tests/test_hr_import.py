@@ -252,8 +252,17 @@ class PipelineTest(PipelineBase):
         siri = self.roster("Vik Siri")
         self.assertNotIn("2027-01-04", siri)                          # week 1: the ukeplan rules
         self.assertEqual(siri["2027-01-11"]["source"], "plan")        # week 2: no ukeplan yet
-        # 5 of the 7 with turnus shifts are missing: looks incomplete → alert.
-        self.assertTrue(any("ser ufullstendig ut" in f for f in self.findings()))
+        # 4 of the 6 with turnus shifts are missing: looks incomplete → alert,
+        # saying who, in plain words (R21).
+        notice = next(f for f in self.findings() if "ser ufullstendig ut" in f)
+        self.assertIn("Uke 1 (04.01–10.01)", notice)
+        self.assertIn("4 av de 6 som har vakter i turnusen denne uken, står ikke i den", notice)
+        self.assertIn("Siri V.", notice)
+
+    def test_no_coverage_notices_for_weeks_that_are_over(self):
+        self.load()
+        hr_import.rebuild(self.conn, TODAY + dt.timedelta(days=7))    # week 1 is now past
+        self.assertFalse([f for f in self.findings() if "ukeplan" in f and "Uke 1 " in f])
 
     def test_unplannable_shifts_are_flagged_however_far_ahead(self):
         self.use_turnus_for_unlisted()
@@ -610,7 +619,10 @@ class LeaveCodesTest(PipelineBase):
                                 (self.kari, tue)).fetchone()
         self.assertEqual((row["raw"], row["fixable"]), ("A (permisjon)", 1))
         self.assertIn("delvis permisjon", row["reason"])
-        self.assertTrue(any("delvis permisjon" in f and "Vakter uten fast tid" in f for f in self.findings()))
+        notices = [r for r in self.conn.execute("SELECT * FROM import_findings WHERE kind = 'vakttid'")]
+        self.assertEqual(len(notices), 1)                         # one line, however many (R21)
+        self.assertIn("1 vakt mangler tid (DX/AX eller delvis permisjon)", notices[0]["text"])
+        self.assertIn("Kari H. tirsdag 05.01", notices[0]["text"])
         item = next(i for p in service.unknown_shifts_model(self.conn, TODAY)["people"] for i in p["items"]
                     if i["raw"] == "A (permisjon)")
         self.assertEqual(item["usual"], ("14:00", "22:00"))           # A, offered as a starting point

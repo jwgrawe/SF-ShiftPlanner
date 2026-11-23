@@ -47,6 +47,7 @@ ARCHIVE_DIRNAME, REJECTED_DIRNAME = "arkiv", "avvist"
 DEFAULT_RETENTION_DAYS = 92
 SCAN_INTERVAL_SECONDS = 30
 LOOKAHEAD_DAYS = 28
+WEEKDAYS = ("mandag", "tirsdag", "onsdag", "torsdag", "fredag", "lørdag", "søndag")
 HEADCOUNT_CHANGE_WARN = 0.15
 
 _lock = threading.Lock()
@@ -560,12 +561,17 @@ class Rebuild:
                         conflicts.add((eid, day))
                     effective[(eid, day)] = (raw, "plan", key)
         listed_weeks: dict[str, set[str]] = defaultdict(set)
+        had_turnus: dict[str, set[str]] = {}
         for monday, f in weeks.items():
             days = [(dt.date.fromisoformat(monday) + dt.timedelta(days=i)).isoformat()
                     for i in range(7)]
             week_rows = [k for k in rows if k[0] == f["file_id"]]
             listed = {mapping[k] for k in week_rows if mapping.get(k)}
             listed_weeks[monday] = listed
+            # Who has turnus shifts this week – counted before the ukeplan takes
+            # over for the people it lists (R21: «x av y» compares with this).
+            had_turnus[monday] = {eid for (eid, day), (_, source, _) in effective.items()
+                                  if source == "plan" and day in days}
             for eid in listed:  # the ukeplan overrules the turnus for these people
                 for day in days:
                     effective.pop((eid, day), None)
@@ -584,32 +590,45 @@ class Rebuild:
         for monday, listed in listed_weeks.items():
             days = {(dt.date.fromisoformat(monday) + dt.timedelta(days=i)).isoformat()
                     for i in range(7)}
-            in_turnus = {eid for (eid, day), (_, source, _) in effective.items()
-                         if source == "plan" and day in days}
-            absent_ids = in_turnus - listed
+            in_turnus = had_turnus.get(monday, set())
+            absent_ids = {eid for (eid, day), (_, source, _) in effective.items()
+                          if source == "plan" and day in days} - listed
             missing = sorted(names.get(eid, eid) for eid in absent_ids)
+            first = dt.date.fromisoformat(monday)
+            week = first.isocalendar().week
+            span = f"Uke {week} ({first:%d.%m}–{first + dt.timedelta(days=6):%d.%m})"
+            shown = f"{', '.join(missing[:8])}{' …' if len(missing) > 8 else ''}"
+            stop = "" if shown.endswith(".") else "."            # «Siri V.» already ends one
+            # The rest of the week loop decides what to do with them; past weeks
+            # need no notice – there is nothing left to plan (R21).
+            past = first + dt.timedelta(days=6) < self.today
             if not missing:
                 continue
-            week = dt.date.fromisoformat(monday).isocalendar().week
             if self.choice["S2"] == "turnus":
-                self.find("warn", "ukeplan",
-                          f"Uke {week}: {', '.join(missing)} har vakter i turnusen, men står ikke "
-                          "i ukeplanen – turnusen brukes for dem. Sjekk at ukeplanen er komplett.")
+                if not past:
+                    self.find("warn", "ukeplan",
+                              f"{span}: {shown} har vakter i turnusen, men står ikke i ukeplanen – "
+                              "turnusen brukes for dem. Sjekk at ukeplanen er komplett.")
                 continue
             # The ukeplan is the truth for the week (S2): not in it = not working.
             for key in [k for k, (_, source, _) in effective.items()
                         if source == "plan" and k[1] in days and k[0] in absent_ids]:
                 effective.pop(key)
                 conflicts.discard(key)
-            if len(absent_ids) > len(in_turnus) / 2:
+            if past:
+                continue
+            n, total = len(absent_ids), len(in_turnus)
+            if n > total / 2:
+                who = (f"ingen av de {total} som har vakter i turnusen denne uken, står i den" if n == total
+                       else f"{n} av de {total} som har vakter i turnusen denne uken, står ikke i den")
                 self.find("alert", "ukeplan",
-                          f"Uke {week}: ukeplanen ser ufullstendig ut – {len(absent_ids)} av "
-                          f"{len(in_turnus)} med turnusvakter står ikke i den og regnes som ikke på "
-                          "jobb. Eksporter ukeplanen på nytt, eller velg «Bruk turnusen» under "
-                          "Planregler → Avvik og tiltak.")
+                          f"{span}: ukeplanen ser ufullstendig ut – {who}. "
+                          f"Appen følger ukeplanen og regner dem som ikke på jobb: {shown}{stop} "
+                          "Er det feil, eksporter ukeplanen for uken på nytt. (Skal turnusen gjelde for "
+                          "dem som mangler, velg «Bruk turnusen» under Planregler → Avvik og tiltak.)")
             else:
                 self.find("info", "ukeplan",
-                          f"Uke {week}: {', '.join(missing)} står i turnusen, men ikke i ukeplanen – "
+                          f"{span}: {shown} har vakter i turnusen, men står ikke i ukeplanen – "
                           "regnet som ikke på jobb den uken.")
         for name, count in sorted(unmatched.items()):
             self.find("alert", "identitet",
@@ -724,16 +743,32 @@ class Rebuild:
         # Flagged as soon as found, however far ahead (S5): red for the next
         # days, yellow for later ones.
         red_until = (self.today + dt.timedelta(days=int(self.choice["S5"]))).isoformat()
-        grouped: dict[tuple[bool, str, int], list[str]] = defaultdict(list)
+        grouped: dict[tuple[bool, str], list[str]] = defaultdict(list)
+        missing_time = []                       # DX/AX and partial leave: only the time is missing
         for day, eid, raw, reason, _, fixable in pending:
-            if day >= self.today.isoformat():
-                grouped[(day > red_until, reason, fixable)].append(
-                    f"{names.get(eid, eid)} {dt.date.fromisoformat(day):%d.%m}")
-        for (later, reason, fixable), who in sorted(grouped.items()):
-            hint = " Angi tid under Datagrunnlag → Vakter uten fast tid." if fixable else ""
+            if day < self.today.isoformat():
+                continue
+            if fixable:
+                missing_time.append((day, names.get(eid, eid)))
+                continue
+            grouped[(day > red_until, reason)].append(
+                f"{names.get(eid, eid)} {dt.date.fromisoformat(day):%d.%m}")
+        for (later, reason), who in sorted(grouped.items()):
             self.find("warn" if later else "alert", "vakt",
                       f"Kan ikke planlegges{' (lenger frem)' if later else ''} – {reason}: "
-                      f"{', '.join(who[:12])}{' …' if len(who) > 12 else ''}.{hint}")
+                      f"{', '.join(who[:12])}{' …' if len(who) > 12 else ''}.")
+        if missing_time:
+            # One line, however many: the list is on «Vakter uten tid» (R21).
+            missing_time.sort()
+            first_day, first_name = missing_time[0]
+            n = len(missing_time)
+            soon = sum(1 for day, _ in missing_time if day <= red_until)
+            when = dt.date.fromisoformat(first_day)
+            self.find("alert" if soon else "warn", "vakttid",
+                      f"{n} vakt{'er' if n != 1 else ''} mangler tid (DX/AX eller delvis permisjon) og holdes "
+                      f"utenfor planen til tiden er angitt"
+                      + (f" – {soon} av dem de nærmeste dagene" if soon and soon != n else "")
+                      + f". Første: {first_name} {WEEKDAYS[when.weekday()]} {when:%d.%m}.")
         held = defaultdict(int)
         for r in conn.execute("SELECT title, COUNT(*) AS n FROM roster WHERE hold = 'uavklart' "
                               "AND date BETWEEN ? AND ? GROUP BY title",

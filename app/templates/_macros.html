@@ -17,3 +17,9 @@
     {% endif %}
   </details>
 {% endmacro %}
+
+{% macro finding_item(finding) %}
+  {# A notice, with a shortcut to where it is dealt with (by its kind). #}
+  {% set link = finding_links.get(finding.kind) %}
+  <li class="{{ finding.level }}">{{ finding.text }}{% if link %}<a class="finding-link" href="{{ link[0] }}">{{ link[1] }} →</a>{% endif %}</li>
+{% endmacro %}

@@ -11,13 +11,14 @@
 <body class="{% block body_class %}{% endblock %}">
   {% block header %}
   <header class="app">
-    <span class="brand">SF-Planlegger</span>
+    <a class="brand" href="/" title="Til startsiden (I dag)">SF-Planlegger</a>
     <nav>
       <a href="/">I dag</a>
       <a href="/display">Tavle</a>
       <a href="/plan">Planlegging</a>
       {% set unknown = unknown_shift_count() %}
-      <a href="/import">Datagrunnlag{% if unknown %} <span class="navbadge" title="{{ unknown }} vakt(er) uten fast tid mangler tid">{{ unknown }}</span>{% endif %}</a>
+      <a href="/import/ukjente" title="DX/AX og delvis permisjon: angi tiden for hver vakt">Vakter uten tid{% if unknown %} <span class="navbadge" title="{{ unknown }} vakt(er) mangler tid">{{ unknown }}</span>{% endif %}</a>
+      <a href="/import">Datagrunnlag</a>
       <a href="/admin">Administrasjon</a>
     </nav>
     <span class="muted small userbox" style="margin-left:auto">

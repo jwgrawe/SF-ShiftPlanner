@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_macros.html" import finding_item %}
 {% block title %}I dag – SF-Planlegger{% endblock %}
 {% block content %}
 {% set now_day = horizon[0] %}
@@ -17,13 +18,14 @@
     <a class="btn small" href="/import/ukjente">Angi tid</a>
   </div>
 {% endif %}
-{% set source_issues = import_findings|selectattr("level", "in", ["alert", "warn"])|list %}
+{# The note above already covers shifts missing a time. #}
+{% set source_issues = import_findings|selectattr("level", "in", ["alert", "warn"])|rejectattr("kind", "equalto", "vakttid")|list %}
 {% if source_issues %}
   <div class="card">
     <strong>Datagrunnlaget</strong>
     <span class="muted small">– turnus og ukeplaner (<a href="/import">se alt</a>)</span>
     <ul class="warn-list" style="margin-top:0.5rem">
-      {% for finding in source_issues[:6] %}<li class="{{ finding.level }}">{{ finding.text }}</li>{% endfor %}
+      {% for finding in source_issues[:6] %}{{ finding_item(finding) }}{% endfor %}
     </ul>
     {% if source_issues|length > 6 %}<a href="/import">… og {{ source_issues|length - 6 }} til</a>{% endif %}
   </div>

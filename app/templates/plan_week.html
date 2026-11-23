@@ -2,6 +2,10 @@
 {% block title %}Uke {{ iso_week }} – SF-Planlegger{% endblock %}
 {% block content %}
 <h1>Uke {{ iso_week }} <span class="muted" style="font-size:1rem">{{ monday.strftime("%d.%m.%Y") }} –</span></h1>
+{% if missing_times %}
+  <div class="note"><strong>{{ missing_times }} vakt{{ "er" if missing_times != 1 }} denne uken mangler tid</strong>
+    (DX/AX eller delvis permisjon) og holdes utenfor planen. <a class="btn small" href="/import/ukjente">Angi tid</a></div>
+{% endif %}
 <p>
   <a href="/plan/uke?start={{ prev_monday }}">&larr; forrige uke</a> ·
   <a href="/plan">oversikt</a> ·

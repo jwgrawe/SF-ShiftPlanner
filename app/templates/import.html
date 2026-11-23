@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import log_panel %}
+{% from "_macros.html" import log_panel, finding_item %}
 {% block title %}Datagrunnlag – SF-Planlegger{% endblock %}
 {% block content %}
 <h1>Datagrunnlag</h1>
@@ -40,16 +40,36 @@ står i den.</p>
   oppdatering gjelder fortsatt. Feil: <code>{{ last_error }}</code></p>
 {% endif %}
 
+{% set fixable = pending|selectattr("fixable")|list %}
+{% set other = pending|rejectattr("fixable")|list %}
+<div class="shortcut-cards">
+  <div class="card" id="ventende">
+    <strong>Vakter uten fast tid</strong> –
+    {% if fixable %}<span class="badge alert">{{ fixable|length }} mangler tid</span>
+    {% else %}<span class="muted">ingen mangler tid</span>{% endif %}
+    {% if manual %}<span class="badge published">{{ manual|length }} har fått tid</span>{% endif %}
+    <a class="btn small" href="/import/ukjente">Åpne</a>
+    <span class="muted small">DX/AX fra vikarenheten og delvis permisjon («A (permisjon)») har ingen kjent tid – angi
+      tiden for hver vakt.</span>
+  </div>
+  <div class="card">
+    <strong>Endringer i vaktlisten</strong> –
+    {% if roster_changes %}<span class="badge edited">{{ roster_changes }} fra i dag og fremover</span>{% else %}<span class="muted">ingen fremover</span>{% endif %}
+    <a class="btn small" href="/import/endringer">Åpne</a>
+    <span class="muted small">Noen byttet vakt, kom ekstra eller gikk hjem? Legg det inn – det går foran turnus og ukeplan.</span>
+  </div>
+</div>
+
 <h2>Trenger oppmerksomhet</h2>
 {% if findings %}
   <ul class="warn-list">
-    {% for finding in findings %}<li class="{{ finding.level }}">{{ finding.text }}</li>{% endfor %}
+    {% for finding in findings %}{{ finding_item(finding) }}{% endfor %}
   </ul>
 {% else %}
   <p class="muted">Ingen avvik i datagrunnlaget.</p>
 {% endif %}
 
-<h2>Dekning per uke</h2>
+<h2 id="dekning">Dekning per uke</h2>
 <div class="tablewrap"><table class="srcgrid">
   <tr><th>Uke</th><th>Datoer</th><th>Turnus (Plan)</th><th>Ukeplan (Ajourhold)</th><th>På vakt</th></tr>
   {% for week in weeks %}
@@ -71,25 +91,8 @@ står i den.</p>
   {% endfor %}
 </table></div>
 
-<div class="card">
-  <strong>Endringer i vaktlisten</strong> –
-  {% if roster_changes %}<span class="badge edited">{{ roster_changes }} fra i dag og fremover</span>{% else %}<span class="muted">ingen fremover</span>{% endif %}
-  <a class="btn small" href="/import/endringer">Åpne</a>
-  <span class="muted small">Noen byttet vakt, kom ekstra eller gikk hjem? Legg det inn – det går foran turnus og ukeplan.</span>
-</div>
-{% set fixable = pending|selectattr("fixable")|list %}
-{% set other = pending|rejectattr("fixable")|list %}
-{% if fixable or manual %}
-  <div class="card" id="ventende">
-    <strong>Vakter uten fast tid</strong> –
-    {% if fixable %}<span class="badge alert">{{ fixable|length }} mangler tid</span>{% endif %}
-    {% if manual %}<span class="badge published">{{ manual|length }} har fått tid</span>{% endif %}
-    <a class="btn small" href="/import/ukjente">Åpne</a>
-    <span class="muted small">Koder som DX/AX fra vikarenheten har ingen fast tid – angi tiden for hver vakt.</span>
-  </div>
-{% endif %}
 {% if other %}
-  <h2>Vakter som holdes utenfor planen</h2>
+  <h2 id="utenfor">Vakter som holdes utenfor planen</h2>
   <p class="small">Appen gjetter aldri. En ukjent kode defineres under
   <a href="/admin/vaktkoder">Administrasjon → Vaktkoder</a>; resten må rettes i turnussystemet.</p>
   <div class="tablewrap"><table>
