@@ -27,7 +27,9 @@ class Invalid(ValueError):
 def people(conn: sqlite3.Connection) -> list[dict]:
     return [dict(r) for r in conn.execute(
         """SELECT employee_id, display_name, full_name, person_id, is_temp FROM employees
-           WHERE origin = 'import' ORDER BY full_name""")]
+           WHERE origin = 'import'
+             AND NOT (person_id IS NOT NULL AND person_id <> '' AND CAST(person_id AS INTEGER) = 0)
+           ORDER BY full_name""")]
 
 
 def model(conn: sqlite3.Connection, today: dt.date, show_past: bool = False) -> dict:

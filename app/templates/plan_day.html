@@ -203,6 +203,7 @@
         <td>{% if row.start and row.hold != "kode" %}{{ row.start }}–{{ row.end }}{% else %}–{% endif %}</td>
         <td class="small">
           {% if row.pending %}<span class="badge alert">kan ikke planlegges</span> {{ row.pending }}
+            {% if row.fixable %}– <a href="/import/ukjente">angi tid</a>{% endif %}
           {% elif row.hold == "aldri" %}<span class="badge soft">holdes utenfor</span> stilling «{{ row.title }}» planlegges ikke
           {% elif row.hold == "uavklart" %}<span class="badge alert">holdes utenfor</span> ny stilling «{{ row.title }}» – <a href="/admin/stillinger">klassifiser</a>
           {% elif row.hold == "kode" %}<span class="badge soft">ignoreres</span> vaktkoden {{ row.shift_code }} planlegges ikke (<a href="/admin/vaktkoder">vaktkoder</a>)

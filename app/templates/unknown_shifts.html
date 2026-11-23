@@ -145,8 +145,13 @@ bort og vakten dukker opp her igjen. Alt som lagres, logges.</p>
       var s = Clock.parse(start.value);
       return s === null ? previous(row, ".uk-end") : Clock.format(s + 7 * 60);
     }});
+    [start, end].forEach(function (input) {
+      input.dataset.saved = input.value;
+      input.addEventListener("input", function () { row.closest("form").dataset.dirty = "1"; });
+    });
     var usual = row.querySelector(".uk-usual");
     if (usual) usual.addEventListener("click", function () {
+      row.closest("form").dataset.dirty = "1";
       start.value = usual.dataset.start; end.value = usual.dataset.end;
       start.dispatchEvent(new Event("change")); end.dispatchEvent(new Event("change"));
       end.focus(); end.select();
@@ -179,6 +184,19 @@ bort og vakten dukker opp her igjen. Alt som lagres, logges.</p>
       track.addEventListener(type, function () { anchor = null; });
     });
     hint(row);
+  });
+
+  // Each person is saved on its own: warn before leaving the page with times
+  // typed into another card that wasn't saved.
+  var submitting = null;
+  document.querySelectorAll("form.uk-card").forEach(function (form) {
+    form.addEventListener("submit", function () { submitting = form; });
+  });
+  window.addEventListener("beforeunload", function (e) {
+    var unsaved = Array.prototype.filter.call(document.querySelectorAll("form.uk-card"), function (form) {
+      return form.dataset.dirty && form !== submitting;
+    });
+    if (unsaved.length) { e.preventDefault(); e.returnValue = ""; }
   });
 })();
 </script>

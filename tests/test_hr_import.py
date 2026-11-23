@@ -662,5 +662,46 @@ class LeaveCodesTest(PipelineBase):
         self.assertEqual(kinds["SE"], "ignoreres")                     # set by hand here: kept
 
 
+class PlaceholderRowsTest(PipelineBase):
+    """PersonID 0 marks a row that isn't a person (R20, D126): skipped, with a
+    yellow notice – no employee, no shifts, no red identity alerts."""
+
+    def load_with_placeholders(self):
+        self.use_turnus_for_unlisted()
+        plan = people() + [("Ledig stilling", "Sterilforsyningstekniker", weekdays("D"), "0"),
+                           ("Ledig stilling 2", "Sterilforsyningstekniker", weekdays("D"), "0")]
+        self.drop(fx.plan_name(EXPORTED), fx.plan_csv(plan, START, 4, EXPORTED))
+        exported = dt.datetime(2027, 1, 4, 6, 30)
+        self.drop(fx.ukeplan_name(exported), fx.ukeplan_csv(
+            [("1001", "Hansen Kari", {MON: "D"}), ("0", "Vakant", {MON: "D", MON + dt.timedelta(1): "A"})],
+            MON, exported))
+        hr_import.scan_inbox(self.conn, self.inbox)
+        hr_import.rebuild(self.conn, TODAY)
+
+    def test_rows_with_personid_0_are_skipped_with_a_yellow_notice(self):
+        from app import competency
+        self.load_with_placeholders()
+        names = {r[0] for r in self.conn.execute("SELECT full_name FROM employees")}
+        self.assertFalse(names & {"Ledig stilling", "Ledig stilling 2", "Vakant"})
+        self.assertIn("Hansen Kari", names)
+        levels = {r["text"]: r["level"] for r in self.conn.execute("SELECT * FROM import_findings")}
+        notice = [t for t in levels if "PersonID 0" in t]
+        self.assertEqual(len(notice), 1)
+        self.assertEqual(levels[notice[0]], "warn")
+        self.assertIn("3 rader", notice[0])
+        self.assertIn("Vakant", notice[0])
+        self.assertFalse([t for t, level in levels.items()            # no red alerts about them
+                          if level == "alert" and ("Ledig" in t or "Vakant" in t)])
+        matrix = {r["full_name"] for r in competency.matrix(self.conn)["rows"]}
+        self.assertFalse(matrix & {"Ledig stilling", "Vakant"})
+
+    def test_an_employee_made_from_such_a_row_before_is_removed(self):
+        with self.conn:
+            self.conn.execute("""INSERT INTO employees (employee_id, display_name, works_at, full_name,
+                                     person_id, origin) VALUES ('A0999', 'Vakant', 'sf', 'Vakant', '0', 'import')""")
+        self.load_with_placeholders()
+        self.assertIsNone(self.conn.execute("SELECT 1 FROM employees WHERE employee_id = 'A0999'").fetchone())
+
+
 if __name__ == "__main__":
     unittest.main()

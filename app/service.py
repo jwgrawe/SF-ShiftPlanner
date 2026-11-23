@@ -602,13 +602,13 @@ def build_day_model(conn: sqlite3.Connection, plan_date: dt.date) -> dict:
                   COALESCE(r.category_override, s.category) AS category,
                   COALESCE(r.start_override, s.start) AS start,
                   COALESCE(r.end_override, s.end) AS end, r.end_override, r.hold, r.title,
-                  r.raw, r.source, s.utpost_code, NULL AS pending
+                  r.raw, r.source, s.utpost_code, NULL AS pending, 0 AS fixable
            FROM roster r JOIN employees e ON e.employee_id = r.employee_id
            JOIN shift_codes s ON s.code = r.shift_code
            WHERE r.date = ?
            UNION ALL
            SELECT e.display_name, p.raw, '', '', '', NULL, NULL, NULL, p.raw, p.source, 'no',
-                  p.reason
+                  p.reason, p.fixable
            FROM roster_pending p JOIN employees e ON e.employee_id = p.employee_id
            WHERE p.date = ?
            ORDER BY 4, 1""",

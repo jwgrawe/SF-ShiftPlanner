@@ -133,9 +133,14 @@ def people(conn: sqlite3.Connection) -> list[dict]:
             titles[r["full_name"]] = r["title"]
     present = {r[0] for r in conn.execute(
         """SELECT DISTINCT r.full_name FROM import_rows r JOIN import_files f ON f.file_id = r.file_id
-           WHERE f.status = 'active' AND f.kind IN ('plan', 'ajourhold')""")}
+           WHERE f.status = 'active' AND f.kind IN ('plan', 'ajourhold')
+             AND NOT (r.person_id IS NOT NULL AND r.person_id <> ''
+                      AND CAST(r.person_id AS INTEGER) = 0)""")}     # PersonID 0: no person (R20)
     found = []
     for r in conn.execute("SELECT * FROM employees WHERE origin = 'import'"):
+        pid = (r["person_id"] or "").strip()
+        if pid.isdigit() and int(pid) == 0:
+            continue                                  # a PersonID-0 row kept by an old plan (R20)
         if r["full_name"] in present:
             found.append({"key": r["full_name"], "full_name": r["full_name"],
                           "display": r["display_name"], "title": titles.get(r["full_name"], ""),

@@ -208,6 +208,15 @@ def scan_inbox(conn: sqlite3.Connection, inbox: Path | None = None) -> list[str]
 
 
 # ---------------------------------------------------------- the rebuild
+def placeholder(person_id: str | None) -> bool:
+    """PersonID 0 marks a row that isn't a person (R20, D126): skipped."""
+    return bool(person_id) and person_id.strip().isdigit() and int(person_id) == 0
+
+
+# The same test in SQL, for queries over import_rows / employees.
+PLACEHOLDER_SQL = "(person_id IS NOT NULL AND person_id <> '' AND CAST(person_id AS INTEGER) = 0)"
+
+
 # Codes that mean the person is away (R19, D125): never planned, and the app
 # keeps no record of which code it was – only that the day isn't worked.
 LEAVE_KINDS = ("fravaer", "permisjon")
@@ -384,10 +393,14 @@ class Rebuild:
         # Ukeplans first (newest first) so PersonIDs attach before names are used.
         ordered = ([f for f in files if f["kind"] == "ajourhold"][::-1]
                    + [f for f in files if f["kind"] == "plan"][::-1])
+        skipped: dict[str, set[str]] = defaultdict(set)
         for f in ordered:
             for r in conn.execute("SELECT * FROM import_rows WHERE file_id = ?", (f["file_id"],)):
                 name, pid = r["full_name"], r["person_id"]
                 key = (f["file_id"], r["row_no"])
+                if placeholder(pid):
+                    skipped[kind_label(f["kind"])].add(name or "uten navn")
+                    continue                         # not a person (R20): no mapping at all
                 if pid:
                     pid_names[pid].add(name)
                     name_pids[name].add(pid)
@@ -413,6 +426,14 @@ class Rebuild:
                         mapping[key] = create(name, None)
                     else:
                         mapping[key] = None
+        if skipped:
+            parts = [f"{kind}: {', '.join(sorted(names)[:8])}{' …' if len(names) > 8 else ''}"
+                     for kind, names in sorted(skipped.items())]
+            count = sum(len(n) for n in skipped.values())
+            self.find("warn", "identitet",
+                      f"{count} rad{'er' if count != 1 else ''} med PersonID 0 er hoppet over (regnes ikke "
+                      f"som ansatte) – {'; '.join(parts)}.")
+        self.drop_placeholders()
         for pid, names in pid_names.items():
             if len(names) > 1:
                 self.find("alert", "identitet",
@@ -441,6 +462,22 @@ class Rebuild:
         conn.executemany("UPDATE employees SET is_temp = 1 WHERE employee_id = ?",
                          [(e,) for e in self.temps])
         return mapping
+
+    def drop_placeholders(self) -> None:
+        """An «employee» made from a PersonID-0 row before R20 goes – unless
+        something kept refers to it (an old plan), then it is only hidden."""
+        conn = self.conn
+        for (eid,) in conn.execute(
+                f"SELECT employee_id FROM employees WHERE origin = 'import' AND {PLACEHOLDER_SQL}").fetchall():
+            conn.execute("SAVEPOINT placeholder")
+            try:
+                for table in ("employee_competencies", "roster", "roster_pending"):
+                    conn.execute(f"DELETE FROM {table} WHERE employee_id = ?", (eid,))
+                conn.execute("DELETE FROM employees WHERE employee_id = ?", (eid,))
+                conn.execute("RELEASE placeholder")
+            except sqlite3.IntegrityError:
+                conn.execute("ROLLBACK TO placeholder")
+                conn.execute("RELEASE placeholder")
 
     # -- the shift-code master list and legend drift (D103) ---------------
     def legends(self, plan_files) -> None:
@@ -489,10 +526,12 @@ class Rebuild:
         cells: dict[tuple[int, int], dict[str, str]] = defaultdict(dict)
         for f in plans + list(weeks.values()):
             for r in conn.execute("SELECT * FROM import_rows WHERE file_id = ?", (f["file_id"],)):
-                rows[(f["file_id"], r["row_no"])] = r
+                if not placeholder(r["person_id"]):             # PersonID 0: not a person (R20)
+                    rows[(f["file_id"], r["row_no"])] = r
             for c in conn.execute("SELECT * FROM import_cells WHERE file_id = ? AND export_date >= ?",
                                   (f["file_id"], cutoff.isoformat())):
-                cells[(f["file_id"], c["row_no"])][c["export_date"]] = c["raw"]
+                if (f["file_id"], c["row_no"]) in rows:
+                    cells[(f["file_id"], c["row_no"])][c["export_date"]] = c["raw"]
 
         # Titles new to the app wait for an admin (D87): «uavklart».
         for (file_id, _), r in rows.items():
@@ -884,7 +923,8 @@ class Rebuild:
                     """SELECT MIN(r.full_name) AS full_name, c.export_date, COUNT(*) AS n
                        FROM import_cells c
                        JOIN import_rows r ON r.file_id = c.file_id AND r.row_no = c.row_no
-                       WHERE c.file_id = ?
+                       WHERE c.file_id = ? AND NOT (r.person_id IS NOT NULL AND r.person_id <> ''
+                             AND CAST(r.person_id AS INTEGER) = 0)
                        GROUP BY COALESCE(r.person_id, r.full_name), c.export_date HAVING n > 1
                        ORDER BY c.export_date LIMIT 5""", (f["file_id"],)):
                 settled = conn.execute(
