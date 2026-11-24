@@ -10,6 +10,8 @@
   {% if now_day.manually_edited %}<span class="badge edited">manuelt endret</span>{% endif %}
 </h1>
 
+{% set melding = request.query_params.get("melding") %}
+{% if melding %}<p class="note">{{ melding }}</p>{% endif %}
 {% set unknown = unknown_shift_count() %}
 {% if unknown %}
   <div class="note">
@@ -25,7 +27,7 @@
     <strong>Datagrunnlaget</strong>
     <span class="muted small">– turnus og ukeplaner (<a href="/import">se alt</a>)</span>
     <ul class="warn-list" style="margin-top:0.5rem">
-      {% for finding in source_issues[:6] %}{{ finding_item(finding) }}{% endfor %}
+      {% for finding in source_issues[:6] %}{{ finding_item(finding, "/") }}{% endfor %}
     </ul>
     {% if source_issues|length > 6 %}<a href="/import">… og {{ source_issues|length - 6 }} til</a>{% endif %}
   </div>

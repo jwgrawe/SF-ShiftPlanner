@@ -254,10 +254,35 @@ class PipelineTest(PipelineBase):
         self.assertEqual(siri["2027-01-11"]["source"], "plan")        # week 2: no ukeplan yet
         # 4 of the 6 with turnus shifts are missing: looks incomplete → alert,
         # saying who, in plain words (R21).
-        notice = next(f for f in self.findings() if "ser ufullstendig ut" in f)
+        notice = next(f for f in self.findings() if "kan være ufullstendig" in f)
         self.assertIn("Uke 1 (04.01–10.01)", notice)
-        self.assertIn("4 av de 6 som har vakter i turnusen denne uken, står ikke i den", notice)
+        self.assertIn("4 av de 6 som har vakter i turnusen denne uken, står ikke i ukeplanen", notice)
         self.assertIn("Siri V.", notice)
+        self.assertIn("Er ukeplanen feil?", notice)                  # the two ways out (R22)
+        self.assertIn("Trykk «Ukeplanen stemmer»", notice)
+
+    def test_ukeplanen_stemmer_quiets_the_notice_until_the_week_changes(self):
+        self.load()
+        def notice():
+            return self.conn.execute("SELECT level, kind, text FROM import_findings WHERE date = ? "
+                                     "AND kind LIKE 'ukeplan%'", (MON.isoformat(),)).fetchone()
+        self.assertEqual(notice()["kind"], "ukeplan_mangler")
+        stamp = self.conn.execute("SELECT exported_at FROM import_files WHERE kind = 'ajourhold'").fetchone()[0]
+        with self.conn:      # what «Ukeplanen stemmer» stores
+            self.conn.execute("INSERT INTO coverage_acks (week, exported, missing, at, who) "
+                              "VALUES (?, ?, NULL, 'nå', 'Kari H.')", (MON.isoformat(), stamp))
+        hr_import.rebuild(self.conn, TODAY)
+        quiet = notice()
+        self.assertEqual((quiet["level"], quiet["kind"]), ("info", "ukeplan_ok"))
+        self.assertIn("bekreftet riktig av Kari H.", quiet["text"])
+        self.assertIsNotNone(self.conn.execute("SELECT missing FROM coverage_acks").fetchone()[0])
+        self.assertNotIn("2027-01-06", self.roster("Vik Siri"))      # still not working: the ukeplan rules
+        # A newer ukeplan for the week: the confirmation no longer applies.
+        newer = dt.datetime(2027, 1, 4, 12, 0)
+        self.drop(fx.ukeplan_name(newer), ukeplan_week1(newer))
+        hr_import.scan_inbox(self.conn, self.inbox)
+        hr_import.rebuild(self.conn, TODAY)
+        self.assertEqual(notice()["kind"], "ukeplan_mangler")
 
     def test_no_coverage_notices_for_weeks_that_are_over(self):
         self.load()

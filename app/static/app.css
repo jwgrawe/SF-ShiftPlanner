@@ -783,3 +783,4 @@ button.linklike { background: none; border: 0; padding: 0; font: inherit; color:
 /* Leave and absence codes on Vaktkoder (R19). */
 .badge.vk-leave { background: var(--info-bg); color: var(--info-ink); border: 1px solid var(--info-line, #c9d3f0); }
 .finding-link { margin-left: 0.4rem; white-space: nowrap; font-weight: 600; }
+.finding-action { margin-left: 0.4rem; }

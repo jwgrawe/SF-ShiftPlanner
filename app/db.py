@@ -174,6 +174,11 @@ CREATE TABLE IF NOT EXISTS import_legend (
     PRIMARY KEY (file_id, code));
 -- Findings of the latest refresh (rebuilt every time) and a lasting log of
 -- what imports did, e.g. assignments removed because a shift disappeared.
+-- «Ukeplanen stemmer» (D128): a manager confirmed that the people missing
+-- from a week's ukeplan really aren't working. Valid for that ukeplan export
+-- (exported) and that set of people (missing, filled in by the next rebuild).
+CREATE TABLE IF NOT EXISTS coverage_acks (
+    week TEXT PRIMARY KEY, exported TEXT NOT NULL, missing TEXT, at TEXT, who TEXT);
 CREATE TABLE IF NOT EXISTS import_findings (
     finding_id INTEGER PRIMARY KEY, level TEXT NOT NULL, kind TEXT NOT NULL,
     text TEXT NOT NULL, date TEXT);

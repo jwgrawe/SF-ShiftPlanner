@@ -18,8 +18,22 @@
   </details>
 {% endmacro %}
 
-{% macro finding_item(finding) %}
+{% macro finding_item(finding, back="/import") %}
   {# A notice, with a shortcut to where it is dealt with (by its kind). #}
   {% set link = finding_links.get(finding.kind) %}
-  <li class="{{ finding.level }}">{{ finding.text }}{% if link %}<a class="finding-link" href="{{ link[0] }}">{{ link[1] }} →</a>{% endif %}</li>
+  <li class="{{ finding.level }}">{{ finding.text }}
+    {% if finding.kind in ("ukeplan_mangler", "ukeplan_ok") and finding.date %}
+      <form method="post" action="/import/ukeplan-stemmer" class="inline finding-action">
+        <input type="hidden" name="week" value="{{ finding.date }}">
+        <input type="hidden" name="back" value="{{ back }}">
+        {% if finding.kind == "ukeplan_ok" %}
+          <input type="hidden" name="angre" value="1">
+          <button class="linklike small" type="submit" title="Varsle om uken igjen">angre</button>
+        {% else %}
+          <button class="btn small secondary" type="submit"
+                  title="De som mangler i ukeplanen, er ikke på jobb. Varsles igjen ved ny ukeplan for uken.">Ukeplanen stemmer</button>
+        {% endif %}
+      </form>
+    {% endif %}
+    {% if link %}<a class="finding-link" href="{{ link[0] }}">{{ link[1] }} →</a>{% endif %}</li>
 {% endmacro %}

@@ -617,19 +617,32 @@ class Rebuild:
                 conflicts.discard(key)
             if past:
                 continue
+            # «Ukeplanen stemmer» (D128): confirmed for this export and these people.
+            key = ",".join(sorted(absent_ids))
+            exported = weeks[monday]["exported_at"]
+            ack = conn.execute("SELECT * FROM coverage_acks WHERE week = ?", (monday,)).fetchone()
+            if ack and ack["exported"] == exported and ack["missing"] in (None, key):
+                if ack["missing"] is None:                # confirmed just now: remember who it was
+                    conn.execute("UPDATE coverage_acks SET missing = ? WHERE week = ?", (key, monday))
+                by = f" av {ack['who']}" if ack["who"] else ""
+                self.find("info", "ukeplan_ok",
+                          f"{span}: ukeplanen er bekreftet riktig{by} – {shown} regnes som ikke på jobb "
+                          "den uken.", first)
+                continue
             n, total = len(absent_ids), len(in_turnus)
+            choices = ("Er ukeplanen feil? Sjekk den i turnussystemet og eksporter uken på nytt. "
+                       "Er den riktig? Trykk «Ukeplanen stemmer».")
             if n > total / 2:
-                who = (f"ingen av de {total} som har vakter i turnusen denne uken, står i den" if n == total
-                       else f"{n} av de {total} som har vakter i turnusen denne uken, står ikke i den")
-                self.find("alert", "ukeplan",
-                          f"{span}: ukeplanen ser ufullstendig ut – {who}. "
-                          f"Appen følger ukeplanen og regner dem som ikke på jobb: {shown}{stop} "
-                          "Er det feil, eksporter ukeplanen for uken på nytt. (Skal turnusen gjelde for "
-                          "dem som mangler, velg «Bruk turnusen» under Planregler → Avvik og tiltak.)")
+                who = (f"Ingen av de {total} som har vakter i turnusen denne uken, står i ukeplanen" if n == total
+                       else f"{n} av de {total} som har vakter i turnusen denne uken, står ikke i ukeplanen")
+                self.find("alert", "ukeplan_mangler",
+                          f"{span}: ukeplanen kan være ufullstendig. {who}: {shown}{stop} Appen følger "
+                          "ukeplanen og regner dem som ikke på "
+                          f"jobb. {choices}", first)
             else:
-                self.find("info", "ukeplan",
-                          f"{span}: {shown} har vakter i turnusen, men står ikke i ukeplanen – "
-                          "regnet som ikke på jobb den uken.")
+                self.find("info", "ukeplan_mangler",
+                          f"{span}: {shown} har vakter i turnusen, men står ikke i ukeplanen – regnet som ikke "
+                          f"på jobb. {choices}", first)
         for name, count in sorted(unmatched.items()):
             self.find("alert", "identitet",
                       f"{count} turnusvakter for «{name}» kan ikke knyttes til én person og "

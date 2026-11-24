@@ -57,6 +57,7 @@ TEMPLATES.env.globals["finding_links"] = {
     "kompetanse": ("/admin/kompetanse", "Kompetanse"),
     "ukeplan": ("/import#dekning", "Dekning per uke"),
     "vakt": ("/import#utenfor", "Se vaktene"),
+    "ukeplan_mangler": ("/import#dekning", "Dekning per uke"),
 }
 TEMPLATES.env.globals["folder_text"] = folder_check.describe
 
@@ -698,6 +699,44 @@ async def admin_competency_save(request: Request):
     if conflicts:
         message += " " + " ".join(conflicts[:3]) + (" …" if len(conflicts) > 3 else "")
     return back("/admin/kompetanse", message)
+
+
+@app.post("/import/ukeplan-stemmer")
+async def coverage_confirm(request: Request):
+    """«Ukeplanen stemmer» (D128): the people missing from a week's ukeplan
+    really aren't working – quiet the notice for this export of the week."""
+    form = await request.form()
+    target = _safe_next(str(form.get("back", "/import")))
+    try:
+        week = dt.date.fromisoformat(str(form.get("week", ""))).isoformat()
+    except ValueError:
+        return back(target, "Ukjent uke.")
+    conn = get_conn()
+    try:
+        undo = form.get("angre") == "1"
+        with conn:
+            if undo:
+                conn.execute("DELETE FROM coverage_acks WHERE week = ?", (week,))
+                text = f"Uke {dt.date.fromisoformat(week).isocalendar().week}: «ukeplanen stemmer» er angret."
+            else:
+                row = conn.execute("SELECT exported_at FROM import_files WHERE kind = 'ajourhold' "
+                                   "AND status = 'active' AND first_date = ? ORDER BY exported_at DESC LIMIT 1",
+                                   (week,)).fetchone()
+                if row is None:
+                    return back(target, "Fant ingen ukeplan for uken.")
+                user = CURRENT_USER.get() or {}
+                conn.execute(
+                    "INSERT INTO coverage_acks (week, exported, missing, at, who) VALUES (?, ?, NULL, ?, ?) "
+                    "ON CONFLICT(week) DO UPDATE SET exported = excluded.exported, missing = NULL, "
+                    "at = excluded.at, who = excluded.who",
+                    (week, row["exported_at"], local_now().isoformat(timespec="seconds"), user.get("name")))
+                text = (f"Uke {dt.date.fromisoformat(week).isocalendar().week}: ukeplanen er bekreftet riktig – "
+                        "de som mangler i ukeplanen, regnes som ikke på jobb.")
+            applog.log(conn, "import", text)
+        hr_import.rebuild(conn)
+    finally:
+        conn.close()
+    return back(target, text)
 
 
 @app.post("/admin/kompetanse/fjern")
